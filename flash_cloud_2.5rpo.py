@@ -46,15 +46,23 @@ PDF_BASE_URL = os.getenv("PDF_BASE_URL", "").rstrip("/")
 
 CHAT_DB_PATH = os.getenv("CHAT_DB_PATH", "./chat_history.sqlite3")
 
-# ---- Vertex tuned endpoint ----
+# ---- Vertex tuned endpoint / project ----
 PROJECT  = os.getenv("GOOGLE_CLOUD_PROJECT") or os.getenv("PROJECT_ID")
 LOCATION = os.getenv("GOOGLE_CLOUD_LOCATION") or os.getenv("VERTEX_LOCATION") or "us-central1"
-TUNED_ENDPOINT = os.getenv("WYDOT_TUNED_ENDPOINT")  # projects/.../locations/.../endpoints/...
+
+# Backward-compat single env var (kept if you only have one tuned endpoint)
+LEGACY_TUNED_ENDPOINT = os.getenv("WYDOT_TUNED_ENDPOINT")  # projects/.../locations/.../endpoints/...
+
+# New: allow two tuned endpoints (Pro & Flash)
+ENV_TUNED_FLASH = os.getenv("WYDOT_TUNED_ENDPOINT_FLASH") or LEGACY_TUNED_ENDPOINT
+ENV_TUNED_PRO   = os.getenv("WYDOT_TUNED_ENDPOINT_PRO")
+
+# Base model fallbacks
+BASE_FLASH = os.getenv("DEFAULT_BASE_FLASH", "gemini-2.5-flash")
+BASE_PRO   = os.getenv("DEFAULT_BASE_PRO", "gemini-2.5-pro")
 
 if not PROJECT:
     raise RuntimeError("Set GOOGLE_CLOUD_PROJECT (or PROJECT_ID) to your GCP project id.")
-if not TUNED_ENDPOINT:
-    raise RuntimeError("Set WYDOT_TUNED_ENDPOINT to your Vertex endpoint id (projects/.../endpoints/...).")
 
 EMBED_MODEL = os.getenv("GEMINI_EMBED_MODEL", "text-embedding-004")
 
@@ -226,8 +234,6 @@ class ChatHistoryStore:
         with self._lock:
             self._conn.execute("DELETE FROM messages WHERE session_id=?", (session_id,))
             self._conn.commit()
-
-
 @st.cache_resource(show_spinner=False)
 def get_chat_store(path: str):
     return ChatHistoryStore(path)
@@ -394,6 +400,7 @@ def milvus_similarity_search(query: str, k: int = 5) -> Tuple[str, List[Dict[str
 # =========================================================
 # Build google-genai request (streaming)
 # =========================================================
+
 def build_contents_and_config(
     query: str,
     context_text: str,
@@ -437,8 +444,40 @@ def build_contents_and_config(
 
 
 # =========================================================
+# Model selection helpers (NEW)
+# =========================================================
+
+def _init_model_state():
+    st.session_state.setdefault("flash_endpoint", ENV_TUNED_FLASH)
+    st.session_state.setdefault("pro_endpoint", ENV_TUNED_PRO)
+
+    # Default choice preference: if Flash tuned endpoint exists, use it; else base Flash
+    default_choice = "Tuned: Flash 2.5 (endpoint)" if ENV_TUNED_FLASH else "Base: gemini-2.5-flash"
+    st.session_state.setdefault("model_choice", default_choice)
+
+
+def get_selected_model_id() -> str:
+    """Return the string to send as `model=` to google-genai.
+    This may be an endpoint resource name (projects/.../endpoints/...) or a base model name.
+    """
+    choice = st.session_state.get("model_choice", "Base: gemini-2.5-flash")
+    flash_ep = st.session_state.get("flash_endpoint")
+    pro_ep = st.session_state.get("pro_endpoint")
+
+    if choice == "Tuned: Flash 2.5 (endpoint)":
+        return flash_ep or BASE_FLASH
+    if choice == "Tuned: Pro 2.5 (endpoint)":
+        return pro_ep or BASE_PRO
+    if choice == "Base: gemini-2.5-pro":
+        return BASE_PRO
+    # default
+    return BASE_FLASH
+
+
+# =========================================================
 # Pipeline (streaming)
 # =========================================================
+
 def resultDocuments_streaming(
     query: str,
     extracted_text: str = "",
@@ -470,10 +509,11 @@ def resultDocuments_streaming(
     )
 
     client = get_genai_client()
+    model_id = get_selected_model_id()
     acc: List[str] = []
     try:
         for chunk in client.models.generate_content_stream(
-            model=TUNED_ENDPOINT,
+            model=model_id,
             contents=contents,
             config=config,
         ):
@@ -492,6 +532,7 @@ def resultDocuments_streaming(
 # =========================================================
 # PDF deep-link helpers
 # =========================================================
+
 def _looks_like_url(s: str) -> bool:
     try:
         u = urlparse(s)
@@ -517,8 +558,10 @@ def build_pdf_url(source: Optional[str], page: Optional[int]) -> Optional[str]:
 # =========================================================
 # Chat composer (attachments + camera + audio/video record)
 # =========================================================
+
 def render_chat_composer() -> Tuple[Optional[str], List[Dict[str, Any]]]:
-    st.markdown("""
+    st.markdown(
+        """
     <style>
       .composer {padding:10px 12px; border:1px solid #e6e6e6; border-radius:28px; background:#fff;}
       .composer .stTextInput>div>div>input {border:0 !important; outline:none !important; background:transparent !important;}
@@ -529,7 +572,9 @@ def render_chat_composer() -> Tuple[Optional[str], List[Dict[str, Any]]]:
       .right-sticky { position: sticky; top: 70px; max-height: calc(100vh - 90px); overflow-y: auto; }
       .left-scroll  { max-height: calc(100vh - 90px); overflow-y: auto; }
     </style>
-    """, unsafe_allow_html=True)
+    """,
+        unsafe_allow_html=True,
+    )
 
     if "chat_attached_preview" not in st.session_state:
         st.session_state["chat_attached_preview"] = []
@@ -665,6 +710,8 @@ st.set_page_config(page_title="WYDOT employee bot", page_icon="🛣️", layout=
 
 # Sidebar
 with st.sidebar:
+    _init_model_state()
+
     st.markdown("Wydot employee bot 🛣️")
     st.session_state.setdefault("milvus_uri", DEFAULT_MILVUS_URI)
     st.session_state.setdefault("milvus_token", DEFAULT_MILVUS_TOKEN)
@@ -690,8 +737,54 @@ with st.sidebar:
             st.toast("Cleared Streamlit caches.", icon="🧹")
 
     st.markdown("---")
-    st.markdown("## 🤖 Vertex endpoint")
-    st.code(TUNED_ENDPOINT, language="text")
+    st.markdown("## 🤖 Model selection")
+
+    # Endpoint inputs
+    flash_in = st.text_input(
+        "Flash tuned endpoint (projects/.../endpoints/...)",
+        value=st.session_state.get("flash_endpoint") or "",
+        help="Use the full endpoint resource name. If blank, the app will fall back to base gemini-2.5-flash.",
+    )
+    pro_in = st.text_input(
+        "Pro tuned endpoint (projects/.../endpoints/...)",
+        value=st.session_state.get("pro_endpoint") or "",
+        help="Use the full endpoint resource name. If blank, the app will fall back to base gemini-2.5-pro.",
+    )
+
+    if st.button("💾 Save endpoints"):
+        st.session_state["flash_endpoint"] = flash_in or None
+        st.session_state["pro_endpoint"] = pro_in or None
+        st.success("Saved.")
+
+    # Choices
+    choices = []
+    if (st.session_state.get("flash_endpoint") or ENV_TUNED_FLASH):
+        choices.append("Tuned: Flash 2.5 (endpoint)")
+    if (st.session_state.get("pro_endpoint") or ENV_TUNED_PRO):
+        choices.append("Tuned: Pro 2.5 (endpoint)")
+    # Always offer base models
+    choices.extend(["Base: gemini-2.5-flash", "Base: gemini-2.5-pro"])
+
+    # Keep previous choice if possible
+    prev_choice = st.session_state.get("model_choice")
+    if prev_choice not in choices:
+        # Prefer Flash tuned if present else base flash
+        st.session_state["model_choice"] = choices[0]
+
+    st.session_state["model_choice"] = st.selectbox(
+        "Active model",
+        choices,
+        index=choices.index(st.session_state["model_choice"]),
+        help="Switch between your tuned Gemini 2.5 Pro / Flash endpoints or the base models.",
+    )
+
+    # Show effective model id
+    current_model_id = get_selected_model_id()
+    st.caption("**Effective model id** (sent to google-genai):")
+    st.code(current_model_id, language="text")
+
+    st.markdown("---")
+    st.markdown("## 🔑 Auth / Project")
     st.caption(f"Auth: Service Account ({st.session_state.get('auth_label','unknown')}). Project: {PROJECT}, Location: {LOCATION}")
 
     if PDF_BASE_URL:
