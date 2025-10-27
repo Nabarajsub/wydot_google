@@ -11,7 +11,7 @@ import streamlit as st
 st.set_page_config(page_title="Q&A Validator", page_icon="✅", layout="wide")
 
 # >>> Set your JSONL path here (absolute path is safest)
-DATASET_DEFAULT = os.environ.get("QAV_DATASET", r"C:\Users\nsubedi1\Desktop\WYDOT project\data_extraction and compare\geminituning_val.jsonl")
+DATASET_DEFAULT = os.environ.get("QAV_DATASET", "geminituning_val.jsonl")
 DB_PATH_DEFAULT = "feedback.db"
 AUTOLOAD_ON_START = True  # auto-load DATASET_DEFAULT at startup if present
 
@@ -292,7 +292,7 @@ def extract_tables_from_text(text: str):
 # --------------- App ---------------
 def main():
     init_state()
-    st.title("Q&A Validator ✅")
+    st.title("WYDOT SPECS Q&A Validator ✅")
     st.caption("Review question–answer pairs against context and store your feedback locally.")
 
     with st.sidebar:
