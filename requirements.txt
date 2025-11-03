@@ -1,34 +1,31 @@
-fastapi
-streamlit==1.38.0
-protobuf==3.20.3
-grpcio==1.62.2
-uvicorn
-langchain
-langchain-openai
-langchain-experimental
-langchain-community
-pymilvus
-python-dotenv
-redis
-langchain-huggingface
-sentence-transformers
-tiktoken
-langchain_groq
-pypdf
-python-multipart
-Pillow
-python-docx
-PyPDF2
-speech
-google-generativeai
-google-genai
-pydub
-pdf2image
-google-genai
-google-auth
-pymilvus
-python-dotenv
-audio-recorder-streamlit
-streamlit
-google-genai
-google-auth
+# fastapi
+# streamlit==1.38.0
+# protobuf==3.20.3
+# grpcio==1.62.2
+# uvicorn
+# langchain
+# langchain-experimental
+# langchain-community
+# pymilvus
+# python-dotenv
+# redis
+# langchain-huggingface
+# tiktoken
+# pypdf
+# python-multipart
+# Pillow
+# python-docx
+# PyPDF2
+# speech
+# google-generativeai
+# google-genai
+# pydub
+# pdf2image
+# google-genai
+# google-auth
+# pymilvus
+# python-dotenv
+# audio-recorder-streamlit
+# streamlit
+# google-genai
+# google-auth
