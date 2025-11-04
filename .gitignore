@@ -12,3 +12,4 @@ __pycache__/
 .env
 ./utils_multimodal/rag_store
 .streamlit/secrets.toml
+.env
