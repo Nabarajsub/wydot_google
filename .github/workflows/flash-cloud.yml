@@ -1,0 +1,64 @@
+name: Deploy flash_cloud_2.5rpo.py to Cloud Run
+
+on:
+  push:
+    branches: [ main ]
+    paths:
+      - "flash_cloud_2.5rpo.py"
+      - "cloudrun/flash.yaml"
+      - "requirements.txt"
+      - "requirements_*.txt"
+      - "Dockerfile"
+      - "entrypoint.py"
+      - ".github/workflows/flash-cloud.yml"
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      id-token: write
+
+    env:
+      IMAGE: us-docker.pkg.dev/${{ secrets.GCP_PROJECT }}/apps/flash-cloud:latest
+      PROJECT_ID: ${{ secrets.GCP_PROJECT }}
+      REGION: ${{ secrets.GCP_REGION || 'us-central1' }}
+      APP_FILE: flash_cloud_2.5rpo.py
+      REQS_FILE: requirements.txt   # change to requirements_flash.txt if you keep a per-app file
+
+    steps:
+    - uses: actions/checkout@v4
+
+    # Workload Identity Federation (no JSON key!)
+    - id: auth
+      uses: google-github-actions/auth@v2
+      with:
+        workload_identity_provider: ${{ secrets.WIF_PROVIDER }}
+        service_account: cloud-run-sa@${{ secrets.GCP_PROJECT }}.iam.gserviceaccount.com
+
+    - uses: google-github-actions/setup-gcloud@v2
+      with:
+        project_id: ${{ secrets.GCP_PROJECT }}
+
+    - name: Configure Docker to use Artifact Registry
+      run: gcloud auth configure-docker us-docker.pkg.dev --quiet
+
+    - name: Build & push image (no-cache to force a fresh build)
+      run: |
+        docker build \
+          --no-cache \
+          --build-arg APP_FILE="${APP_FILE}" \
+          --build-arg REQS_FILE="${REQS_FILE}" \
+          -t "${IMAGE}" .
+        docker push "${IMAGE}"
+
+    - name: Prepare YAML (inject project id)
+      run: sed -e "s/\${PROJECT_ID}/${PROJECT_ID}/g" cloudrun/flash.yaml > /tmp/flash.yaml
+
+    - name: Deploy to Cloud Run
+      run: gcloud run services replace /tmp/flash.yaml
+
+    # (Optional) Make it public
+    - name: Make service public
+      run: gcloud run services add-iam-policy-binding flash-cloud \
+             --member="allUsers" --role="roles/run.invoker"
