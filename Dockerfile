@@ -1,7 +1,7 @@
 # syntax=docker/dockerfile:1
 FROM python:3.11-slim
 
-ARG APP_FILE=flash_cloud_2.5rpo.py
+ARG APP_FILE=flash_cloud_2.5rpo_login.py
 ARG REQS_FILE=requirements.txt
 
 ENV PYTHONDONTWRITEBYTECODE=1 \
@@ -31,5 +31,4 @@ ENV APP_FILE=${APP_FILE}
 ENV DOTENV_PATH=/etc/secrets/.env
 ENV SECRETS_TOML_PATH=/etc/secrets/streamlit/secrets.toml
 
-# Entrypoint handles dotenv + secrets.toml + runs streamlit
-CMD ["python", "entrypoint.py"]
+CMD ["python", "container_entrypoint.py"]

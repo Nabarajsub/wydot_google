@@ -1,4 +1,4 @@
-apiVersion: serving.knative.dev/v1
+apiVersion: run.googleapis.com/v1
 kind: Service
 metadata:
   name: flash-cloud
@@ -8,13 +8,12 @@ spec:
       annotations:
         run.googleapis.com/startup-cpu-boost: "true"
         run.googleapis.com/cpu-throttling: "false"
-        run.googleapis.com/region: us-central1   # ✅ region hint (optional but safe)
     spec:
-      serviceAccountName: cloud-run-sa@quiet-era-401008.iam.gserviceaccount.com
+      serviceAccountName: cloud-run-sa@${PROJECT_ID}.iam.gserviceaccount.com
       containerConcurrency: 80
       timeoutSeconds: 900
       containers:
-      - image: us-docker.pkg.dev/quiet-era-401008/apps/flash-cloud:latest
+      - image: us-docker.pkg.dev/${PROJECT_ID}/apps/flash-cloud:latest
         env:
         - name: APP_FILE
           value: flash_cloud_2.5rpo.py
@@ -37,8 +36,13 @@ spec:
           secretName: shared-dotenv
           items:
           - path: .env
+            version: "4"          # <-- shared-dotenv v4
       - name: streamlit-secrets
         secret:
           secretName: flash-secrets-toml
           items:
           - path: secrets.toml
+            version: "2"          # <-- flash-secrets-toml v2
+  traffic:
+  - percent: 100
+    latestRevision: true
