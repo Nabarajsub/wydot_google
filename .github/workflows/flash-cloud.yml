@@ -4,7 +4,7 @@ on:
   push:
     branches: [ main ]
     paths:
-      - "flash_cloud_2.5rpo_login.py"
+      - "flash_cloud_2.5rpo.py"
       - "cloudrun/flash.yaml"
       - "requirements.txt"
       - "requirements_*.txt"
@@ -30,13 +30,12 @@ jobs:
     steps:
     - uses: actions/checkout@v4
 
-    # Authenticate as the GitHub deployer SA (via Workload Identity)
+    # 🔐 Authenticate to Google Cloud
     - id: auth
       uses: google-github-actions/auth@v2
       with:
         workload_identity_provider: ${{ secrets.WIF_PROVIDER }}
         service_account: github-actions-sa@${{ secrets.GCP_PROJECT }}.iam.gserviceaccount.com
-        # token_format defaults to 'access_token'; leaving default is fine
 
     - uses: google-github-actions/setup-gcloud@v2
       with:
@@ -57,9 +56,19 @@ jobs:
       run: sed -e "s/\${PROJECT_ID}/${PROJECT_ID}/g" cloudrun/flash.yaml > /tmp/flash.yaml
 
     - name: Deploy to Cloud Run
-      run: gcloud run services replace /tmp/flash.yaml --region "${REGION}" --project "${PROJECT_ID}"
+      run: |
+        set -x
+        # Try to replace (update existing service)
+        gcloud run services replace /tmp/flash.yaml --region="${REGION}" --project="${PROJECT_ID}" || \
+        # Fall back to deploy if service doesn't exist
+        gcloud run deploy flash-cloud \
+          --image us-docker.pkg.dev/${PROJECT_ID}/apps/flash-cloud:latest \
+          --region "${REGION}" \
+          --service-account cloud-run-sa@${PROJECT_ID}.iam.gserviceaccount.com \
+          --allow-unauthenticated \
+          --quiet
 
-    - name: Make service public
+    - name: Make service public (optional safeguard)
       run: gcloud run services add-iam-policy-binding flash-cloud \
              --member="allUsers" --role="roles/run.invoker" \
              --region "${REGION}" --project "${PROJECT_ID}"
