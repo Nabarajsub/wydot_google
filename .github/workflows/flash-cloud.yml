@@ -4,7 +4,7 @@ on:
   push:
     branches: [ main ]
     paths:
-      - "flash_cloud_2.5rpo.py"
+      - "flash_cloud_2.5rpo_login.py"
       - "cloudrun/flash.yaml"
       - "requirements.txt"
       - "requirements_*.txt"
