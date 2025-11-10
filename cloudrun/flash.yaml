@@ -36,13 +36,13 @@ spec:
           secretName: shared-dotenv
           items:
           - path: .env
-            version: "4"          # <-- shared-dotenv v4
+            version: "4"        # MUST be a quoted string
       - name: streamlit-secrets
         secret:
           secretName: flash-secrets-toml
           items:
           - path: secrets.toml
-            version: "2"          # <-- flash-secrets-toml v2
+            version: "2"        # MUST be a quoted string
   traffic:
   - percent: 100
     latestRevision: true
