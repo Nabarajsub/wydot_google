@@ -33,13 +33,11 @@ spec:
         secret:
           secretName: shared-dotenv
           items:
-          - version: latest
-            path: .env
+          - path: .env         # ✅ removed version: latest
       - name: streamlit-secrets
         secret:
           secretName: flash-secrets-toml
           items:
-          - version: latest
-            path: secrets.toml
+          - path: secrets.toml # ✅ removed version: latest
       containerConcurrency: 80
       timeoutSeconds: 900
