@@ -29,12 +29,13 @@ jobs:
     steps:
     - uses: actions/checkout@v4
 
-    # Workload Identity Federation (no JSON key!)
+    # ✅ Authenticate using GitHub Actions Service Account (not Cloud Run SA)
     - id: auth
       uses: google-github-actions/auth@v2
       with:
+        token_format: 'access_token'
         workload_identity_provider: ${{ secrets.WIF_PROVIDER }}
-        service_account: cloud-run-sa@${{ secrets.GCP_PROJECT }}.iam.gserviceaccount.com
+        service_account: github-actions-sa@${{ secrets.GCP_PROJECT }}.iam.gserviceaccount.com
 
     - uses: google-github-actions/setup-gcloud@v2
       with:
