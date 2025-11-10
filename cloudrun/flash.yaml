@@ -8,8 +8,11 @@ spec:
       annotations:
         run.googleapis.com/startup-cpu-boost: "true"
         run.googleapis.com/cpu-throttling: "false"
+        run.googleapis.com/region: us-central1   # ✅ region hint (optional but safe)
     spec:
       serviceAccountName: cloud-run-sa@quiet-era-401008.iam.gserviceaccount.com
+      containerConcurrency: 80
+      timeoutSeconds: 900
       containers:
       - image: us-docker.pkg.dev/quiet-era-401008/apps/flash-cloud:latest
         env:
@@ -39,5 +42,3 @@ spec:
           secretName: flash-secrets-toml
           items:
           - path: secrets.toml
-      containerConcurrency: 80
-      timeoutSeconds: 900
