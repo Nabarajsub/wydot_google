@@ -4,11 +4,12 @@ on:
   push:
     branches: [ main ]
     paths:
-      - "flash_cloud_2.5rpo_login.py"
+      - "flash_cloud_2.5rpo.py"
       - "cloudrun/flash.yaml"
+      - "requirements.txt"
+      - "requirements_*.txt"
       - "Dockerfile"
-      - "container_entrypoint.py"
-      - "requirements*.txt"
+      - "entrypoint.py"
       - ".github/workflows/flash-cloud.yml"
   workflow_dispatch:
 
@@ -29,12 +30,13 @@ jobs:
     steps:
     - uses: actions/checkout@v4
 
+    # Authenticate as the GitHub deployer SA (via Workload Identity)
     - id: auth
       uses: google-github-actions/auth@v2
       with:
         workload_identity_provider: ${{ secrets.WIF_PROVIDER }}
-        # Use the SA that has the Workload Identity User binding
-        service_account: cloud-run-sa@${{ secrets.GCP_PROJECT }}.iam.gserviceaccount.com
+        service_account: github-actions-sa@${{ secrets.GCP_PROJECT }}.iam.gserviceaccount.com
+        # token_format defaults to 'access_token'; leaving default is fine
 
     - uses: google-github-actions/setup-gcloud@v2
       with:
@@ -51,18 +53,13 @@ jobs:
           -t "${IMAGE}" .
         docker push "${IMAGE}"
 
-    - name: Set gcloud defaults
-      run: |
-        gcloud config set project "${PROJECT_ID}"
-        gcloud config set run/region "${REGION}"
-        gcloud config set run/platform "managed"
-
     - name: Prepare YAML (inject project id)
       run: sed -e "s/\${PROJECT_ID}/${PROJECT_ID}/g" cloudrun/flash.yaml > /tmp/flash.yaml
 
     - name: Deploy to Cloud Run
-      run: gcloud run services replace /tmp/flash.yaml
+      run: gcloud run services replace /tmp/flash.yaml --region "${REGION}" --project "${PROJECT_ID}"
 
     - name: Make service public
       run: gcloud run services add-iam-policy-binding flash-cloud \
-             --member="allUsers" --role="roles/run.invoker"
+             --member="allUsers" --role="roles/run.invoker" \
+             --region "${REGION}" --project "${PROJECT_ID}"
