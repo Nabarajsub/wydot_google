@@ -1040,7 +1040,7 @@ def _creds_from_env_file() -> Optional[service_account.Credentials]:
         st.warning(f"[Auth] Failed loading GOOGLE_APPLICATION_CREDENTIALS file: {e}")
     return None
 
-
+# this is comment
 def _creds_from_env_json() -> Optional[service_account.Credentials]:
     try:
         raw = os.getenv("GCP_SERVICE_ACCOUNT_JSON")
