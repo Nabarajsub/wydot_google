@@ -69,6 +69,4 @@ jobs:
           --quiet
 
     - name: Make service public (optional safeguard)
-      run: gcloud run services add-iam-policy-binding flash-cloud \
-             --member="allUsers" --role="roles/run.invoker" \
-             --region "${REGION}" --project "${PROJECT_ID}"
+      run: gcloud run services add-iam-policy-binding flash-cloud --member="allUsers" --role="roles/run.invoker" --region="${REGION}" --project="${PROJECT_ID}"
