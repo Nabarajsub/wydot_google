@@ -45,7 +45,7 @@ DEFAULT_COLLECTION = os.getenv("MILVUS_COLLECTION", "wydotspec_llamaparse")
 PDF_BASE_URL = os.getenv("PDF_BASE_URL", "").rstrip("/")
 
 CHAT_DB_PATH = os.getenv("CHAT_DB_PATH", "./chat_history.sqlite3")
-
+#need to update the path for chat db
 # ---- Vertex tuned endpoint / project ----
 PROJECT  = os.getenv("GOOGLE_CLOUD_PROJECT") or os.getenv("PROJECT_ID")
 LOCATION = os.getenv("GOOGLE_CLOUD_LOCATION") or os.getenv("VERTEX_LOCATION") or "us-central1"
