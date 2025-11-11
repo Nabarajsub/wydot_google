@@ -1,25 +1,49 @@
-# container_entrypoint.py
+#!/usr/bin/env python3
 import os, pathlib, shutil, subprocess
 from dotenv import load_dotenv
+import toml
 
-# 1) Load .env mounted from Secret Manager
-dotenv_path = os.getenv("DOTENV_PATH", "/etc/secrets/.env")
-if pathlib.Path(dotenv_path).exists():
+# === 0) Debug info: log environment and working dir ===
+print("👀 Starting container entrypoint")
+print("HOME:", pathlib.Path.home())
+print("WORKDIR:", os.getcwd())
+print("DOTENV_PATH:", os.getenv("DOTENV_PATH"))
+print("SECRETS_TOML_PATH:", os.getenv("SECRETS_TOML_PATH"))
+
+# === 1) Load .env mounted from Secret Manager ===
+dotenv_path = pathlib.Path(os.getenv("DOTENV_PATH", "/etc/secrets/.env"))
+if dotenv_path.exists():
     load_dotenv(dotenv_path, override=False)
+    print(f"✅ Loaded .env from {dotenv_path}")
+else:
+    print(f"⚠️ No .env found at {dotenv_path}")
 
-# 2) Copy secrets.toml to ~/.streamlit/secrets.toml so st.secrets works
-src = os.getenv("SECRETS_TOML_PATH", "/etc/secrets/streamlit/secrets.toml")
-if pathlib.Path(src).exists():
-    dst_dir = pathlib.Path.home() / ".streamlit"
-    dst_dir.mkdir(parents=True, exist_ok=True)
-    dst = dst_dir / "secrets.toml"
+# === 2) Copy secrets.toml to ~/.streamlit/secrets.toml ===
+src = pathlib.Path(os.getenv("SECRETS_TOML_PATH", "/etc/secrets/streamlit/secrets.toml"))
+dst_dir = pathlib.Path.home() / ".streamlit"
+dst_dir.mkdir(parents=True, exist_ok=True)
+dst = dst_dir / "secrets.toml"
+
+if src.exists():
     if dst.exists():
         dst.unlink()
     shutil.copy(src, dst)
+    print(f"✅ Copied {src} → {dst}")
 
-# 3) Run Streamlit app
-app = os.getenv("APP_FILE", "flash_cloud_2.5rpo_login.py")
+    # (optional) verify TOML validity immediately
+    try:
+        data = toml.load(dst)
+        print("✅ Parsed secrets.toml sections:", list(data.keys()))
+    except Exception as e:
+        print("❌ TOML parse error in secrets.toml:", e)
+else:
+    print(f"❌ Secret file missing at {src}")
+    print("⚠️ st.secrets will fail until Secret Manager mount works")
+
+# === 3) Run Streamlit app ===
+app = os.getenv("APP_FILE", "flash_cloud_2.5rpo.py")
 port = os.getenv("PORT", "8080")
+print(f"🚀 Launching Streamlit: {app} on port {port}")
 subprocess.run([
     "python", "-m", "streamlit", "run", app,
     "--server.port", port, "--server.address", "0.0.0.0"
