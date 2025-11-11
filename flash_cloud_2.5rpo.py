@@ -11,7 +11,7 @@ import streamlit.components.v1 as components
 from dotenv import load_dotenv
 
 # ---------- Vertex GenAI (new SDK) ----------
-import google.generativeai as genai
+# import google.generativeai as genai
 from google.genai import types as gtypes
 from google.oauth2 import service_account
 
