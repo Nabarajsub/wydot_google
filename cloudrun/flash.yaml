@@ -42,9 +42,11 @@ spec:
           - path: .env            # ✅ removed version; Cloud Run automatically uses latest enabled version
       - name: streamlit-secrets
         secret:
-          secretName: flash-secrets-toml
+          secretName: streamlit-secrets-toml
           items:
           - path: secrets.toml    # ✅ removed version
   traffic:
   - percent: 100
     latestRevision: true
+
+
