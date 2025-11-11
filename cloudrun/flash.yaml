@@ -21,6 +21,10 @@ spec:
           value: /etc/secrets/.env
         - name: SECRETS_TOML_PATH
           value: /etc/secrets/streamlit/secrets.toml
+        - name: GOOGLE_CLOUD_PROJECT
+          value: quiet-era-401008
+        - name: PROJECT_ID
+          value: quiet-era-401008
         ports:
         - containerPort: 8080
         volumeMounts:
