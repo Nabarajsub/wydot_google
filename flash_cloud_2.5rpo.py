@@ -984,7 +984,7 @@ DEFAULT_COLLECTION = os.getenv("MILVUS_COLLECTION", "wydotspec_llamaparse")
 # Optional: where your PDFs are hosted (e.g., https://your-bucket/public/specs/)
 PDF_BASE_URL = os.getenv("PDF_BASE_URL", "").rstrip("/")
 
-CHAT_DB_PATH = os.getenv("CHAT_DB_PATH", "./chat_history.sqlite3")
+CHAT_DB_PATH = os.getenv("CHAT_DB_PATH", "/tmp/chat_history.sqlite3")
 
 # ---- Vertex tuned endpoint / project ----
 # You hard-coded these; fine for Cloud Run
