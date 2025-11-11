@@ -21,10 +21,6 @@ spec:
           value: /etc/secrets/.env
         - name: SECRETS_TOML_PATH
           value: /etc/secrets/streamlit/secrets.toml
-        - name: GOOGLE_CLOUD_PROJECT
-          value: quiet-era-401008
-        - name: PROJECT_ID
-          value: quiet-era-401008
         ports:
         - containerPort: 8080
         volumeMounts:
@@ -37,16 +33,16 @@ spec:
       volumes:
       - name: dotenv
         secret:
-          secretName: shared-dotenv
+          secretName: projects/${PROJECT_NUMBER}/secrets/shared-dotenv
           items:
-          - path: .env            # ✅ removed version; Cloud Run automatically uses latest enabled version
+          - key: "4"          # or "4"
+            path: .env
       - name: streamlit-secrets
         secret:
-          secretName: streamlit-secrets-toml
+          secretName: projects/${PROJECT_NUMBER}/secrets/streamlit-secrets-toml
           items:
-          - path: secrets.toml    # ✅ removed version
+          - key: "2"          # or "2"
+            path: secrets.toml
   traffic:
   - percent: 100
     latestRevision: true
-
-
