@@ -30,19 +30,19 @@ spec:
         - name: streamlit-secrets
           mountPath: /etc/secrets/streamlit
           readOnly: true
-      # volumes:
-      # - name: dotenv
-      #   secret:
-      #     secretName: projects/${PROJECT_NUMBER}/secrets/shared-dotenv
-      #     items:
-      #     - key: "4"          # or "4"
-      #       path: .env
-      # - name: streamlit-secrets
-      #   secret:
-      #     secretName: projects/${PROJECT_NUMBER}/secrets/streamlit-secrets-toml
-      #     items:
-      #     - key: "2"          # or "2"
-      #       path: secrets.toml
+      volumes:
+      - name: dotenv
+        secret:
+          secretName: shared-dotenv             # <-- plain name (no slashes)
+          items:
+          - key: "4"                         # or "4"
+            path: .env
+      - name: streamlit-secrets
+        secret:
+          secretName: streamlit-secrets-toml    # <-- plain name (no slashes)
+          items:
+          - key: "2"                         # or "2"
+            path: secrets.toml
   traffic:
   - percent: 100
     latestRevision: true
