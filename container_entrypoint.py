@@ -41,7 +41,7 @@ else:
     print("⚠️ st.secrets will fail until Secret Manager mount works")
 
 # === 3) Run Streamlit app ===
-app = os.getenv("APP_FILE", "flash_cloud_2.5rpo.py")
+app = os.getenv("APP_FILE", "advance/app2010.py")
 port = os.getenv("PORT", "8080")
 print(f"🚀 Launching Streamlit: {app} on port {port}")
 subprocess.run([
