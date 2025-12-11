@@ -1,7 +1,21 @@
 #!/usr/bin/env python3
 import os, pathlib, shutil, subprocess
 from dotenv import load_dotenv
-import toml
+
+# Try stdlib tomllib first; fall back to toml if installed
+try:
+    import tomllib
+
+    def load_toml(path: pathlib.Path):
+        with open(path, "rb") as f:
+            return tomllib.load(f)
+
+except ImportError:
+    import toml  # requires `toml` package
+
+    def load_toml(path: pathlib.Path):
+        return toml.load(path)
+
 
 # === 0) Debug info: log environment and working dir ===
 print("👀 Starting container entrypoint")
@@ -32,7 +46,7 @@ if src.exists():
 
     # (optional) verify TOML validity immediately
     try:
-        data = toml.load(dst)
+        data = load_toml(dst)
         print("✅ Parsed secrets.toml sections:", list(data.keys()))
     except Exception as e:
         print("❌ TOML parse error in secrets.toml:", e)
