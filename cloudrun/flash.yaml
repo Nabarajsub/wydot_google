@@ -16,7 +16,7 @@ spec:
       - image: us-docker.pkg.dev/${PROJECT_ID}/apps/flash-cloud:latest
         env:
         - name: APP_FILE
-          value: /advance/app2010.py
+          value: advance/app2010.py
         - name: DOTENV_PATH
           value: /etc/secrets/.env
         - name: SECRETS_TOML_PATH
