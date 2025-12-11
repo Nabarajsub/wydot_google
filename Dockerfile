@@ -1,7 +1,6 @@
-# syntax=docker/dockerfile:1
 FROM python:3.11-slim
 
-ARG APP_FILE=flash_cloud_2.5rpo_login.py
+ARG APP_FILE=advance/app2010.py
 ARG REQS_FILE=requirements.txt
 
 ENV PYTHONDONTWRITEBYTECODE=1 \
@@ -14,15 +13,12 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
 
 WORKDIR /app
 
-# Per-app deps
 COPY ${REQS_FILE} /tmp/requirements.txt
 RUN pip install -r /tmp/requirements.txt && \
     pip install python-dotenv streamlit
 
-# Source
 COPY . /app
 
-# Non-root
 RUN useradd -m appuser
 USER appuser
 
