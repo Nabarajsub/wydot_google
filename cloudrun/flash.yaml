@@ -35,7 +35,7 @@ spec:
         secret:
           secretName: shared-dotenv             # <-- plain name (no slashes)
           items:
-          - key: "6"                         # or "4"
+          - key: "7"                         # or "4"
             path: .env
       - name: streamlit-secrets
         secret:
