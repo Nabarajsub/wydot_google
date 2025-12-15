@@ -4,7 +4,7 @@ on:
   push:
     branches: [ main ]
     paths:
-      - "advance/app2010.py"
+      - "llamacheck_metadata/app3.py"
       - "cloudrun/flash.yaml"
       - "requirements.txt"
       - "requirements_*.txt"
@@ -24,7 +24,7 @@ jobs:
       PROJECT_ID: ${{ secrets.GCP_PROJECT }}
       REGION: ${{ secrets.GCP_REGION || 'us-central1' }}
       IMAGE: us-docker.pkg.dev/${{ secrets.GCP_PROJECT }}/apps/flash-cloud:latest
-      APP_FILE: advance/app2010.py
+      APP_FILE: llamacheck_metadata/app3.py
       REQS_FILE: requirements.txt
 
     steps:

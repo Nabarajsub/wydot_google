@@ -7,7 +7,7 @@
 # # --- SETUP ---
 # # Load environment variables if you have a .env file, otherwise set api_key directly
 # load_dotenv()
-# api_key = "AIzaSyBJCo4A_oJENi45ShXYyeZHRBorKa121Ho"
+# api_key = ""
 
 # # NOTE: If you don't have a .env file, paste your key below:
 # # api_key = "YOUR_GOOGLE_API_KEY_HERE"
@@ -133,7 +133,7 @@ from dotenv import load_dotenv
 # --- CONFIGURATION ---
 # Load API key from .env or environment variable
 load_dotenv()
-api_key = "AIzaSyBJCo4A_oJENi45ShXYyeZHRBorKa121Ho"
+api_key = os.getenv("GEMINI_API_KEY")
 
 if not api_key:
     # Fallback for manual entry if needed during testing
