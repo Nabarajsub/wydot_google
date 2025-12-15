@@ -28,7 +28,7 @@
 #     st.markdown("### Configuration")
     
 #     # API Key Input
-#     user_api_key = "AIzaSyBJCo4A_oJENi45ShXYyeZHRBorKa121Ho"
+#     user_api_key = ""
     
 #     os.environ["GOOGLE_API_KEY"] = user_api_key
 #     genai.configure(api_key=user_api_key)
@@ -224,7 +224,7 @@ with st.sidebar:
     st.image("https://upload.wikimedia.org/wikipedia/commons/thumb/c/c5/Wyoming_Athletics_logo.svg/1200px-Wyoming_Athletics_logo.svg.png", width=80)
     
     # Secure API Key Input
-    user_api_key = "AIzaSyBJCo4A_oJENi45ShXYyeZHRBorKa121Ho"
+    user_api_key = os.environ.get("GEMINI_API_KEY")
     
     os.environ["GOOGLE_API_KEY"] = user_api_key
     genai.configure(api_key=user_api_key)

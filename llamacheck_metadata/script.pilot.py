@@ -1,171 +1,4 @@
 
-# import os
-# import json
-# import nest_asyncio
-# import pandas as pd
-# from llama_parse import LlamaParse
-# from llama_index.core.schema import TextNode
-# import google.generativeai as genai
-# from PIL import Image
-# import io
-# import re
-
-# # --- CONFIGURATION ---
-# # API KEYS
-# # ⚠️ REPLACE THESE WITH YOUR ACTUAL KEYS
-# os.environ["LLAMA_CLOUD_API_KEY"] = "llx-70lfJlK1UztwgKFgNPlUA7NLU1AhJnsFtLyLJEFrRh6wdCIe" 
-# GOOGLE_API_KEY = "AIzaSyBJCo4A_oJENi45ShXYyeZHRBorKa121Ho" # Your Gemini Key
-
-# # DIRECTORIES
-# DATA_DIR = "./data_raw"
-# IMG_DIR = "./output_images"
-# OUTPUT_JSON_FILE = "final_extracted_data.json" # <--- New Output File
-# os.makedirs(IMG_DIR, exist_ok=True)
-
-# # SETUP GEMINI
-# genai.configure(api_key=GOOGLE_API_KEY)
-# vision_model = genai.GenerativeModel('gemini-1.5-flash') # Updated to 1.5-flash as 2.5 is not standard yet
-
-# nest_asyncio.apply()
-
-# def get_year_from_filename(filename):
-#     """Simple regex to grab the first 4-digit year from filename."""
-#     match = re.search(r'\d{4}', filename)
-#     return int(match.group(0)) if match else "Unknown"
-
-# def caption_image_with_gemini(image_path):
-#     """Sends image to Gemini for a detailed caption."""
-#     try:
-#         img = Image.open(image_path)
-#         response = vision_model.generate_content([
-#             "Analyze this chart, graph, or image from an annual report. "
-#             "Extract key figures, trends, and titles. Output a detailed summary paragraph.", 
-#             img
-#         ])
-#         return response.text
-#     except Exception as e:
-#         print(f"Error captioning {image_path}: {e}")
-#         return "Image processing failed."
-
-# def process_pdf(file_path):
-#     file_name = os.path.basename(file_path)
-#     print(f"Processing: {file_name}...")
-    
-#     # 1. PARSE WITH LLAMAPARSE
-#     parser = LlamaParse(
-#         result_type="markdown",  
-#         premium_mode=True,       
-#         parsing_instruction="This is an annual report. Keep tables structured. Extract all charts.",
-#         api_key=os.environ["LLAMA_CLOUD_API_KEY"],
-#         verbose=True,
-#         # CRITICAL CHANGE: This ensures images are downloaded to your local folder
-#         download_images=True  
-#     )
-    
-#     # LlamaParse returns a list of 'Document' objects (JSON-like wrapper)
-#     json_objs = parser.get_json_result(file_path)
-#     json_data = json_objs[0] 
-
-#     nodes = []
-    
-#     # 2. ITERATE PAGES
-#     for page in json_data["pages"]:
-#         page_num = page["page"]
-        
-#         # --- A. HANDLE TEXT ---
-#         text_content = page["md"] 
-#         if text_content.strip():
-#             text_node = TextNode(
-#                 text=text_content,
-#                 metadata={
-#                     "file_name": file_name,
-#                     "year": get_year_from_filename(file_name),
-#                     "page": page_num,
-#                     "type": "text_block",
-#                     "image_path": "N/A" # Consistent schema
-#                 }
-#             )
-#             nodes.append(text_node)
-
-#         # --- B. HANDLE IMAGES ---
-#         for img_info in page.get("images", []):
-#             img_name = img_info["name"]
-            
-#             # LlamaParse downloads images to the current working directory by default
-#             local_img_path = f"./{img_name}" 
-            
-#             # Only process if the file was actually downloaded
-#             if os.path.exists(local_img_path):
-#                 # Move to our organized folder with a unique name
-#                 new_img_name = f"{os.path.splitext(file_name)[0]}_p{page_num}_{img_name}"
-#                 final_path = os.path.join(IMG_DIR, new_img_name)
-                
-#                 # Rename/Move the file
-#                 os.rename(local_img_path, final_path)
-                
-#                 # CAPTION IT
-#                 print(f"   -> Captioning image: {new_img_name}")
-#                 caption = caption_image_with_gemini(final_path)
-                
-#                 # Create a specific NODE for this image
-#                 img_node = TextNode(
-#                     text=f"[IMAGE SUMMARY]\nType: Chart/Figure\nCaption: {caption}",
-#                     metadata={
-#                         "file_name": file_name,
-#                         "year": get_year_from_filename(file_name),
-#                         "page": page_num,
-#                         "type": "image_caption",
-#                         "image_path": final_path # <-- THIS IS KEY FOR RAG
-#                     }
-#                 )
-#                 nodes.append(img_node)
-
-#     return nodes
-
-# # --- MAIN EXECUTION ---
-# all_nodes = []
-# pdf_files = [f for f in os.listdir(DATA_DIR) if f.endswith(".pdf")]
-
-# for pdf in pdf_files:
-#     nodes = process_pdf(os.path.join(DATA_DIR, pdf))
-#     all_nodes.extend(nodes)
-
-# # --- 3. SAVE TO JSON (NEW STEP) ---
-# print(f"\nSaving {len(all_nodes)} nodes to {OUTPUT_JSON_FILE}...")
-
-# # We must convert TextNode objects to standard Dictionaries to save them as JSON
-# nodes_as_dicts = [node.to_dict() for node in all_nodes]
-
-# with open(OUTPUT_JSON_FILE, 'w', encoding='utf-8') as f:
-#     json.dump(nodes_as_dicts, f, indent=4, ensure_ascii=False)
-
-# print(f"✅ Data saved successfully to {OUTPUT_JSON_FILE}")
-
-# # --- 4. METADATA AUDIT ---
-# print("\n--- METADATA AUDIT ---")
-# df = pd.DataFrame([n.metadata for n in all_nodes])
-# if not df.empty:
-#     print(df.head())
-#     print("\nSummary of Extracted Years:")
-#     print(df['year'].value_counts())
-#     print("\nSummary of Node Types:")
-#     print(df['type'].value_counts())
-
-#     if df['year'].isnull().any() or (df['year'] == "Unknown").any():
-#         print("⚠️ WARNING: Some documents have missing years!")
-#     else:
-#         print("✅ SUCCESS: Metadata looks valid.")
-# else:
-#     print("❌ ERROR: No nodes extracted.")
-
-
-
-
-# --- CONFIGURATION ---
-# ⚠️ REPLACE WITH REAL KEYS
-
-
-# DIRECTORIES
 import os
 import json
 import nest_asyncio
@@ -178,19 +11,26 @@ from PIL import Image
 
 # --- CONFIGURATION ---
 # ⚠️ REPLACE WITH YOUR REAL KEYS
-os.environ["LLAMA_CLOUD_API_KEY"] = "llx-..." 
-os.environ["LLAMA_CLOUD_API_KEY"] = "llx-70lfJlK1UztwgKFgNPlUA7NLU1AhJnsFtLyLJEFrRh6wdCIe" 
-GOOGLE_API_KEY = "AIzaSyBJCo4A_oJENi45ShXYyeZHRBorKa121Ho" # Your Gemini Key
+os.environ["LLAMA_CLOUD_API_KEY"] = "llx-70lfJlK1UztwgKFgNPlUA7NLU1AhJnsFtLyLJEFrRh6wdCIe" # Replace with your LlamaCloud Key
+GOOGLE_API_KEY = os.getenv("GEMINI_API_KEY") # Replace with your Gemini Key
 
 # DIRECTORIES
-DATA_DIR = "./data_raw"
+# You mentioned your files are in 'raw_data', so I updated this.
+DATA_DIR = "./data_raw" 
 IMG_DIR = "./output_images"
-OUTPUT_JSON_FILE = "final_extracted_data_visual.json" 
+OUTPUT_JSON_FILE = "final_extracted_data_visual_withspecs.json" 
+
+# Ensure directories exist
+os.makedirs(DATA_DIR, exist_ok=True)
 os.makedirs(IMG_DIR, exist_ok=True)
 
 # SETUP GEMINI
-genai.configure(api_key=GOOGLE_API_KEY)
-vision_model = genai.GenerativeModel('gemini-2.5-flash') 
+try:
+    genai.configure(api_key=GOOGLE_API_KEY)
+    vision_model = genai.GenerativeModel('gemini-2.5-flash') # Use 1.5 Flash (stable)
+except ImportError:
+    print("❌ Error: 'google.generativeai' not installed. Run: pip install google-generativeai")
+    exit()
 
 nest_asyncio.apply()
 
@@ -254,12 +94,20 @@ def process_pdf(file_path):
     print("   📷 Converting PDF pages to images for analysis...")
     try:
         # dpi=150 is a good balance between quality and speed
+        # If poppler is not in PATH, you might need to install it: 
+        # Windows: http://blog.alivate.com.au/poppler-windows/ (Add bin to PATH)
+        # Mac: brew install poppler
+        # Linux: sudo apt-get install poppler-utils
         pdf_images = convert_from_path(file_path, dpi=150)
     except Exception as e:
         print(f"   ❌ PDF2Image failed (Is Poppler installed?): {e}")
-        return []
+        # Continue with just text if image conversion fails
+        pdf_images = []
 
     # 3. ITERATE PAGES
+    # Safety check: ensure we don't index out of bounds if pdf_images failed
+    num_images = len(pdf_images)
+    
     for page in json_data["pages"]:
         page_num = page["page"]
         text_content = page["md"]
@@ -281,7 +129,7 @@ def process_pdf(file_path):
         # Note: page_num is usually 1-based, pdf_images list is 0-based
         idx = page_num - 1
         
-        if 0 <= idx < len(pdf_images):
+        if 0 <= idx < num_images:
             # Save temporary image for Gemini to look at
             temp_img_name = f"temp_{file_name}_{page_num}.jpg"
             temp_img_path = os.path.join(IMG_DIR, temp_img_name)
@@ -295,9 +143,13 @@ def process_pdf(file_path):
                 final_img_name = f"{os.path.splitext(file_name)[0]}_p{page_num}_CHART.jpg"
                 final_path = os.path.join(IMG_DIR, final_img_name)
                 
-                # If reusing the temp file
+                # If reusing the temp file (overwrite if exists)
                 if os.path.exists(final_path):
-                    os.remove(final_path)
+                    try:
+                        os.remove(final_path)
+                    except:
+                        pass # Handle open file errors gracefully
+                        
                 os.rename(temp_img_path, final_path)
                 
                 print(f"   ✅ Chart detected on Page {page_num}. Saved {final_img_name}")
@@ -308,37 +160,64 @@ def process_pdf(file_path):
                         "file_name": file_name,
                         "year": get_year_from_filename(file_name),
                         "page": page_num,
-                        "type": "image_caption", # <--- THIS is what you were missing
-                        "image_path": final_path # <--- THIS is your RAG link
+                        "type": "image_caption", 
+                        "image_path": final_path 
                     }
                 ))
             else:
                 # No chart, delete the temp image to save space
-                os.remove(temp_img_path)
+                try:
+                    os.remove(temp_img_path)
+                except:
+                    pass
 
     return nodes
 
 # --- MAIN EXECUTION ---
 if __name__ == "__main__":
     all_nodes = []
+    
+    if not os.path.exists(DATA_DIR):
+         print(f"❌ Data directory '{DATA_DIR}' not found. Please create it and add PDFs.")
+         exit()
+
     pdf_files = [f for f in os.listdir(DATA_DIR) if f.lower().endswith(".pdf")]
     
-    for pdf in pdf_files:
-        try:
-            file_nodes = process_pdf(os.path.join(DATA_DIR, pdf))
-            all_nodes.extend(file_nodes)
-        except Exception as e:
-            print(f"CRITICAL ERROR on {pdf}: {e}")
+    if not pdf_files:
+        print(f"⚠️ No PDF files found in '{DATA_DIR}'. Please add your 2 WYDOT specs there.")
+    else:
+        print(f"Found {len(pdf_files)} PDFs to process: {pdf_files}")
+        
+        for pdf in pdf_files:
+            try:
+                file_nodes = process_pdf(os.path.join(DATA_DIR, pdf))
+                all_nodes.extend(file_nodes)
+            except Exception as e:
+                print(f"CRITICAL ERROR on {pdf}: {e}")
 
-    # Save Final JSON
-    print(f"\n💾 Saving {len(all_nodes)} nodes to {OUTPUT_JSON_FILE}...")
-    nodes_as_dicts = [node.to_dict() for node in all_nodes]
-    
-    with open(OUTPUT_JSON_FILE, 'w', encoding='utf-8') as f:
-        json.dump(nodes_as_dicts, f, indent=4, ensure_ascii=False)
-    
-    # Final Audit
-    count_images = sum(1 for n in nodes_as_dicts if n['metadata']['type'] == 'image_caption')
-    print(f"✅ Process Complete.")
-    print(f"📊 Total Text Blocks: {len(nodes_as_dicts) - count_images}")
-    print(f"🖼️  Total Charts Detected & Saved: {count_images}")
+        # Save Final JSON
+        if all_nodes:
+            print(f"\n💾 Saving {len(all_nodes)} nodes to {OUTPUT_JSON_FILE}...")
+            # Convert TextNodes to dicts for JSON serialization
+            nodes_as_dicts = []
+            for node in all_nodes:
+                # TextNode object to dict conversion
+                node_dict = {
+                    "id_": node.node_id,
+                    "text": node.text,
+                    "metadata": node.metadata
+                }
+                nodes_as_dicts.append(node_dict)
+            
+            with open(OUTPUT_JSON_FILE, 'w', encoding='utf-8') as f:
+                json.dump(nodes_as_dicts, f, indent=4, ensure_ascii=False)
+            
+            # Final Audit
+            count_images = sum(1 for n in nodes_as_dicts if n['metadata'].get('type') == 'image_caption')
+            print(f"✅ Process Complete.")
+            print(f"📊 Total Text Blocks: {len(nodes_as_dicts) - count_images}")
+            print(f"🖼️  Total Charts Detected & Saved: {count_images}")
+        else:
+            print("⚠️ No nodes were created. Check input files and keys.")
+
+
