@@ -4,7 +4,7 @@ on:
   push:
     branches: [ main ]
     paths:
-      - "llamacheck_metadata/app3.py"
+      - "advance/app2010.py"
       - "cloudrun/flash.yaml"
       - "requirements.txt"
       - "requirements_*.txt"
@@ -24,7 +24,7 @@ jobs:
       PROJECT_ID: ${{ secrets.GCP_PROJECT }}
       REGION: ${{ secrets.GCP_REGION || 'us-central1' }}
       IMAGE: us-docker.pkg.dev/${{ secrets.GCP_PROJECT }}/apps/flash-cloud:latest
-      APP_FILE: llamacheck_metadata/app3.py
+      APP_FILE: advance/app2010.py
       REQS_FILE: requirements.txt
 
     steps:
@@ -61,7 +61,7 @@ jobs:
         # Try to replace (update existing service)
         gcloud run services replace /tmp/flash.yaml --region="${REGION}" --project="${PROJECT_ID}" || \
         # Fall back to deploy if service doesn't exist
-        gcloud run deploy flash-cloud-metadata \
+        gcloud run deploy flash-cloud-specs \
           --image us-docker.pkg.dev/${PROJECT_ID}/apps/flash-cloud:latest \
           --region "${REGION}" \
           --service-account cloud-run-sa@${PROJECT_ID}.iam.gserviceaccount.com \
@@ -69,4 +69,4 @@ jobs:
           --quiet
 
     - name: Make service public (optional safeguard)
-      run: gcloud run services add-iam-policy-binding flash-cloud-metadata --member="allUsers" --role="roles/run.invoker" --region="${REGION}" --project="${PROJECT_ID}"
+      run: gcloud run services add-iam-policy-binding flash-cloud-specs --member="allUsers" --role="roles/run.invoker" --region="${REGION}" --project="${PROJECT_ID}"

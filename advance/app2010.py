@@ -1551,7 +1551,7 @@ with col_docs:
 # =========================================================
 
 # st.markdown("---")
-st.markdown("### 2010 & 2012 Specifications ")
+st.markdown("### 2010 & 2021 Specifications ")
 
 COLL_2010 = os.getenv("MILVUS_COLLECTION_2010", "wydotspec_llamaparse_2010")
 last_q = st.session_state.get("last_question", "")
