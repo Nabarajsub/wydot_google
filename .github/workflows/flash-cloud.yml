@@ -4,7 +4,7 @@ on:
   push:
     branches: [ main ]
     paths:
-      - "advance/app2010.py"
+      - "validator_ai_andhuman.py"
       - "cloudrun/flash.yaml"
       - "requirements.txt"
       - "requirements_*.txt"
@@ -61,7 +61,7 @@ jobs:
         # Try to replace (update existing service)
         gcloud run services replace /tmp/flash.yaml --region="${REGION}" --project="${PROJECT_ID}" || \
         # Fall back to deploy if service doesn't exist
-        gcloud run deploy flash-cloud-specs \
+        gcloud run deploy validator-ai-and-human \
           --image us-docker.pkg.dev/${PROJECT_ID}/apps/flash-cloud:latest \
           --region "${REGION}" \
           --service-account cloud-run-sa@${PROJECT_ID}.iam.gserviceaccount.com \
@@ -69,4 +69,4 @@ jobs:
           --quiet
 
     - name: Make service public (optional safeguard)
-      run: gcloud run services add-iam-policy-binding flash-cloud-specs --member="allUsers" --role="roles/run.invoker" --region="${REGION}" --project="${PROJECT_ID}"
+      run: gcloud run services add-iam-policy-binding validator-ai-and-human --member="allUsers" --role="roles/run.invoker" --region="${REGION}" --project="${PROJECT_ID}"
