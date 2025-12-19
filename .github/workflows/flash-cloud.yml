@@ -70,4 +70,4 @@ jobs:
 
     - name: Make service public (optional safeguard)
       run: gcloud run services add-iam-policy-binding validator-ai-and-human --member="allUsers" --role="roles/run.invoker" --region="${REGION}" --project="${PROJECT_ID}"
-#final deployment
+#final deployments
