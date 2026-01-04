@@ -1,6 +1,6 @@
 FROM python:3.11-slim
 
-ARG APP_FILE=advance/app2010.py
+ARG APP_FILE=llamacheck_metadata/app2.py
 ARG REQS_FILE=requirements.txt
 
 ENV PYTHONDONTWRITEBYTECODE=1 \
