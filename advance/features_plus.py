@@ -138,7 +138,7 @@ def render_citations_bar(sources: List[Dict[str, Any]]) -> Optional[Tuple[str, i
         conf = _confidence_from_score(s.get("score") or s.get("distance"))
         pct = int(round(conf * 100))
         with chip_cols[i % len(chip_cols)]:
-            if st.button(f"{label} · {pct}%", key=f"cite_chip_{i}"):
+            if st.button(f"{label}", key=f"cite_chip_{i}"):
                 selected = (s.get("doc_id") or "", int(s.get("page") or 0))
     if selected:
         st.session_state["citations_filter"] = {"doc_id": selected[0], "page": selected[1]}

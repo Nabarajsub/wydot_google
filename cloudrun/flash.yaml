@@ -1,7 +1,7 @@
 apiVersion: serving.knative.dev/v1
 kind: Service
 metadata:
-  name: validator-ai-and-human
+  name: 2010-vs-2021-specs-comparison
 spec:
   template:
     metadata:
@@ -16,7 +16,7 @@ spec:
       - image: us-docker.pkg.dev/${PROJECT_ID}/apps/flash-cloud:latest
         env:
         - name: APP_FILE
-          value: validator_ai_andhuman.py
+          value: advance/app2010.py
         - name: DOTENV_PATH
           value: /etc/secrets/.env
         - name: SECRETS_TOML_PATH
