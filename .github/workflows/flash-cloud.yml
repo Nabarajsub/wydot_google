@@ -60,7 +60,7 @@ jobs:
         # Try to replace (update existing service)
         gcloud run services replace /tmp/flash.yaml --region="${REGION}" --project="${PROJECT_ID}" || \
         # Fall back to deploy if service doesn't exist
-        gcloud run deploy 2010-vs-2021-specs-comparison \
+        gcloud run deploy specscomparison \
           --image us-docker.pkg.dev/${PROJECT_ID}/apps/flash-cloud:latest \
           --region "${REGION}" \
           --service-account cloud-run-sa@${PROJECT_ID}.iam.gserviceaccount.com \
@@ -68,5 +68,5 @@ jobs:
           --quiet
 
     - name: Make service public (optional safeguard)
-      run: gcloud run services add-iam-policy-binding 2010-vs-2021-specs-comparison --member="allUsers" --role="roles/run.invoker" --region="${REGION}" --project="${PROJECT_ID}"
+      run: gcloud run services add-iam-policy-binding specscomparison --member="allUsers" --role="roles/run.invoker" --region="${REGION}" --project="${PROJECT_ID}"
 #final deployments

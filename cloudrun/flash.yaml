@@ -1,7 +1,7 @@
 apiVersion: serving.knative.dev/v1
 kind: Service
 metadata:
-  name: 2010-vs-2021-specs-comparison
+  name: specscomparison
 spec:
   template:
     metadata:
