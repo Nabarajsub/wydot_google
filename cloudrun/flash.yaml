@@ -1,7 +1,7 @@
 apiVersion: serving.knative.dev/v1
 kind: Service
 metadata:
-  name: specscomparison
+  name: metadatabased 
 spec:
   template:
     metadata:
@@ -16,7 +16,7 @@ spec:
       - image: us-docker.pkg.dev/${PROJECT_ID}/apps/flash-cloud:latest
         env:
         - name: APP_FILE
-          value: advance/app2010.py
+          value: llamacheck_metadata/app2.py
         - name: DOTENV_PATH
           value: /etc/secrets/.env
         - name: SECRETS_TOML_PATH
