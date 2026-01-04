@@ -60,7 +60,7 @@ jobs:
         # Try to replace (update existing service)
         gcloud run services replace /tmp/flash.yaml --region="${REGION}" --project="${PROJECT_ID}" || \
         # Fall back to deploy if service doesn't exist
-        gcloud run deploy validator-ai-and-human \
+        gcloud run deploy 2010-vs-2021-specs-comparison \
           --image us-docker.pkg.dev/${PROJECT_ID}/apps/flash-cloud:latest \
           --region "${REGION}" \
           --service-account cloud-run-sa@${PROJECT_ID}.iam.gserviceaccount.com \
