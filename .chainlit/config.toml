@@ -1,0 +1,48 @@
+[project]
+name = "WYDOT Assistant"
+enable_telemetry = false
+session_timeout = 3600
+cache = false
+
+[features]
+unsafe_allow_html = true
+latex = true
+prompt_playground = false
+
+[features.spontaneous_file_upload]
+enabled = true
+accept = ["image/*", "video/*", "audio/*", "application/pdf", "text/plain"]
+max_files = 10
+max_size_mb = 100
+
+[features.chat_history]
+enabled = true
+
+[features.audio]
+enabled = true
+min_decibels = -45
+initial_silence_timeout = 3000
+silence_timeout = 1500
+max_duration = 30000
+chunk_duration = 1000
+sample_rate = 44100
+
+[UI]
+name = "WYDOT Assistant"
+description = "Wyoming Department of Transportation Knowledge Assistant"
+default_collapse_content = true
+custom_css = "/public/custom.css"
+
+# Custom logo for header (light and dark theme)
+logo_light = "./public/logo.png"
+logo_dark = "./public/logo.png"
+
+# Custom chatbot avatar icon
+[UI.icons]
+chatbot = "/public/logo.png"
+
+[UI.theme]
+default = "light"
+
+[meta]
+generated_by = "1.3.1"

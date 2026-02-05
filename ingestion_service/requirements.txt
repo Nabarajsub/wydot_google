@@ -1,0 +1,26 @@
+# ================================
+# WYDOT Document Ingestion Service
+# Cloud Run Dependencies
+# ================================
+
+# Core Flask
+flask>=3.0.0
+gunicorn>=21.0.0
+
+# Google Cloud
+google-cloud-storage>=2.14.0
+
+# Document Processing
+python-dotenv>=1.0.0
+pypdf>=3.17.0
+python-docx>=1.0.0
+
+# Neo4j GraphRAG
+neo4j>=5.14.0
+langchain-core>=0.1.0
+langchain-neo4j>=0.1.0
+langchain-community>=0.0.20
+
+# Embeddings
+langchain-huggingface>=0.0.1
+sentence-transformers>=2.2.0

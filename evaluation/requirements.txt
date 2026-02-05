@@ -1,0 +1,21 @@
+# ================================
+# WYDOT RAG Evaluation System
+# Dependencies
+# ================================
+
+# Google Cloud
+google-cloud-aiplatform>=1.38.0
+google-cloud-bigquery>=3.14.0
+vertexai>=1.38.0
+
+# Neo4j GraphRAG
+neo4j>=5.14.0
+langchain-core>=0.1.0
+langchain-neo4j>=0.1.0
+langchain-huggingface>=0.0.1
+
+# Embeddings
+sentence-transformers>=2.2.0
+
+# Core
+python-dotenv>=1.0.0
