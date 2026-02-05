@@ -55,7 +55,7 @@ else:
     print("⚠️ st.secrets will fail until Secret Manager mount works")
 
 # === 3) Run Streamlit app ===
-app = os.getenv("APP_FILE", "validator_ai_andhuman.py")
+app = os.getenv("APP_FILE", "chatapp.py")
 port = os.getenv("PORT", "8080")
 print(f"🚀 Launching Streamlit: {app} on port {port}")
 subprocess.run([
