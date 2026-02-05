@@ -29,15 +29,44 @@
 # streamlit
 # google-genai
 # google-auth
+# ================================
+# WYDOT Multimodal GraphRAG
+# Combined Dependencies
+# ================================
+
+# Core
 streamlit>=1.30,<2
-pandas>=2.0
 python-dotenv>=1.0
+pandas>=2.0
+
+# Neo4j GraphRAG
+neo4j>=5.14.0
+langchain-core>=0.1.0
+langchain-neo4j>=0.1.0
+langchain-mistralai>=0.1.0
+langchain-huggingface>=0.0.1
+
+# Embeddings & NLP
+sentence-transformers>=2.2.0
+transformers>=4.30.0
+torch>=2.0.0
+
+# Multimodal (Images / Audio)
+Pillow
+pydub
+audio-recorder-streamlit
+
+# Vector DB (if used)
+pymilvus>=2.4.0
+
+# Reranking
+flashrank>=0.2.0
+
+# Google / Gemini (optional but enabled)
 google-generativeai>=0.8.3
 google-genai>=0.3.0
 google-auth>=2.29
-pymilvus>=2.4.0
-audio-recorder-streamlit
-pydub
-Pillow
+
+# System / Serialization
 protobuf>=4.25,<6
 grpcio>=1.62

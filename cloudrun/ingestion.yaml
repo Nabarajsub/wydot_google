@@ -1,0 +1,60 @@
+apiVersion: serving.knative.dev/v1
+kind: Service
+metadata:
+  name: wydot-ingestion
+  annotations:
+    run.googleapis.com/ingress: all
+    run.googleapis.com/launch-stage: GA
+spec:
+  template:
+    metadata:
+      annotations:
+        # Scale to zero when not in use
+        autoscaling.knative.dev/minScale: "0"
+        autoscaling.knative.dev/maxScale: "3"
+        # Allow 5 minutes for document processing
+        run.googleapis.com/cpu-throttling: "false"
+        run.googleapis.com/startup-cpu-boost: "true"
+    spec:
+      containerConcurrency: 1  # One request at a time for memory-intensive processing
+      timeoutSeconds: 300      # 5 minute timeout
+      serviceAccountName: cloud-run-sa@${PROJECT_ID}.iam.gserviceaccount.com
+      containers:
+        - image: us-docker.pkg.dev/${PROJECT_ID}/apps/wydot-ingestion:latest
+          ports:
+            - containerPort: 8080
+          resources:
+            limits:
+              cpu: "2"
+              memory: 4Gi
+          env:
+            - name: GCS_BUCKET
+              value: wydot-documents-${PROJECT_ID}
+            - name: GCS_INCOMING_PREFIX
+              value: incoming/
+            - name: GCS_PROCESSED_PREFIX
+              value: processed/
+            - name: GCS_FAILED_PREFIX
+              value: failed/
+            - name: NEO4J_INDEX_NAME
+              value: wydot_vector_index
+            - name: CHUNK_SIZE
+              value: "1000"
+            - name: CHUNK_OVERLAP
+              value: "100"
+            # Secrets mounted from Secret Manager
+            - name: NEO4J_URI
+              valueFrom:
+                secretKeyRef:
+                  key: latest
+                  name: neo4j-uri
+            - name: NEO4J_USERNAME
+              valueFrom:
+                secretKeyRef:
+                  key: latest
+                  name: neo4j-username
+            - name: NEO4J_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  key: latest
+                  name: neo4j-password

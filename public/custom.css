@@ -1,0 +1,207 @@
+/* Gemini-like Clean UI */
+
+:root {
+    --background-primary: #ffffff;
+    --text-primary: #1f1f1f;
+    --input-bg: #f0f4f9;
+    --accent-color: #1d72b8;
+    /* WYDOT Blueish */
+}
+
+
+/* Replace Chainlit Logo with WYDOT Logo */
+/* Use content property to replace img src - most reliable method */
+img.logo,
+img[alt="logo"] {
+    content: url('/public/logo.png') !important;
+    width: 180px !important;
+    height: auto !important;
+    max-height: 50px !important;
+    object-fit: contain !important;
+}
+
+/* Hide Chainlit SVG logos */
+header a[href="/"] svg,
+.logo svg {
+    display: none !important;
+}
+
+/* Ensure logo container has proper sizing */
+.logo {
+    min-width: 180px !important;
+    height: 50px !important;
+    display: flex !important;
+    align-items: center !important;
+}
+
+/* Add "Assistant" text next to logo above chat composer */
+.logo::after {
+    content: "Assistant" !important;
+    font-size: 20px !important;
+    font-weight: 600 !important;
+    color: var(--text-primary) !important;
+    margin-left: 12px !important;
+    font-family: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif !important;
+}
+
+
+
+/* Custom Avatar - Replace Chainlit default with WYDOT logo */
+/* Force replace avatar images using content property */
+img[alt*="Avatar for WYDOT Assistant"],
+img[src*="/avatars/WYDOT"],
+img[alt*="WYDOT Assistant"],
+.MuiAvatar-root img,
+.message-avatar img {
+    content: url('/public/logo.png') !important;
+    width: 40px !important;
+    height: 40px !important;
+    object-fit: contain !important;
+}
+
+/* Fallback: use background image for avatar containers */
+.MuiAvatar-root,
+.message-avatar {
+    background-image: url('/public/logo.png') !important;
+    background-size: contain !important;
+    background-repeat: no-repeat !important;
+    background-position: center !important;
+    background-color: transparent !important;
+}
+
+/* Hide default SVG icons in avatars */
+.MuiAvatar-root svg,
+.message-avatar svg {
+    display: none !important;
+}
+
+/* Hide any text/children that might interfere */
+.MuiAvatar-root>*:not(img),
+.message-avatar>*:not(img) {
+    opacity: 0 !important;
+}
+
+/* Hide default footer/header noise */
+.cl-header {
+    background: transparent !important;
+    box-shadow: none !important;
+}
+
+/* Chat Input Area - Floating Pill Style */
+.cl-input-container {
+    background-color: var(--input-bg) !important;
+    border-radius: 24px !important;
+    border: 1px solid transparent !important;
+    padding: 10px 20px !important;
+    margin-bottom: 20px !important;
+    box-shadow: 0 1px 3px rgba(0, 0, 0, 0.08) !important;
+    transition: all 0.2s ease !important;
+}
+
+.cl-input-container:focus-within {
+    border-color: var(--accent-color) !important;
+    box-shadow: 0 2px 8px rgba(29, 114, 184, 0.15) !important;
+}
+
+/* Clean message bubbles */
+.message-content {
+    background-color: transparent !important;
+    padding: 12px 0 !important;
+}
+
+/* User messages subtle highlight */
+.user-message {
+    background-color: rgba(29, 114, 184, 0.05) !important;
+    border-radius: 12px !important;
+    padding: 12px 16px !important;
+    margin: 8px 0 !important;
+}
+
+/* Assistant message spacing */
+.assistant-message {
+    margin: 12px 0 !important;
+}
+
+/* Clean header */
+header {
+    border-bottom: 1px solid rgba(0, 0, 0, 0.06) !important;
+    background: white !important;
+}
+
+/* Buttons */
+button {
+    border-radius: 8px !important;
+    transition: all 0.2s ease !important;
+}
+
+/* Source cards in side panel */
+.source-card {
+    border-radius: 12px !important;
+    border: 1px solid rgba(0, 0, 0, 0.08) !important;
+    padding: 16px !important;
+    margin: 8px 0 !important;
+    background: white !important;
+    box-shadow: 0 1px 3px rgba(0, 0, 0, 0.06) !important;
+}
+
+/* Citation links inline */
+a[href^="#source"] {
+    color: var(--accent-color) !important;
+    text-decoration: none !important;
+    font-weight: 500 !important;
+    padding: 2px 6px !important;
+    border-radius: 4px !important;
+    background: rgba(29, 114, 184, 0.1) !important;
+    transition: background 0.2s ease !important;
+}
+
+a[href^="#source"]:hover {
+    background: rgba(29, 114, 184, 0.2) !important;
+}
+
+/* Settings Panel Styling */
+.settings-panel {
+    background: white !important;
+    border-radius: 12px !important;
+    padding: 20px !important;
+    box-shadow: 0 2px 8px rgba(0, 0, 0, 0.1) !important;
+}
+
+/* Improve code blocks */
+pre {
+    background-color: #f6f8fa !important;
+    border-radius: 8px !important;
+    padding: 16px !important;
+    border: 1px solid rgba(0, 0, 0, 0.08) !important;
+}
+
+code {
+    background-color: #f6f8fa !important;
+    padding: 2px 6px !important;
+    border-radius: 4px !important;
+    font-family: 'SF Mono', 'Monaco', 'Inconsolata', 'Consolas', monospace !important;
+}
+
+/* Typography */
+body {
+    font-family: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', 'Roboto', sans-serif !important;
+    color: var(--text-primary) !important;
+}
+
+/* Smooth scrolling */
+* {
+    scroll-behavior: smooth;
+}
+
+/* File upload area */
+.file-upload-area {
+    border-radius: 12px !important;
+    border: 2px dashed rgba(29, 114, 184, 0.3) !important;
+    background: rgba(29, 114, 184, 0.03) !important;
+    transition: all 0.2s ease !important;
+}
+
+.file-upload-area:hover {
+    border-color: var(--accent-color) !important;
+    background: rgba(29, 114, 184, 0.06) !important;
+}

@@ -229,6 +229,9 @@ import google.generativeai as genai
 from google.generativeai.types import HarmCategory, HarmBlockThreshold
 
 from pymilvus import connections, Collection, utility, DataType
+from pathlib import Path
+
+
 
 # =========================
 # PAGE SETUP
@@ -391,6 +394,20 @@ User query: {query}
 # =========================
 # DEBUG HELPERS (clickable citations -> debug anchors)
 # =========================
+def normalize_path(p: str) -> str:
+    if not p or p == "N/A":
+        return None
+    # 1. Replace Windows backslashes with Unix forward slashes
+    clean_p = p.replace("\\", "/")
+    # 2. Remove leading './' if present so Path() handles it correctly from the root
+    if clean_p.startswith("./"):
+        clean_p = clean_p[2:]
+    
+    # 3. Create a path object relative to your current working directory
+    # (Assuming output_images is in your project folder)
+    full_path = Path.cwd() / clean_p
+    return str(full_path)
+
 def _safe_anchor_id(chunk_id: str) -> str:
     # Make a safe HTML anchor id from chunk_id
     return re.sub(r"[^A-Za-z0-9_-]", "_", str(chunk_id))
@@ -607,10 +624,11 @@ for msg in st.session_state.messages:
         if msg.get("images"):
             with st.expander("📊 View referenced charts/images"):
                 for img in msg["images"]:
+                    # img is already normalized here because we saved valid_images to state
                     if os.path.exists(img):
-                        st.image(img, caption="Reference", width=650)
+                        st.image(img, caption=f"Source: {Path(img).name}", use_container_width=True)
                     else:
-                        st.caption(f"Image referenced but not found locally: {img}")
+                        st.caption(f"⚠️ File still not found at: {img}")
 
         if msg.get("debug"):
             with st.expander("Sources(route + years + filter + context preview)"):
@@ -665,8 +683,17 @@ if prompt := st.chat_input("Ask about WYDOT specs or reports..."):
                 else:
                     response_text = grounded_answer(prompt, metas, docs, mode=f"{route} {target_year}")
 
-                    images = [m["image_path"] for m in metas if m.get("image_path") and m["image_path"] != "N/A"]
+                    images = []
+                    for m in metas:
+                        raw_path = m.get("image_path")
+                        if raw_path and raw_path != "N/A":
+                            norm = normalize_path(raw_path)
+                            if norm:
+                                images.append(norm)
                     images = sorted(set(images))
+
+                    # Validate images for storing in session
+                   
 
                 # Validate images for storing in session
                 valid_images = []
