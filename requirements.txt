@@ -1,34 +1,3 @@
-# # fastapi
-# streamlit==1.38.0
-# protobuf==3.20.3
-# grpcio==1.62.2
-# # uvicorn
-# langchain
-# langchain-experimental
-# langchain-community
-# pymilvus
-# python-dotenv
-# redis
-# # langchain-huggingface
-# tiktoken
-# pypdf
-# python-multipart
-# Pillow
-# python-docx
-# PyPDF2
-# speech
-# google-generativeai
-# google-genai
-# pydub
-# pdf2image
-# google-genai
-# google-auth
-# pymilvus
-# python-dotenv
-# audio-recorder-streamlit
-# streamlit
-# google-genai
-# google-auth
 # ================================
 # WYDOT Multimodal GraphRAG
 # Combined Dependencies
@@ -62,12 +31,13 @@ pymilvus>=2.4.0
 # Reranking
 flashrank>=0.2.0
 
-# Google / Gemini (optional but enabled)
+# Google / Gemini
 google-generativeai>=0.8.3
 google-genai>=0.3.0
 google-auth>=2.29
+google-cloud-storage
 
 # System / Serialization
 protobuf>=4.25,<6
 grpcio>=1.62
-chainlit
+chainlit>=1.0.0

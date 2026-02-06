@@ -24,6 +24,16 @@ print("WORKDIR:", os.getcwd())
 print("DOTENV_PATH:", os.getenv("DOTENV_PATH"))
 print("SECRETS_TOML_PATH:", os.getenv("SECRETS_TOML_PATH"))
 
+# DEBUG: Print python environment
+import sys
+print("🐍 sys.path:", sys.path)
+try:
+    print("📦 Installed packages (pip list):")
+    subprocess.run(["pip", "list"], check=False)
+except Exception as e:
+    print("Could not run pip list:", e)
+
+
 # === 1) Load .env mounted from Secret Manager ===
 dotenv_path = pathlib.Path(os.getenv("DOTENV_PATH", "/etc/secrets/.env"))
 if dotenv_path.exists():
@@ -61,11 +71,24 @@ port = os.getenv("PORT", "8080")
 # Simple heuristic: Check if file imports chainlit
 is_chainlit = False
 try:
-    with open(app, "r", encoding="utf-8") as f:
-        if "chainlit" in f.read():
-            is_chainlit = True
-except Exception:
-    pass
+    print(f"🧐 Checking {app} for 'chainlit' import...")
+    if not os.path.exists(app):
+        print(f"❌ File {app} does not exist at {os.getcwd()}")
+    else:
+        with open(app, "r", encoding="utf-8") as f:
+            content = f.read()
+            if "chainlit" in content:
+                is_chainlit = True
+                print("✅ Found 'chainlit' in file content.")
+            else:
+                print("❌ 'chainlit' NOT found in file content.")
+except Exception as e:
+    print(f"❌ Error reading {app}: {e}")
+
+# Fallback/Override: If it IS chatapp.py, it IS chainlit
+if app == "chatapp.py":
+    print("⚠️  Force-enabling Chainlit for known app 'chatapp.py'")
+    is_chainlit = True
 
 if is_chainlit:
     print(f"🚀 Launching Chainlit: {app} on port {port}")
@@ -76,7 +99,7 @@ if is_chainlit:
 else:
     print(f"🚀 Launching Streamlit: {app} on port {port}")
     subprocess.run([
-        "python", "-m", "streamlit", "run", app,
+        "python", "-m", "chainlit", "run", app,
         "--server.port", port, "--server.address", "0.0.0.0"
     ])
 #this is changed checkpoint

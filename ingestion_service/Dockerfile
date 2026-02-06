@@ -17,7 +17,11 @@ RUN pip install --upgrade pip && \
     pip install -r requirements.txt
 
 # Copy application code
+# Copy application code
 COPY . .
+
+# Pre-download embedding model (bakes it into the image)
+RUN python download_model.py
 
 # Create non-root user for security
 RUN useradd -m appuser && chown -R appuser:appuser /app

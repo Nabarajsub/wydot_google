@@ -1,14 +1,43 @@
-# Welcome to Chainlit! 🚀🤖
+# Welcome to WYDOT Assistant! 
 
-Hi there, Developer! 👋 We're excited to have you on board. Chainlit is a powerful tool designed to help you prototype, debug and share applications built on top of LLMs.
+This is your AI-powered assistant for the Wyoming Department of Transportation. It uses advanced Graph based RAG (Retrieval-Augmented Generation) to answer questions based on official specifications, manuals, and reports.
 
-## Useful Links 🔗
+##  Key Features
+-  Multi-Document Search: Instantly searches across thousands of pages of WYDOT documents.
+-  Multi-Hop Reasoning: Can connect facts from different sections (e.g., relating material specs to construction methods).
+-  Voice Support: Click the microphone icon to ask questions verbally.
+-  Multimodal Analysis: Upload images or PDFs, and the AI will analyze them using Google Gemini models.
+-  Citation Tracking: Every answer provides clickable sources so you can verify the information.
 
-- **Documentation:** Get started with our comprehensive [Chainlit Documentation](https://docs.chainlit.io) 📚
-- **Discord Community:** Join our friendly [Chainlit Discord](https://discord.gg/k73SQ3FyUh) to ask questions, share your projects, and connect with other developers! 💬
+## 💡 How to Ask Better Questions
+ To get the **excel best** results, try to be specific and use the metadata fields our system tracks:
 
-We can't wait to see what you create with Chainlit! Happy coding! 💻😊
+### 1. Filter by Year
+If you need information from a specific version of the specs, mention the year.
+> "What is the asphalt binder requirement in the **2021** specs?"
 
-## Welcome screen
+### 2. Reference Specific Sections
+The system indexes documents by section. Referring to them helps precise retrieval.
+> "Summarize **Section 101.03** regarding definitions."
+> "What does **Section 401** say about mixing temperatures?"
 
-To modify the welcome screen, edit the `chainlit.md` file at the root of your project. If you do not want a welcome screen, just leave this file empty.
+### 3. Ask for Comparisons** 
+> "Compare the aggregate gradation requirements for **Type I** vs **Type II** pavement."
+
+### 4. Use Multimodal Capabilities** 
+Upload a photo of a construction defect or a screenshot of a table and ask:
+> "What does this table specify for compressive strength?"
+> "Does this crack pattern indicate a subgrade failure?"
+
+## Metadata Fields
+The system tracks the following metadata for every document chunk. You can use these terms in your query to narrow down results:
+- **SOURCE**: The filename of the document (e.g., `2021_Standard_Specs.pdf`)
+- **TITLE**: The title of the document (e.g., `2021 Standard Specifications for Road and Bridge Construction,annual report `)
+- **DOCUMENT_TYPE**: The type of document (e.g., `Standard Specifications`, `Manual`, `Report`)
+- **PREVIEW**: The preview of the document (e.g., `2021 Standard Specifications for Road and Bridge Construction`)  
+- **SECTION**: The section number (e.g., `401.4`)
+- **YEAR**: The document publication year (e.g., `2021`, `2010`)
+- **PAGE**: The page number in the original PDF
+
+
+Ready to start? Type your question in the chat composer below!
