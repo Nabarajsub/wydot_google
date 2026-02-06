@@ -16,7 +16,11 @@ WORKDIR /app
 COPY ${REQS_FILE} /tmp/requirements.txt
 ARG CACHEBUST=1
 RUN pip install -r /tmp/requirements.txt && \
-    pip install python-dotenv streamlit chainlit
+    pip install python-dotenv streamlit chainlit && \
+    echo "=== VERIFYING CHAINLIT INSTALLATION ===" && \
+    python -c "import chainlit; print(f'chainlit installed at: {chainlit.__file__}')" && \
+    which chainlit && \
+    echo "=== CHAINLIT VERIFIED ==="
 
 COPY . /app
 
