@@ -90,6 +90,17 @@ if app == "chatapp.py":
     print("⚠️  Force-enabling Chainlit for known app 'chatapp.py'")
     is_chainlit = True
 
+# PRE-FLIGHT CHECK: Verify chainlit is importable
+print("🔍 Pre-flight check: Verifying chainlit module...")
+try:
+    import chainlit
+    print(f"✅ chainlit version {chainlit.__version__} found at {chainlit.__file__}")
+except ImportError as e:
+    print(f"❌ CRITICAL: Cannot import chainlit! Error: {e}")
+    print("📦 Listing installed packages:")
+    subprocess.run(["pip", "list"], check=False)
+    sys.exit(1)
+
 if is_chainlit:
     print(f"🚀 Launching Chainlit: {app} on port {port}")
     subprocess.run([
@@ -99,7 +110,7 @@ if is_chainlit:
 else:
     print(f"🚀 Launching Streamlit: {app} on port {port}")
     subprocess.run([
-        "python", "-m", "chainlit", "run", app,
+        "python", "-m", "streamlit", "run", app,
         "--server.port", port, "--server.address", "0.0.0.0"
     ])
 #this is changed checkpoint
