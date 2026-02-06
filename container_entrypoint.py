@@ -54,12 +54,29 @@ else:
     print(f"❌ Secret file missing at {src}")
     print("⚠️ st.secrets will fail until Secret Manager mount works")
 
-# === 3) Run Streamlit app ===
+# === 3) Run App (Chainlit or Streamlit) ===
 app = os.getenv("APP_FILE", "chatapp.py")
 port = os.getenv("PORT", "8080")
-print(f"🚀 Launching Streamlit: {app} on port {port}")
-subprocess.run([
-    "python", "-m", "streamlit", "run", app,
-    "--server.port", port, "--server.address", "0.0.0.0"
-])
+
+# Simple heuristic: Check if file imports chainlit
+is_chainlit = False
+try:
+    with open(app, "r", encoding="utf-8") as f:
+        if "chainlit" in f.read():
+            is_chainlit = True
+except Exception:
+    pass
+
+if is_chainlit:
+    print(f"🚀 Launching Chainlit: {app} on port {port}")
+    subprocess.run([
+        "chainlit", "run", app,
+        "--port", port, "--host", "0.0.0.0", "--headless"
+    ])
+else:
+    print(f"🚀 Launching Streamlit: {app} on port {port}")
+    subprocess.run([
+        "python", "-m", "streamlit", "run", app,
+        "--server.port", port, "--server.address", "0.0.0.0"
+    ])
 #this is changed checkpoint
