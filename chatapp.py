@@ -41,6 +41,29 @@ try:
 except ImportError:
     GEMINI_AVAILABLE = False
 
+# Google Cloud Storage - Public URLs
+import urllib.parse
+
+def generate_public_url(gcs_uri: str) -> str:
+    """Generate a public URL for a GCS object."""
+    try:
+        if not gcs_uri or not gcs_uri.startswith("gs://"):
+            return ""
+            
+        # Parse gs://bucket/blob_name
+        parts = gcs_uri.replace("gs://", "").split("/", 1)
+        if len(parts) != 2:
+            return ""
+            
+        bucket_name, blob_name = parts
+        # Encode the blob path (e.g. spaces to %20)
+        encoded_blob = urllib.parse.quote(blob_name)
+        
+        return f"https://storage.googleapis.com/{bucket_name}/{encoded_blob}"
+    except Exception as e:
+        print(f"Error generating public URL: {e}")
+        return ""
+
 # Load environment variables
 load_dotenv()
 
@@ -401,16 +424,42 @@ def search_graph(query: str, index_name: str, use_gemini: bool = False) -> Tuple
         for i, doc in enumerate(docs):
             chunks.append(f"[SOURCE_{i+1}]\n{doc.page_content}")
             meta = doc.metadata
+            title = meta.get("title", "Untitled")
+            source_file = meta.get("source", "File")
+            if title in ["Unknown", "Untitled", "None", ""]:
+                title = source_file
+
             sources.append({
                 "id": f"source_{i+1}",
                 "index": i + 1, # citation index [1], [2]
-                "title": meta.get("title", "Untitled"),
+                "title": title,
                 "source": meta.get("source", "File"),
                 "year": meta.get("year", ""),
                 "section": meta.get("section", ""),
                 "page": meta.get("page", ""),
                 "preview": doc.page_content[:300]
             })
+            
+            # Generate signed URL if GCS path is available
+            gcs_path = meta.get("gcs_path", "")
+            
+            # Fallback for documents in 'wydot documents' folder
+            if not gcs_path:
+                project_id = os.getenv("GCP_PROJECT") or os.getenv("GOOGLE_CLOUD_PROJECT")
+                if project_id:
+                    bucket_name = f"wydot-documents-{project_id}"
+                    source_file = meta.get("source", "")
+                    if source_file:
+                        gcs_path = f"gs://{bucket_name}/wydot documents/{source_file}"
+
+            public_url = generate_public_url(gcs_path)
+            
+            # Append page number hash if available
+            page = meta.get("page", "")
+            if public_url and page:
+                public_url += f"#page={page}"
+                
+            sources[-1]["url"] = public_url
         return "\n\n".join(chunks), sources
     except Exception as e:
         print(f"Search error: {e}")
@@ -650,7 +699,7 @@ async def main(message: cl.Message):
         clean_elements.append(
             cl.Text(
                 name=f"Source {src['index']}", 
-                content=f"**Source {src['index']}: {src['title']}**\n\n**File:** {src['source']}\n**Section:** {src.get('section', 'N/A')}\n**Year:** {src.get('year', 'N/A')}\n\n**Preview:**\n{src['preview']}", 
+                content=f"**Source {src['index']}: {src['title']}**\n\n**File:** [{src['source']}]({src.get('url', '#')})\n**Page:** {src.get('page', 'N/A')}\n**Section:** {src.get('section', 'N/A')}\n**Year:** {src.get('year', 'N/A')}\n\n**Preview:**\n{src['preview']}", 
                 display="side"
             )
         )

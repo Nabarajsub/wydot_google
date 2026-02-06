@@ -14,6 +14,7 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
 WORKDIR /app
 
 COPY ${REQS_FILE} /tmp/requirements.txt
+ARG CACHEBUST=1
 RUN pip install -r /tmp/requirements.txt && \
     pip install python-dotenv streamlit chainlit
 
