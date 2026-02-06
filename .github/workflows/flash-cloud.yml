@@ -48,6 +48,7 @@ jobs:
         docker build \
           --build-arg APP_FILE="${APP_FILE}" \
           --build-arg REQS_FILE="${REQS_FILE}" \
+          --build-arg CACHEBUST="${{ github.run_id }}" \
           -t "${IMAGE}" .
         docker push "${IMAGE}"
 
