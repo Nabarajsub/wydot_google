@@ -14,6 +14,8 @@ spec:
       timeoutSeconds: 900
       containers:
       - image: us-docker.pkg.dev/${PROJECT_ID}/apps/flash-cloud:latest
+        command: ["chainlit"]
+        args: ["run", "chatapp.py", "--port", "8080", "--host", "0.0.0.0", "--headless"]
         env:
         - name: APP_FILE
           value: chatapp.py
