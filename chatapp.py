@@ -10,6 +10,13 @@ Features:
 - Audio Input Support
 """
 
+# === CLOUD RUN RUNTIME SETUP ===
+# Create temp directories at runtime (Cloud Run may reset /tmp between requests)
+import os as _os
+for _d in ["/tmp/.files", "/tmp/.chainlit"]:
+    _os.makedirs(_d, exist_ok=True)
+# === END CLOUD RUN SETUP ===
+
 import os
 import re
 import time

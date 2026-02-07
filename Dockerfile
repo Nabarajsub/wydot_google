@@ -25,7 +25,9 @@ RUN pip install -r /tmp/requirements.txt && \
 COPY . /app
 
 # Create temp directories for file uploads with correct permissions
-RUN mkdir -p /tmp/.files && chmod 777 /tmp/.files
+# Note: These may be reset by Cloud Run, so we also create them at runtime
+RUN mkdir -p /tmp/.files /tmp/.chainlit && \
+    chmod -R 777 /tmp/.files /tmp/.chainlit
 
 RUN useradd -m appuser
 USER appuser
@@ -34,6 +36,8 @@ ENV PORT=8080
 ENV APP_FILE=chatapp.py
 ENV DOTENV_PATH=/etc/secrets/.env
 ENV SECRETS_TOML_PATH=/etc/secrets/streamlit/secrets.toml
+ENV CHAINLIT_CONFIG_PATH=/app/.chainlit/config.toml
+ENV CHAINLIT_STORAGE_PATH=/tmp/.chainlit
 
-# Run chainlit DIRECTLY - no entrypoint script
-CMD ["chainlit", "run", "chatapp.py", "--port", "8080", "--host", "0.0.0.0", "--headless"]
+# Run chainlit DIRECTLY
+CMD ["chainlit", "run", "chatapp.py", "--port", "8080", "--host", "0.0.0.0"]
