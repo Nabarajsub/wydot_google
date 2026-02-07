@@ -91,7 +91,8 @@ GEMINI_API_KEY = os.getenv("GEMINI_API_KEY")
 LLM_MODEL = os.getenv("LLM_MODEL", "mistral-large-latest")
 LLM_TEMPERATURE = float(os.getenv("LLM_TEMPERATURE", "0"))
 
-CHAT_DB_PATH = os.getenv("CHAT_DB_PATH", os.path.join(tempfile.gettempdir(), "wydot_chat_history.sqlite3"))
+# Cloud Run only allows writes to /tmp - force the DB there
+CHAT_DB_PATH = os.getenv("CHAT_DB_PATH", "/tmp/wydot_chat_history.sqlite3")
 RETRIEVAL_K = int(os.getenv("RETRIEVAL_K", "8"))
 MAX_HISTORY_MSGS = 20
 
