@@ -9,6 +9,7 @@ on:
       - "requirements.txt"
       - "Dockerfile"
       - "entrypoint.py"
+      - "container_entrypoint.py"
       - ".github/workflows/flash-cloud.yml"
   workflow_dispatch:
 
