@@ -28,8 +28,9 @@ RUN useradd -m appuser
 USER appuser
 
 ENV PORT=8080
-ENV APP_FILE=${APP_FILE}
+ENV APP_FILE=chatapp.py
 ENV DOTENV_PATH=/etc/secrets/.env
 ENV SECRETS_TOML_PATH=/etc/secrets/streamlit/secrets.toml
 
-CMD ["python", "container_entrypoint.py"]
+# Run chainlit DIRECTLY - no entrypoint script
+CMD ["chainlit", "run", "chatapp.py", "--port", "8080", "--host", "0.0.0.0", "--headless"]
