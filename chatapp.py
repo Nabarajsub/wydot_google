@@ -95,6 +95,19 @@ CHAT_DB_PATH = os.getenv("CHAT_DB_PATH", os.path.join(tempfile.gettempdir(), "wy
 RETRIEVAL_K = int(os.getenv("RETRIEVAL_K", "8"))
 MAX_HISTORY_MSGS = 20
 
+# Debug: Print configuration (hide password)
+print("=" * 60)
+print("🔧 NEO4J CONFIGURATION:")
+print(f"  URI: {NEO4J_URI}")
+print(f"  Username: {NEO4J_USERNAME}")
+print(f"  Password: {'*' * len(NEO4J_PASSWORD) if NEO4J_PASSWORD else 'NOT SET'}")
+print(f"  Database: {NEO4J_DATABASE}")
+print(f"  Index: {NEO4J_INDEX_DEFAULT}")
+print(f"🔧 API KEYS:")
+print(f"  MISTRAL_API_KEY: {'SET' if MISTRAL_API_KEY else 'NOT SET'}")
+print(f"  GEMINI_API_KEY: {'SET' if GEMINI_API_KEY else 'NOT SET'}")
+print("=" * 60)
+
 # =========================================================
 # DATABASE / AUTH STORE
 # =========================================================
