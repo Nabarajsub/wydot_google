@@ -24,6 +24,9 @@ RUN pip install -r /tmp/requirements.txt && \
 
 COPY . /app
 
+# Create temp directories for file uploads with correct permissions
+RUN mkdir -p /tmp/.files && chmod 777 /tmp/.files
+
 RUN useradd -m appuser
 USER appuser
 
