@@ -64,8 +64,14 @@ def generate_public_url(gcs_uri: str) -> str:
         print(f"Error generating public URL: {e}")
         return ""
 
-# Load environment variables
-load_dotenv()
+# Load environment variables from DOTENV_PATH or .env
+dotenv_path = os.getenv("DOTENV_PATH", ".env")
+if os.path.exists(dotenv_path):
+    print(f"📂 Loading environment from: {dotenv_path}")
+    load_dotenv(dotenv_path)
+else:
+    print(f"⚠️ DOTENV_PATH not found: {dotenv_path}, trying default .env")
+    load_dotenv()
 
 # =========================================================
 # CONFIGURATION
