@@ -20,6 +20,25 @@ import hmac
 import tempfile
 import base64 as _b64
 from typing import List, Dict, Any, Optional, Tuple
+import sys
+import subprocess
+
+# ====== DIAGNOSTIC START ======
+print("=" * 60, flush=True)
+print("🔍 DIAGNOSTIC: Python environment check", flush=True)
+print(f"Python executable: {sys.executable}", flush=True)
+print(f"Python version: {sys.version}", flush=True)
+print(f"sys.path:", flush=True)
+for p in sys.path:
+    print(f"  - {p}", flush=True)
+print("", flush=True)
+print("🔍 Checking for chainlit package:", flush=True)
+result = subprocess.run([sys.executable, "-m", "pip", "show", "chainlit"], capture_output=True, text=True)
+print(f"pip show chainlit:\n{result.stdout}", flush=True)
+if result.stderr:
+    print(f"STDERR: {result.stderr}", flush=True)
+print("=" * 60, flush=True)
+# ====== DIAGNOSTIC END ======
 
 import chainlit as cl
 from chainlit.input_widget import Select, Switch
