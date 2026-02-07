@@ -3,6 +3,8 @@ name = "WYDOT Assistant"
 enable_telemetry = false
 session_timeout = 3600
 cache = false
+# Cloud Run only allows writes to /tmp
+files_directory = "/tmp/.files"
 
 [features]
 unsafe_allow_html = true
