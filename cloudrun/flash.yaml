@@ -15,7 +15,7 @@ spec:
       containers:
       - image: us-docker.pkg.dev/${PROJECT_ID}/apps/flash-cloud:latest
         command: ["chainlit"]
-        args: ["run", "chatapp.py", "--port", "8080", "--host", "0.0.0.0", "--headless"]
+        args: ["run", "chatapp.py", "--port", "8080", "--host", "0.0.0.0"]
         env:
         - name: APP_FILE
           value: chatapp.py
@@ -23,6 +23,10 @@ spec:
           value: /etc/secrets/.env
         - name: SECRETS_TOML_PATH
           value: /etc/secrets/streamlit/secrets.toml
+        - name: CHAINLIT_CONFIG_PATH
+          value: /app/.chainlit/config.toml
+        - name: CHAINLIT_STORAGE_PATH
+          value: /tmp/.chainlit
         ports:
         - containerPort: 8080
         resources:
