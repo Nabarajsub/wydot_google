@@ -16,8 +16,9 @@ import os as _os
 for _d in ["/tmp/.files", "/tmp/.chainlit"]:
     _os.makedirs(_d, exist_ok=True)
 
-# Force Chainlit to use /tmp for file uploads (config.toml not always respected)
+# Force Chainlit to use /tmp for everything (config.toml override)
 _os.environ.setdefault("CHAINLIT_FILES_DIRECTORY", "/tmp/.files")
+_os.environ.setdefault("CHAINLIT_DB_FILE", "/tmp/chainlit.db")
 # === END CLOUD RUN SETUP ===
 
 import os
