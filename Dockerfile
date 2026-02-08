@@ -16,11 +16,16 @@ WORKDIR /app
 COPY ${REQS_FILE} /tmp/requirements.txt
 ARG CACHEBUST=1
 RUN pip install -r /tmp/requirements.txt && \
-    pip install python-dotenv streamlit chainlit && \
-    echo "=== VERIFYING CHAINLIT INSTALLATION ===" && \
     python -c "import chainlit; print(f'chainlit installed at: {chainlit.__file__}')" && \
     which chainlit && \
     echo "=== CHAINLIT VERIFIED ==="
+
+# --- BAKE MODEL INTO IMAGE ---
+ENV HF_HOME=/app/model_cache
+ENV SENTENCE_TRANSFORMERS_HOME=/app/model_cache
+COPY ingestion_service/download_model.py /app/download_model.py
+RUN python3 /app/download_model.py && \
+    chmod -R 777 /app/model_cache
 
 COPY . /app
 
@@ -38,6 +43,7 @@ ENV DOTENV_PATH=/etc/secrets/.env
 ENV SECRETS_TOML_PATH=/etc/secrets/streamlit/secrets.toml
 ENV CHAINLIT_CONFIG_PATH=/app/.chainlit/config.toml
 ENV CHAINLIT_STORAGE_PATH=/tmp/.chainlit
+ENV CHAINLIT_FILES_DIRECTORY=/tmp/.files
 
 # Run chainlit DIRECTLY
-CMD ["chainlit", "run", "chatapp.py", "--port", "8080", "--host", "0.0.0.0"]
+CMD ["chainlit", "run", "chatapp.py", "--port", "8080", "--host", "0.0.0.0" "--headless"]
