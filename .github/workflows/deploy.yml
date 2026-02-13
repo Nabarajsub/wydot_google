@@ -1,0 +1,85 @@
+name: Build and Deploy to Cloud Run
+
+on:
+  push:
+    branches:
+      - main
+    paths-ignore:
+      - 'README.md'
+      - 'docs/**'
+
+env:
+  PROJECT_ID: ${{ secrets.GCP_PROJECT }}
+  REGION: ${{ secrets.GCP_LOCATION || 'us-central1' }}
+  # Matches user's existing "apps" repo pattern in "us" multi-region
+  GAR_LOCATION: us-docker.pkg.dev/${{ secrets.GCP_PROJECT }}/apps
+
+jobs:
+  build-and-deploy:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: 'read'
+      id-token: 'write'
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      # Authenticate using Workload Identity (using the SA you just created)
+      - id: 'auth'
+        name: 'Authenticate to Google Cloud'
+        uses: 'google-github-actions/auth@v2'
+        with:
+          workload_identity_provider: ${{ secrets.WIF_PROVIDER }}
+          service_account: github-deployer@${{ secrets.GCP_PROJECT }}.iam.gserviceaccount.com
+
+      # Authenticate Docker to Artifact Registry (us-docker)
+      - name: 'Docker Auth'
+        run: |-
+          gcloud auth configure-docker us-docker.pkg.dev --quiet
+
+      # 1. Build and Push Chatbot
+      - name: 'Build and Push Chatbot'
+        run: |-
+          docker build -f Dockerfile.chatbot -t "${{ env.GAR_LOCATION }}/wydot-chatbot:${{ github.sha }}" .
+          docker push "${{ env.GAR_LOCATION }}/wydot-chatbot:${{ github.sha }}"
+
+      # 2. Build and Push Admin
+      - name: 'Build and Push Admin'
+        run: |-
+          docker build -f Dockerfile.admin -t "${{ env.GAR_LOCATION }}/wydot-admin:${{ github.sha }}" .
+          docker push "${{ env.GAR_LOCATION }}/wydot-admin:${{ github.sha }}"
+
+      # 3. Build and Push Embeddings (Vertex AI Image)
+      - name: 'Build and Push Embeddings'
+        run: |-
+          docker build -t "${{ env.GAR_LOCATION }}/wydot-embeddings:${{ github.sha }}" ./deploy/embeddings
+          docker push "${{ env.GAR_LOCATION }}/wydot-embeddings:${{ github.sha }}"
+
+      # 4. Deploy Chatbot to Cloud Run
+      - name: 'Deploy Chatbot'
+        uses: 'google-github-actions/deploy-cloudrun@v2'
+        with:
+          service: 'wydot-chatbot'
+          image: '${{ env.GAR_LOCATION }}/wydot-chatbot:${{ github.sha }}'
+          region: ${{ env.REGION }}
+          flags: '--allow-unauthenticated'
+          env_vars: |
+            CHAINLIT_AUTH_SECRET=${{ secrets.CHAINLIT_AUTH_SECRET }}
+            DATABASE_URL=${{ secrets.DATABASE_URL }}
+            VERTEX_EMBEDDING_ENDPOINT=${{ secrets.VERTEX_EMBEDDING_ENDPOINT }}
+            MISTRAL_API_KEY=${{ secrets.MISTRAL_API_KEY }}
+            GEMINI_API_KEY=${{ secrets.GEMINI_API_KEY }}
+
+      # 5. Deploy Admin to Cloud Run
+      - name: 'Deploy Admin'
+        uses: 'google-github-actions/deploy-cloudrun@v2'
+        with:
+          service: 'wydot-admin'
+          image: '${{ env.GAR_LOCATION }}/wydot-admin:${{ github.sha }}'
+          region: ${{ env.REGION }}
+          flags: '--allow-unauthenticated'
+          env_vars: |
+            DATABASE_URL=${{ secrets.DATABASE_URL }}
+            MISTRAL_API_KEY=${{ secrets.MISTRAL_API_KEY }}
+            GEMINI_API_KEY=${{ secrets.GEMINI_API_KEY }}

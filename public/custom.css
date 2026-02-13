@@ -20,21 +20,18 @@ img[alt="logo"] {
     object-fit: contain !important;
 }
 
-/* Hide Chainlit SVG logos */
-header a[href="/"] svg,
-.logo svg {
+/* .logo svg {
     display: none !important;
-}
+} */
 
 /* Ensure logo container has proper sizing */
-.logo {
+/* .logo {
     min-width: 180px !important;
     height: 50px !important;
     display: flex !important;
     align-items: center !important;
 }
 
-/* Add "Assistant" text next to logo above chat composer */
 .logo::after {
     content: "Assistant" !important;
     font-size: 20px !important;
@@ -42,7 +39,7 @@ header a[href="/"] svg,
     color: var(--text-primary) !important;
     margin-left: 12px !important;
     font-family: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif !important;
-}
+} */
 
 
 
@@ -81,11 +78,11 @@ img[alt*="WYDOT Assistant"],
     opacity: 0 !important;
 }
 
-/* Hide default footer/header noise */
-.cl-header {
+/* Hide default footer/header noise - keep header visible for menu */
+/* .cl-header {
     background: transparent !important;
     box-shadow: none !important;
-}
+} */
 
 /* Chat Input Area - Floating Pill Style */
 .cl-input-container {
@@ -204,4 +201,148 @@ body {
 .file-upload-area:hover {
     border-color: var(--accent-color) !important;
     background: rgba(29, 114, 184, 0.06) !important;
+}
+
+/* PDF Modal Styling */
+.wy-modal {
+    display: none;
+    position: fixed;
+    z-index: 9999;
+    left: 0;
+    top: 0;
+    width: 100%;
+    height: 100%;
+    overflow: hidden;
+    background-color: rgba(0, 0, 0, 0.5);
+    backdrop-filter: blur(4px);
+    align-items: center;
+    justify-content: center;
+}
+
+.wy-modal-content {
+    background-color: #fefefe;
+    margin: auto;
+    border: 1px solid #888;
+    width: 90%;
+    height: 90%;
+    border-radius: 12px;
+    box-shadow: 0 4px 24px rgba(0, 0, 0, 0.2);
+    display: flex;
+    flex-direction: column;
+    animation: modalFadeIn 0.2s ease-out;
+}
+
+@keyframes modalFadeIn {
+    from {
+        opacity: 0;
+        transform: scale(0.95);
+    }
+
+    to {
+        opacity: 1;
+        transform: scale(1);
+    }
+}
+
+.wy-modal-header {
+    padding: 16px 24px;
+    border-bottom: 1px solid #eee;
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    background: #fff;
+    border-radius: 12px 12px 0 0;
+}
+
+.wy-modal-title {
+    font-size: 18px;
+    font-weight: 600;
+    color: var(--text-primary);
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    max-width: 80%;
+}
+
+.wy-modal-actions {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+}
+
+.wy-modal-close {
+    color: #888;
+    font-size: 28px;
+    font-weight: bold;
+    background: none;
+    border: none;
+    cursor: pointer;
+    line-height: 1;
+    padding: 0;
+    margin: 0;
+    width: 32px;
+    height: 32px;
+    border-radius: 50%;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    transition: all 0.2s;
+}
+
+.wy-modal-close:hover {
+    color: #000;
+    background: #f0f0f0;
+}
+
+.wy-btn-icon {
+    font-size: 18px;
+    text-decoration: none;
+    color: var(--accent-color);
+    width: 32px;
+    height: 32px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    border-radius: 50%;
+    background: rgba(29, 114, 184, 0.1);
+    transition: all 0.2s;
+}
+
+.wy-btn-icon:hover {
+    background: rgba(29, 114, 184, 0.2);
+}
+
+.wy-modal-body {
+    flex: 1;
+    position: relative;
+    background: #f8f9fa;
+    border-radius: 0 0 12px 12px;
+    overflow: hidden;
+}
+
+.wy-loading {
+    position: absolute;
+    top: 50%;
+    left: 50%;
+    transform: translate(-50%, -50%);
+    color: #666;
+    font-size: 14px;
+    pointer-events: none;
+}
+
+iframe,
+embed {
+    width: 100%;
+    height: 100%;
+    border: none;
+    display: block;
+    position: relative;
+    z-index: 1;
+}
+
+/* Login page: hide right-side Chainlit branding (pink graphic) so only the form shows */
+body:has(form input[type="password"]) main>div>div:last-child,
+body:has(form[action]) main div.flex>div:last-child,
+main div.grid>div:last-child {
+    display: none !important;
 }

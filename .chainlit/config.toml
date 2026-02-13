@@ -34,6 +34,10 @@ name = "WYDOT Assistant"
 description = "Wyoming Department of Transportation Knowledge Assistant"
 default_collapse_content = true
 custom_css = "/public/custom.css"
+custom_js = "/public/custom.js"
+
+# Login page: show WYDOT logo on the right instead of default Chainlit graphic
+login_page_image = "/public/logo.png"
 
 # Custom logo for header (light and dark theme)
 logo_light = "./public/logo.png"

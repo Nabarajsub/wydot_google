@@ -1,0 +1,319 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>WYDOT Assistant - Register</title>
+    <style>
+        :root {
+            --primary: #2563eb;
+            --primary-hover: #1d4ed8;
+            --bg-color: #f3f4f6;
+            --card-bg: #ffffff;
+            --text-color: #1f2937;
+            --text-muted: #6b7280;
+            --border-color: #e5e7eb;
+            --success: #10b981;
+            --error: #ef4444;
+        }
+
+        body {
+            font-family: 'Inter', -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+            background-color: var(--bg-color);
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            min-height: 100vh;
+            margin: 0;
+            color: var(--text-color);
+        }
+
+        .container {
+            background-color: var(--card-bg);
+            padding: 2.5rem;
+            border-radius: 1rem;
+            box-shadow: 0 10px 15px -3px rgba(0, 0, 0, 0.1), 0 4px 6px -2px rgba(0, 0, 0, 0.05);
+            width: 100%;
+            max-width: 400px;
+        }
+
+        h1 {
+            margin-top: 0;
+            font-size: 1.5rem;
+            font-weight: 700;
+            text-align: center;
+            margin-bottom: 0.5rem;
+            color: #111827;
+        }
+
+        p.subtitle {
+            text-align: center;
+            color: var(--text-muted);
+            margin-bottom: 2rem;
+            font-size: 0.875rem;
+        }
+
+        .form-group {
+            margin-bottom: 1.25rem;
+        }
+
+        label {
+            display: block;
+            font-size: 0.875rem;
+            font-weight: 500;
+            margin-bottom: 0.5rem;
+            color: #374151;
+        }
+
+        input {
+            width: 100%;
+            padding: 0.75rem 1rem;
+            border: 1px solid var(--border-color);
+            border-radius: 0.5rem;
+            font-size: 1rem;
+            transition: border-color 0.15s ease-in-out;
+            box-sizing: border-box;
+        }
+
+        input:focus {
+            outline: none;
+            border-color: var(--primary);
+            box-shadow: 0 0 0 3px rgba(37, 99, 235, 0.1);
+        }
+
+        button {
+            width: 100%;
+            padding: 0.75rem;
+            background-color: var(--primary);
+            color: white;
+            border: none;
+            border-radius: 0.5rem;
+            font-size: 1rem;
+            font-weight: 600;
+            cursor: pointer;
+            transition: background-color 0.15s ease-in-out;
+        }
+
+        button:hover {
+            background-color: var(--primary-hover);
+        }
+
+        button:disabled {
+            opacity: 0.7;
+            cursor: not-allowed;
+        }
+
+        .link-text {
+            text-align: center;
+            margin-top: 1.5rem;
+            font-size: 0.875rem;
+        }
+
+        a {
+            color: var(--primary);
+            text-decoration: none;
+            font-weight: 500;
+        }
+
+        a:hover {
+            text-decoration: underline;
+        }
+
+        .hidden {
+            display: none;
+        }
+
+        #message-box {
+            margin-top: 1rem;
+            padding: 0.75rem;
+            border-radius: 0.5rem;
+            font-size: 0.875rem;
+            text-align: center;
+        }
+
+        .success {
+            background-color: #d1fae5;
+            color: #065f46;
+        }
+
+        .error {
+            background-color: #fee2e2;
+            color: #991b1b;
+        }
+
+        .fade-in {
+            animation: fadeIn 0.3s ease-in;
+        }
+
+        @keyframes fadeIn {
+            from {
+                opacity: 0;
+                transform: translateY(10px);
+            }
+
+            to {
+                opacity: 1;
+                transform: translateY(0);
+            }
+        }
+    </style>
+</head>
+
+<body>
+
+    <div class="container fade-in">
+        <div id="register-section">
+            <h1>Create Account</h1>
+            <p class="subtitle">Join WYDOT Assistant today.</p>
+
+            <form id="register-form">
+                <div class="form-group">
+                    <label for="reg-email">Email Address</label>
+                    <input type="email" id="reg-email" required placeholder="you@example.com">
+                </div>
+                <div class="form-group">
+                    <label for="reg-password">Password</label>
+                    <input type="password" id="reg-password" required placeholder="••••••••">
+                </div>
+                <button type="submit" id="reg-btn">Register</button>
+            </form>
+
+            <div class="link-text">
+                Already have an account? <a href="/">Log in here</a>
+            </div>
+        </div>
+
+        <div id="verify-section" class="hidden fade-in">
+            <h1>Verify Email</h1>
+            <p class="subtitle">Enter the 6-digit code sent to your email.</p>
+
+            <form id="verify-form">
+                <div class="form-group">
+                    <label for="ver-email">Email Address</label>
+                    <input type="email" id="ver-email" readonly style="background-color: #f9fafb;">
+                </div>
+                <div class="form-group">
+                    <label for="ver-code">Verification Code</label>
+                    <input type="text" id="ver-code" required placeholder="123456" maxlength="6" pattern="\d{6}">
+                </div>
+                <button type="submit" id="ver-btn">Verify Account</button>
+            </form>
+
+            <div class="link-text">
+                <a href="#" id="back-to-reg">Back to Registration</a>
+            </div>
+        </div>
+
+        <div id="success-section" class="hidden fade-in" style="text-align: center;">
+            <div style="font-size: 3rem; margin-bottom: 1rem;">✅</div>
+            <h1>All Set!</h1>
+            <p class="subtitle">Your account is verified.</p>
+            <button onclick="window.location.href='/'">Go to Login</button>
+        </div>
+
+        <div id="message-box" class="hidden"></div>
+    </div>
+
+    <script>
+        const registerForm = document.getElementById('register-form');
+        const verifyForm = document.getElementById('verify-form');
+        const registerSection = document.getElementById('register-section');
+        const verifySection = document.getElementById('verify-section');
+        const successSection = document.getElementById('success-section');
+        const messageBox = document.getElementById('message-box');
+
+        const regEmailInput = document.getElementById('reg-email');
+        const verEmailInput = document.getElementById('ver-email');
+        const backToRegBtn = document.getElementById('back-to-reg');
+
+        function showMessage(msg, type) {
+            messageBox.textContent = msg;
+            messageBox.className = type; // success or error
+            messageBox.classList.remove('hidden');
+            setTimeout(() => {
+                messageBox.classList.add('hidden');
+            }, 5000);
+        }
+
+        registerForm.addEventListener('submit', async (e) => {
+            e.preventDefault();
+            const email = regEmailInput.value;
+            const password = document.getElementById('reg-password').value;
+            const btn = document.getElementById('reg-btn');
+
+            btn.disabled = true;
+            btn.textContent = "Registering...";
+
+            try {
+                const res = await fetch('http://localhost:8001/auth/register', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ email, password })
+                });
+
+                const data = await res.json();
+
+                if (res.ok) {
+                    // Switch to verify view
+                    verEmailInput.value = email;
+                    registerSection.classList.add('hidden');
+                    verifySection.classList.remove('hidden');
+                    showMessage(data.message, 'success');
+
+                    if (data.dev_code) {
+                        alert("DEV MODE: Your verification code is " + data.dev_code);
+                        document.getElementById('ver-code').value = data.dev_code;
+                    }
+                } else {
+                    showMessage(data.error || 'Registration failed', 'error');
+                }
+            } catch (err) {
+                showMessage('Network error. Please try again.', 'error');
+            } finally {
+                btn.disabled = false;
+                btn.textContent = "Register";
+            }
+        });
+
+        verifyForm.addEventListener('submit', async (e) => {
+            e.preventDefault();
+            const email = verEmailInput.value;
+            const code = document.getElementById('ver-code').value;
+            const btn = document.getElementById('ver-btn');
+
+            btn.disabled = true;
+            btn.textContent = "Verifying...";
+
+            try {
+                const res = await fetch('http://localhost:8001/auth/verify', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ email, code })
+                });
+
+                const data = await res.json();
+
+                if (res.ok) {
+                    verifySection.classList.add('hidden');
+                    successSection.classList.remove('hidden');
+                } else {
+                    showMessage(data.error || 'Verification failed', 'error');
+                }
+            } catch (err) {
+                showMessage('Network error. Please try again.', 'error');
+            } finally {
+                btn.disabled = false;
+                btn.textContent = "Verify Account";
+            }
+        });
+
+        backToRegBtn.addEventListener('click', (e) => {
+            e.preventDefault();
+            verifySection.classList.add('hidden');
+            registerSection.classList.remove('hidden');
+        });
+    </script>
+</body>
+
+</html>
