@@ -83,3 +83,4 @@ jobs:
             DATABASE_URL=${{ secrets.DATABASE_URL }}
             MISTRAL_API_KEY=${{ secrets.MISTRAL_API_KEY }}
             GEMINI_API_KEY=${{ secrets.GEMINI_API_KEY }}
+#python3 -m pip install --no-cache-dir torch torchvision torchaudio --index-url https://download.pytorch.org/whl/cpu
