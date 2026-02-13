@@ -41,7 +41,10 @@ def _send_verification_email(email: str, code: str) -> None:
     """Send 6-digit verification code. Uses SMTP if configured, else logs to console and file."""
     # ALWAYS log to file for dev/testing ease
     try:
-        with open("verification_codes.txt", "a") as f:
+        log_path = "verification_codes.txt"
+        if os.getenv("K_SERVICE"):
+            log_path = "/tmp/verification_codes.txt"
+        with open(log_path, "a") as f:
             import datetime
             f.write(f"[{datetime.datetime.now()}] To: {email} | Code: {code}\n")
     except Exception as e:
