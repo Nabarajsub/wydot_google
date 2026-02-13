@@ -517,7 +517,12 @@ class SQLiteChatHistoryStore(BaseChatHistoryStore):
 class CloudSQLChatHistoryStore(BaseChatHistoryStore):
     def __init__(self, database_url: str):
         self.db_url = database_url
-        self._init_tables()
+        try:
+            self._init_tables()
+        except Exception as e:
+            print(f"WARNING: Database initialization failed (app will start, but DB features may break): {e}")
+            import traceback
+            traceback.print_exc()
 
     def _get_conn(self):
         import psycopg2
