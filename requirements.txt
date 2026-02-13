@@ -7,10 +7,12 @@
 streamlit>=1.30,<2
 python-dotenv>=1.0
 pandas>=2.0
+requests>=2.31.0
 
 # Neo4j GraphRAG
 neo4j>=5.14.0
 langchain-core>=0.1.0
+langchain-community>=0.0.10
 langchain-neo4j>=0.1.0
 langchain-mistralai>=0.1.0
 langchain-huggingface>=0.0.1
@@ -19,6 +21,8 @@ langchain-huggingface>=0.0.1
 sentence-transformers>=2.2.0
 transformers>=4.30.0
 torch>=2.0.0
+openai>=1.0.0
+langchain-openai>=0.1.0
 
 # Multimodal (Images / Audio)
 Pillow
@@ -41,3 +45,5 @@ google-cloud-storage
 protobuf>=4.25,<6
 grpcio>=1.62
 chainlit>=1.0.0
+flask>=3.0.0
+psycopg2-binary==2.9.9

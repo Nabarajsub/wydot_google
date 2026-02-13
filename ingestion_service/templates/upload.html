@@ -1,0 +1,2224 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>WYDOT Knowledge Graph — Ingestion Dashboard</title>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/mammoth/1.6.0/mammoth.browser.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+    <style>
+        :root {
+            --wydot-blue: #003366;
+            --wydot-blue-light: #004a8f;
+            --wydot-gold: #f0a500;
+            --wydot-gold-light: #ffc233;
+            --bg: #f0f2f5;
+            --white: #ffffff;
+            --surface: #ffffff;
+            --border: #e0e4ea;
+            --text: #1a2332;
+            --text-secondary: #5a6577;
+            --text-muted: #8a93a3;
+            --success: #10b981;
+            --success-bg: #ecfdf5;
+            --error: #ef4444;
+            --error-bg: #fef2f2;
+            --warning: #f59e0b;
+            --warning-bg: #fffbeb;
+            --info: #3b82f6;
+            --info-bg: #eff6ff;
+            --radius: 10px;
+            --shadow: 0 1px 3px rgba(0, 0, 0, 0.08), 0 1px 2px rgba(0, 0, 0, 0.06);
+            --shadow-lg: 0 4px 12px rgba(0, 0, 0, 0.1);
+        }
+
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        body {
+            font-family: 'Inter', -apple-system, sans-serif;
+            background: var(--bg);
+            color: var(--text);
+            min-height: 100vh;
+        }
+
+        /* === HEADER === */
+        .header {
+            background: linear-gradient(135deg, var(--wydot-blue), var(--wydot-blue-light));
+            color: white;
+            padding: 1rem 2rem;
+            display: flex;
+            align-items: center;
+            gap: 1rem;
+            box-shadow: 0 2px 8px rgba(0, 0, 0, 0.15);
+        }
+
+        .header-logo {
+            width: 48px;
+            height: 48px;
+            background: var(--wydot-gold);
+            border-radius: 8px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 1.5rem;
+            font-weight: 800;
+            color: var(--wydot-blue);
+        }
+
+        .header-text h1 {
+            font-size: 1.25rem;
+            font-weight: 700;
+        }
+
+        .header-text p {
+            font-size: 0.8rem;
+            opacity: 0.8;
+        }
+
+        .header-nav {
+            margin-left: auto;
+            display: flex;
+            gap: 0.5rem;
+        }
+
+        .nav-btn {
+            padding: 0.5rem 1rem;
+            border: 1.5px solid rgba(255, 255, 255, 0.3);
+            background: transparent;
+            color: white;
+            font-family: inherit;
+            font-size: 0.82rem;
+            font-weight: 500;
+            border-radius: 6px;
+            cursor: pointer;
+            transition: all 0.2s;
+        }
+
+        .nav-btn:hover,
+        .nav-btn.active {
+            background: rgba(255, 255, 255, 0.15);
+            border-color: rgba(255, 255, 255, 0.5);
+        }
+
+        .nav-btn.active {
+            background: var(--wydot-gold);
+            color: var(--wydot-blue);
+            border-color: var(--wydot-gold);
+            font-weight: 600;
+        }
+
+        /* === MAIN LAYOUT === */
+        .main {
+            max-width: 1100px;
+            margin: 0 auto;
+            padding: 1.5rem;
+        }
+
+        .page {
+            display: none;
+        }
+
+        .page.active {
+            display: block;
+        }
+
+        /* === CARDS === */
+        .card {
+            background: var(--surface);
+            border: 1px solid var(--border);
+            border-radius: var(--radius);
+            box-shadow: var(--shadow);
+            margin-bottom: 1.25rem;
+            overflow: hidden;
+        }
+
+        .card-header {
+            padding: 1rem 1.25rem;
+            border-bottom: 1px solid var(--border);
+            display: flex;
+            align-items: center;
+            gap: 0.75rem;
+            font-weight: 600;
+            font-size: 0.95rem;
+        }
+
+        .card-header .icon {
+            width: 32px;
+            height: 32px;
+            border-radius: 8px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 1rem;
+        }
+
+        .card-body {
+            padding: 1.25rem;
+        }
+
+        /* === DROP ZONE === */
+        .drop-zone {
+            border: 2px dashed var(--border);
+            border-radius: var(--radius);
+            padding: 2.5rem 2rem;
+            text-align: center;
+            background: #fafbfc;
+            transition: all 0.3s;
+            cursor: pointer;
+            position: relative;
+        }
+
+        .drop-zone:hover,
+        .drop-zone.drag-over {
+            border-color: var(--wydot-blue);
+            background: var(--info-bg);
+        }
+
+        .drop-zone input[type="file"] {
+            position: absolute;
+            inset: 0;
+            opacity: 0;
+            cursor: pointer;
+        }
+
+        .drop-zone-icon {
+            font-size: 2.5rem;
+            margin-bottom: 0.75rem;
+        }
+
+        .drop-zone h3 {
+            font-size: 1rem;
+            color: var(--text);
+            margin-bottom: 0.25rem;
+        }
+
+        .drop-zone p {
+            color: var(--text-muted);
+            font-size: 0.82rem;
+        }
+
+        /* === TABS (for Upload page) === */
+        .upload-tabs {
+            display: flex;
+            gap: 0;
+            margin-bottom: 1.25rem;
+            background: var(--surface);
+            border: 1px solid var(--border);
+            border-radius: var(--radius);
+            overflow: hidden;
+        }
+
+        .upload-tab {
+            flex: 1;
+            padding: 0.75rem;
+            border: none;
+            background: transparent;
+            color: var(--text-secondary);
+            font-family: inherit;
+            font-size: 0.85rem;
+            font-weight: 500;
+            cursor: pointer;
+            transition: all 0.2s;
+            border-right: 1px solid var(--border);
+        }
+
+        .upload-tab:last-child {
+            border-right: none;
+        }
+
+        .upload-tab:hover {
+            background: #f5f7fa;
+        }
+
+        .upload-tab.active {
+            background: var(--wydot-blue);
+            color: white;
+        }
+
+        .utab-content {
+            display: none;
+        }
+
+        .utab-content.active {
+            display: block;
+        }
+
+        /* === FILE LIST === */
+        .file-list {
+            display: flex;
+            flex-direction: column;
+            gap: 0.5rem;
+        }
+
+        .file-item {
+            display: flex;
+            align-items: center;
+            gap: 0.75rem;
+            background: #f8f9fb;
+            padding: 0.75rem 1rem;
+            border-radius: 8px;
+            border: 1px solid var(--border);
+        }
+
+        .file-icon {
+            width: 40px;
+            height: 40px;
+            border-radius: 8px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 1.2rem;
+            flex-shrink: 0;
+        }
+
+        .file-icon.pdf {
+            background: #fee2e2;
+        }
+
+        .file-icon.doc {
+            background: #dbeafe;
+        }
+
+        .file-icon.audio {
+            background: #fef3c7;
+        }
+
+        .file-icon.video {
+            background: #e0e7ff;
+        }
+
+        .file-info {
+            flex: 1;
+            min-width: 0;
+        }
+
+        .file-name {
+            font-weight: 500;
+            font-size: 0.88rem;
+            white-space: nowrap;
+            overflow: hidden;
+            text-overflow: ellipsis;
+        }
+
+        .file-size {
+            color: var(--text-muted);
+            font-size: 0.78rem;
+        }
+
+        .file-actions {
+            display: flex;
+            gap: 0.25rem;
+        }
+
+        .icon-btn {
+            width: 32px;
+            height: 32px;
+            border: none;
+            background: transparent;
+            border-radius: 6px;
+            cursor: pointer;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 1rem;
+            transition: background 0.2s;
+        }
+
+        .icon-btn:hover {
+            background: #e5e7eb;
+        }
+
+        .icon-btn.danger:hover {
+            background: #fee2e2;
+        }
+
+        /* === BUTTONS === */
+        .btn {
+            padding: 0.7rem 1.5rem;
+            border: none;
+            border-radius: 8px;
+            font-family: inherit;
+            font-size: 0.88rem;
+            font-weight: 600;
+            cursor: pointer;
+            transition: all 0.2s;
+            display: inline-flex;
+            align-items: center;
+            gap: 0.5rem;
+        }
+
+        .btn-primary {
+            background: var(--wydot-blue);
+            color: white;
+        }
+
+        .btn-primary:hover {
+            background: var(--wydot-blue-light);
+        }
+
+        .btn-primary:disabled {
+            opacity: 0.5;
+            cursor: not-allowed;
+        }
+
+        .btn-danger {
+            background: var(--error);
+            color: white;
+        }
+
+        .btn-danger:hover {
+            background: #dc2626;
+        }
+
+        .btn-outline {
+            background: transparent;
+            border: 1.5px solid var(--border);
+            color: var(--text-secondary);
+        }
+
+        .btn-outline:hover {
+            border-color: var(--wydot-blue);
+            color: var(--wydot-blue);
+        }
+
+        .btn-sm {
+            padding: 0.4rem 0.8rem;
+            font-size: 0.8rem;
+        }
+
+        .btn-block {
+            width: 100%;
+            justify-content: center;
+        }
+
+        /* === RECORDING === */
+        .record-area {
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            gap: 1.25rem;
+            padding: 1.5rem;
+        }
+
+        .record-btn {
+            width: 72px;
+            height: 72px;
+            border-radius: 50%;
+            border: 3px solid var(--error);
+            background: white;
+            cursor: pointer;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            transition: all 0.3s;
+        }
+
+        .record-btn .dot {
+            width: 28px;
+            height: 28px;
+            border-radius: 50%;
+            background: var(--error);
+            transition: all 0.3s;
+        }
+
+        .record-btn.recording .dot {
+            border-radius: 4px;
+            width: 22px;
+            height: 22px;
+        }
+
+        .record-btn.recording {
+            animation: rec-pulse 1.5s ease-in-out infinite;
+        }
+
+        @keyframes rec-pulse {
+
+            0%,
+            100% {
+                box-shadow: 0 0 0 0 rgba(239, 68, 68, 0.4);
+            }
+
+            50% {
+                box-shadow: 0 0 0 12px rgba(239, 68, 68, 0);
+            }
+        }
+
+        .rec-timer {
+            font-size: 1.8rem;
+            font-weight: 700;
+            font-variant-numeric: tabular-nums;
+            color: var(--text-muted);
+        }
+
+        .rec-timer.active {
+            color: var(--error);
+        }
+
+        #videoLive {
+            width: 100%;
+            max-width: 420px;
+            border-radius: 8px;
+            background: #000;
+        }
+
+        /* === LOG / STATUS === */
+        .log-box {
+            background: #1e293b;
+            color: #e2e8f0;
+            border-radius: 8px;
+            padding: 1rem;
+            font-family: 'SF Mono', 'Fira Code', monospace;
+            font-size: 0.8rem;
+            line-height: 1.6;
+            max-height: 300px;
+            overflow-y: auto;
+            white-space: pre-wrap;
+        }
+
+        .log-line {
+            margin-bottom: 2px;
+        }
+
+        .log-line.success {
+            color: #34d399;
+        }
+
+        .log-line.error {
+            color: #f87171;
+        }
+
+        .log-line.info {
+            color: #60a5fa;
+        }
+
+        .log-line.warn {
+            color: #fbbf24;
+        }
+
+        /* === PREVIEW MODAL === */
+        .modal-overlay {
+            position: fixed;
+            inset: 0;
+            background: rgba(0, 0, 0, 0.5);
+            display: none;
+            align-items: center;
+            justify-content: center;
+            z-index: 1000;
+            padding: 2rem;
+        }
+
+        .modal-overlay.active {
+            display: flex;
+        }
+
+        .modal {
+            background: white;
+            border-radius: 12px;
+            max-width: 700px;
+            width: 100%;
+            max-height: 80vh;
+            overflow-y: auto;
+            box-shadow: 0 8px 30px rgba(0, 0, 0, 0.2);
+        }
+
+        .modal-header {
+            padding: 1rem 1.25rem;
+            border-bottom: 1px solid var(--border);
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            font-weight: 600;
+        }
+
+        .modal-body {
+            padding: 1.25rem;
+        }
+
+        .modal-body pre {
+            background: #f8f9fb;
+            border: 1px solid var(--border);
+            border-radius: 8px;
+            padding: 1rem;
+            font-size: 0.82rem;
+            line-height: 1.5;
+            max-height: 400px;
+            overflow-y: auto;
+            white-space: pre-wrap;
+            word-break: break-word;
+        }
+
+        .modal-body iframe,
+        .modal-body embed {
+            width: 100%;
+            height: 500px;
+            border: 1px solid var(--border);
+            border-radius: 8px;
+        }
+
+        /* === TRANSCRIPT BOX === */
+        .transcript-box {
+            display: none;
+            margin-top: 1rem;
+        }
+
+        .transcript-box.active {
+            display: block;
+        }
+
+        .transcript-header {
+            font-weight: 600;
+            font-size: 0.9rem;
+            margin-bottom: 0.5rem;
+            display: flex;
+            align-items: center;
+            gap: 0.5rem;
+        }
+
+        .transcript-content {
+            background: #f8f9fb;
+            border: 1px solid var(--border);
+            border-radius: 8px;
+            padding: 1rem;
+            font-size: 0.82rem;
+            line-height: 1.6;
+            max-height: 250px;
+            overflow-y: auto;
+            white-space: pre-wrap;
+        }
+
+        .metadata-grid {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 0.5rem;
+            margin-top: 0.75rem;
+        }
+
+        .meta-item {
+            background: var(--info-bg);
+            padding: 0.5rem 0.75rem;
+            border-radius: 6px;
+            font-size: 0.8rem;
+        }
+
+        .meta-label {
+            color: var(--text-muted);
+            font-size: 0.72rem;
+            text-transform: uppercase;
+            letter-spacing: 0.5px;
+        }
+
+        .meta-value {
+            font-weight: 600;
+            color: var(--text);
+            margin-top: 2px;
+        }
+
+        /* === PROGRESS === */
+        .progress-container {
+            margin-top: 1rem;
+            display: none;
+        }
+
+        .progress-container.active {
+            display: block;
+        }
+
+        .progress-bar-bg {
+            background: #e5e7eb;
+            border-radius: 999px;
+            height: 6px;
+            overflow: hidden;
+        }
+
+        .progress-bar {
+            height: 100%;
+            background: linear-gradient(90deg, var(--wydot-blue), var(--wydot-gold));
+            border-radius: 999px;
+            width: 0%;
+            transition: width 0.5s ease;
+        }
+
+        .progress-text {
+            margin-top: 0.4rem;
+            font-size: 0.78rem;
+            color: var(--text-muted);
+            text-align: center;
+        }
+
+        /* === INGESTED TABLE === */
+        .table-wrap {
+            overflow-x: auto;
+        }
+
+        table {
+            width: 100%;
+            border-collapse: collapse;
+            font-size: 0.85rem;
+        }
+
+        thead th {
+            background: #f8f9fb;
+            padding: 0.75rem 1rem;
+            text-align: left;
+            font-weight: 600;
+            font-size: 0.78rem;
+            text-transform: uppercase;
+            letter-spacing: 0.5px;
+            color: var(--text-secondary);
+            border-bottom: 2px solid var(--border);
+        }
+
+        tbody td {
+            padding: 0.75rem 1rem;
+            border-bottom: 1px solid var(--border);
+            vertical-align: middle;
+        }
+
+        tbody tr:hover {
+            background: #f8f9fb;
+        }
+
+        .badge {
+            display: inline-block;
+            padding: 2px 8px;
+            border-radius: 999px;
+            font-size: 0.72rem;
+            font-weight: 600;
+        }
+
+        .badge-doc {
+            background: #dbeafe;
+            color: #1d4ed8;
+        }
+
+        .badge-audio {
+            background: #fef3c7;
+            color: #92400e;
+        }
+
+        .badge-video {
+            background: #e0e7ff;
+            color: #3730a3;
+        }
+
+        .empty-state {
+            text-align: center;
+            padding: 3rem 2rem;
+            color: var(--text-muted);
+        }
+
+        .empty-state .icon {
+            font-size: 3rem;
+            margin-bottom: 1rem;
+        }
+
+        /* === STATS ROW === */
+        .stats-row {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
+            gap: 1rem;
+            margin-bottom: 1.25rem;
+        }
+
+        .stat-card {
+            background: white;
+            border: 1px solid var(--border);
+            border-radius: var(--radius);
+            padding: 1rem 1.25rem;
+            box-shadow: var(--shadow);
+        }
+
+        .stat-card .label {
+            font-size: 0.78rem;
+            color: var(--text-muted);
+            text-transform: uppercase;
+            letter-spacing: 0.5px;
+        }
+
+        .stat-card .value {
+            font-size: 1.5rem;
+            font-weight: 700;
+            color: var(--wydot-blue);
+            margin-top: 0.25rem;
+        }
+
+        /* === KG EXPLORER === */
+        .search-box {
+            display: flex;
+            gap: 0.5rem;
+            margin-bottom: 1rem;
+        }
+
+        .search-box input {
+            flex: 1;
+            padding: 0.7rem 1rem;
+            border: 1.5px solid var(--border);
+            border-radius: 8px;
+            font-family: inherit;
+            font-size: 0.88rem;
+            outline: none;
+            transition: border-color 0.2s;
+        }
+
+        .search-box input:focus {
+            border-color: var(--wydot-blue);
+        }
+
+        .search-result {
+            background: #f8f9fb;
+            border: 1px solid var(--border);
+            border-radius: 8px;
+            padding: 1rem;
+            margin-bottom: 0.75rem;
+            transition: box-shadow 0.2s;
+        }
+
+        .search-result:hover {
+            box-shadow: var(--shadow-lg);
+        }
+
+        .search-result .score {
+            display: inline-block;
+            padding: 2px 8px;
+            border-radius: 999px;
+            font-size: 0.72rem;
+            font-weight: 700;
+            background: var(--success-bg);
+            color: var(--success);
+            margin-bottom: 0.5rem;
+        }
+
+        .search-result .source-tag {
+            font-size: 0.78rem;
+            color: var(--text-muted);
+            margin-bottom: 0.4rem;
+        }
+
+        .search-result .text-preview {
+            font-size: 0.84rem;
+            line-height: 1.5;
+            color: var(--text);
+            max-height: 120px;
+            overflow-y: auto;
+        }
+
+        .kg-doc-row {
+            cursor: pointer;
+            transition: background 0.15s;
+        }
+
+        .kg-doc-row:hover {
+            background: var(--info-bg) !important;
+        }
+
+        .chunk-card {
+            background: #f8f9fb;
+            border: 1px solid var(--border);
+            border-radius: 8px;
+            padding: 0.85rem 1rem;
+            margin-bottom: 0.5rem;
+        }
+
+        .chunk-card .chunk-id {
+            font-size: 0.72rem;
+            font-weight: 700;
+            color: var(--text-muted);
+            text-transform: uppercase;
+            letter-spacing: 0.5px;
+            margin-bottom: 0.3rem;
+        }
+
+        .chunk-card .chunk-text {
+            font-size: 0.82rem;
+            line-height: 1.5;
+            color: var(--text);
+            max-height: 100px;
+            overflow-y: auto;
+            white-space: pre-wrap;
+            word-break: break-word;
+        }
+
+        .edit-grid {
+            display: grid;
+            grid-template-columns: 120px 1fr;
+            gap: 0.5rem;
+            align-items: center;
+        }
+
+        .edit-grid label {
+            font-size: 0.82rem;
+            font-weight: 600;
+            color: var(--text-secondary);
+        }
+
+        .edit-grid input {
+            padding: 0.5rem 0.75rem;
+            border: 1.5px solid var(--border);
+            border-radius: 6px;
+            font-family: inherit;
+            font-size: 0.84rem;
+            outline: none;
+            transition: border-color 0.2s;
+        }
+
+        .edit-grid input:focus {
+            border-color: var(--wydot-blue);
+        }
+
+        .tab-pills {
+            display: flex;
+            gap: 0.5rem;
+            margin-bottom: 1.25rem;
+        }
+
+        .tab-pill {
+            padding: 0.45rem 1rem;
+            border: 1.5px solid var(--border);
+            border-radius: 999px;
+            background: transparent;
+            font-family: inherit;
+            font-size: 0.82rem;
+            font-weight: 500;
+            cursor: pointer;
+            transition: all 0.2s;
+            color: var(--text-secondary);
+        }
+
+        .tab-pill:hover {
+            border-color: var(--wydot-blue);
+            color: var(--wydot-blue);
+        }
+
+        .tab-pill.active {
+            background: var(--wydot-blue);
+            border-color: var(--wydot-blue);
+            color: white;
+        }
+
+        .kg-section {
+            display: none;
+        }
+
+        .kg-section.active {
+            display: block;
+        }
+
+        /* Monitoring & Eval Styles */
+        .stats-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+            gap: 1rem;
+            margin-bottom: 2rem;
+        }
+
+        .stat-card {
+            background: white;
+            border: 1px solid var(--border);
+            border-radius: 8px;
+            padding: 1.5rem;
+            box-shadow: 0 2px 4px rgba(0, 0, 0, 0.02);
+        }
+
+        .stat-card h3 {
+            font-size: 0.85rem;
+            color: var(--text-secondary);
+            margin-bottom: 0.5rem;
+            text-transform: uppercase;
+            letter-spacing: 0.5px;
+        }
+
+        .stat-card .value {
+            font-size: 1.8rem;
+            font-weight: 700;
+            color: var(--wydot-blue);
+        }
+
+        .charts-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(400px, 1fr));
+            gap: 1.5rem;
+            margin-bottom: 2rem;
+        }
+
+        .chart-container {
+            background: white;
+            border: 1px solid var(--border);
+            border-radius: 8px;
+            padding: 1.5rem;
+            height: 300px;
+        }
+
+        .data-table {
+            width: 100%;
+            border-collapse: collapse;
+            font-size: 0.9rem;
+        }
+
+        .data-table th,
+        .data-table td {
+            text-align: left;
+            padding: 0.75rem 1rem;
+            border-bottom: 1px solid var(--border);
+        }
+
+        .data-table th {
+            font-weight: 600;
+            color: var(--text-secondary);
+            background: #f8f9fb;
+        }
+
+        .btn-primary {
+            background: var(--wydot-blue);
+            color: white;
+            border: none;
+            padding: 0.5rem 1rem;
+            border-radius: 6px;
+            cursor: pointer;
+            font-weight: 600;
+        }
+
+        .btn-primary:hover {
+            background: var(--wydot-blue-light);
+        }
+    </style>
+</head>
+
+<body>
+    <!-- HEADER -->
+    <div class="header">
+        <img src="/static/wydot_logo.png" alt="WYDOT"
+            style="width:48px; height:48px; border-radius:8px; object-fit:cover;">
+        <div class="header-text">
+            <h1>WYDOT Knowledge Graph</h1>
+            <p>Document Ingestion Dashboard</p>
+        </div>
+        <div class="header-nav">
+            <button class="nav-btn" onclick="showPage('monitoring')">📊 Monitoring</button>
+            <button class="nav-btn" onclick="showPage('evaluation')">📝 Evaluation</button>
+            <button class="nav-btn" onclick="showPage('explorer')">🔍 KG Explorer</button>
+            <button class="nav-btn active" onclick="showPage('upload')"> Upload & Ingest</button>
+            <button class="nav-btn" onclick="showPage('library')"> Ingested Library</button>
+        </div>
+    </div>
+
+    <div class="main">
+        <!-- ==================== MONITORING PAGE ==================== -->
+        <div id="page-monitoring" class="page">
+            <div class="page-header">
+                <h2>System Monitoring</h2>
+                <div class="actions">
+                    <button class="action-btn" onclick="loadMonitoring()">🔄 Refresh</button>
+                </div>
+            </div>
+
+            <div class="stats-grid">
+                <div class="stat-card">
+                    <h3>Total Requests</h3>
+                    <div class="value" id="mon-count">-</div>
+                </div>
+                <div class="stat-card">
+                    <h3>Avg Latency (ms)</h3>
+                    <div class="value" id="mon-latency">-</div>
+                </div>
+                <div class="stat-card">
+                    <h3>P95 Latency (ms)</h3>
+                    <div class="value" id="mon-p95">-</div>
+                </div>
+                <div class="stat-card">
+                    <h3>Avg Generation (ms)</h3>
+                    <div class="value" id="mon-gen">-</div>
+                </div>
+            </div>
+
+            <div class="charts-grid">
+                <div class="chart-container">
+                    <canvas id="chart-latency"></canvas>
+                </div>
+                <div class="chart-container">
+                    <canvas id="chart-models"></canvas>
+                </div>
+            </div>
+        </div>
+
+        <!-- ==================== EVALUATION PAGE ==================== -->
+        <div id="page-evaluation" class="page">
+            <div class="page-header">
+                <h2>RAG Evaluation</h2>
+                <div class="actions">
+                    <button class="action-btn" onclick="loadEvaluation()">🔄 Refresh</button>
+                </div>
+            </div>
+
+            <h3 style="margin-top:20px; border-bottom:1px solid #eee; padding-bottom:10px;">Offline Evaluation (Golden
+                Dataset)</h3>
+            <div class="file-list-header" style="background:white; margin-top:10px;">
+                <button class="btn-primary" id="btn-run-eval" onclick="runOfflineEval()">▶ Run Offline Eval (5
+                    Items)</button>
+                <div style="margin-left:auto; font-size:0.9rem;">
+                    Last Run Score: <strong id="off-score">-</strong> (<span id="off-ts">-</span>)
+                </div>
+            </div>
+            <div class="file-list" id="offline-results-list" style="margin-bottom:30px;">
+                <!-- Results Table -->
+            </div>
+
+            <h3 style="margin-top:20px; border-bottom:1px solid #eee; padding-bottom:10px;">Online Evaluation (Live
+                Traffic)</h3>
+            <div class="stats-grid">
+                <div class="stat-card">
+                    <h3>Avg Relevancy</h3>
+                    <div class="value" id="on-relevancy">-</div>
+                </div>
+                <div class="stat-card">
+                    <h3>Context Utilization</h3>
+                    <div class="value" id="on-util">-</div>
+                </div>
+                <div class="stat-card">
+                    <h3>Completeness</h3>
+                    <div class="value" id="on-comp">-</div>
+                </div>
+                <div class="stat-card">
+                    <h3>Error Rate</h3>
+                    <div class="value" id="on-error">-</div>
+                </div>
+            </div>
+
+            <div class="charts-grid">
+                <div class="chart-container">
+                    <canvas id="chart-quality-trend"></canvas>
+                </div>
+                <div class="chart-container" style="overflow-y:auto;">
+                    <h4 style="margin-bottom:10px; font-size:0.9rem;">Recent Feedback</h4>
+                    <table class="data-table">
+                        <thead>
+                            <tr>
+                                <th>Time</th>
+                                <th>User</th>
+                                <th>Feedback</th>
+                                <th>Comment</th>
+                            </tr>
+                        </thead>
+                        <tbody id="feedback-table-body"></tbody>
+                    </table>
+                </div>
+            </div>
+        </div>
+
+        <!-- ==================== UPLOAD PAGE ==================== -->
+        <div id="page-upload" class="page active">
+
+            <div class="upload-tabs">
+                <button class="upload-tab active" onclick="switchUploadTab('files')">📄 Documents</button>
+                <button class="upload-tab" onclick="switchUploadTab('audio')">🎙️ Audio</button>
+                <button class="upload-tab" onclick="switchUploadTab('video')">🎥 Video</button>
+            </div>
+
+            <!-- FILES TAB -->
+            <div id="utab-files" class="utab-content active">
+                <div class="card">
+                    <div class="card-header">
+                        <div class="icon" style="background:#dbeafe;">📁</div>
+                        Upload Documents
+                    </div>
+                    <div class="card-body">
+                        <div class="drop-zone" id="dropZone">
+                            <input type="file" id="fileInput" multiple
+                                accept=".pdf,.docx,.doc,.mp3,.wav,.m4a,.webm,.mp4,.mov,.ogg">
+                            <div class="drop-zone-icon">📄</div>
+                            <h3>Drop files here or click to browse</h3>
+                            <p>PDF, DOCX, Audio (MP3, WAV, M4A), Video (MP4, WebM, MOV)</p>
+                        </div>
+                        <div class="file-list" id="fileList" style="margin-top:1rem;"></div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- AUDIO TAB -->
+            <div id="utab-audio" class="utab-content">
+                <div class="card">
+                    <div class="card-header">
+                        <div class="icon" style="background:#fef3c7;">🎙️</div>
+                        Record Audio
+                    </div>
+                    <div class="card-body">
+                        <div class="record-area">
+                            <div class="rec-timer" id="audioTimer">00:00</div>
+                            <button class="record-btn" id="audioRecBtn" onclick="toggleAudioRec()">
+                                <div class="dot"></div>
+                            </button>
+                            <p style="color:var(--text-muted); font-size:0.82rem;">Click to start / stop recording</p>
+                            <audio id="audioPlayback" controls
+                                style="display:none; width:100%; max-width:400px;"></audio>
+                        </div>
+                        <div class="transcript-box" id="audioTranscript">
+                            <div class="transcript-header">📝 Transcription</div>
+                            <div class="transcript-content" id="audioTranscriptContent"></div>
+                            <div class="metadata-grid" id="audioMetadata"></div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- VIDEO TAB -->
+            <div id="utab-video" class="utab-content">
+                <div class="card">
+                    <div class="card-header">
+                        <div class="icon" style="background:#e0e7ff;">🎥</div>
+                        Record Video
+                    </div>
+                    <div class="card-body">
+                        <div class="record-area">
+                            <video id="videoLive" autoplay muted playsinline style="display:none;"></video>
+                            <div class="rec-timer" id="videoTimer">00:00</div>
+                            <button class="record-btn" id="videoRecBtn" onclick="toggleVideoRec()">
+                                <div class="dot"></div>
+                            </button>
+                            <p style="color:var(--text-muted); font-size:0.82rem;">Click to start / stop recording</p>
+                            <video id="videoPlayback" controls
+                                style="display:none; width:100%; max-width:420px; border-radius:8px; margin-top:0.5rem;"></video>
+                        </div>
+                        <div class="transcript-box" id="videoTranscript">
+                            <div class="transcript-header">📝 Transcription</div>
+                            <div class="transcript-content" id="videoTranscriptContent"></div>
+                            <div class="metadata-grid" id="videoMetadata"></div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- SUBMIT -->
+            <button class="btn btn-primary btn-block" id="submitBtn" onclick="submitFiles()" disabled>
+                🚀 Ingest into Knowledge Graph
+            </button>
+
+            <!-- PROGRESS -->
+            <div class="progress-container" id="progressContainer">
+                <div class="progress-bar-bg">
+                    <div class="progress-bar" id="progressBar"></div>
+                </div>
+                <div class="progress-text" id="progressText">Processing...</div>
+            </div>
+
+            <!-- LOG -->
+            <div class="card" id="logCard" style="display:none; margin-top:1rem;">
+                <div class="card-header">
+                    <div class="icon" style="background:#e0e7ff;">📋</div>
+                    Ingestion Log
+                </div>
+                <div class="card-body" style="padding:0;">
+                    <div class="log-box" id="logBox"></div>
+                </div>
+            </div>
+
+        </div>
+
+        <!-- ==================== LIBRARY PAGE ==================== -->
+        <div id="page-library" class="page">
+            <div class="stats-row" id="statsRow">
+                <div class="stat-card">
+                    <div class="label">Total Documents</div>
+                    <div class="value" id="statTotal">—</div>
+                </div>
+                <div class="stat-card">
+                    <div class="label">Documents</div>
+                    <div class="value" id="statDocs">—</div>
+                </div>
+                <div class="stat-card">
+                    <div class="label">Audio</div>
+                    <div class="value" id="statAudio">—</div>
+                </div>
+                <div class="stat-card">
+                    <div class="label">Video</div>
+                    <div class="value" id="statVideo">—</div>
+                </div>
+            </div>
+
+            <div class="card">
+                <div class="card-header">
+                    <div class="icon" style="background:#dbeafe;">📚</div>
+                    Ingested Documents
+                    <button class="btn btn-outline btn-sm" onclick="loadLibrary()" style="margin-left:auto;">🔄
+                        Refresh</button>
+                </div>
+                <div class="card-body" style="padding:0;">
+                    <div class="table-wrap">
+                        <table>
+                            <thead>
+                                <tr>
+                                    <th>File Name</th>
+                                    <th>Type</th>
+                                    <th>Chunks</th>
+                                    <th>Date Ingested</th>
+                                    <th>Actions</th>
+                                </tr>
+                            </thead>
+                            <tbody id="libraryBody">
+                                <tr>
+                                    <td colspan="5">
+                                        <div class="empty-state">
+                                            <div class="icon">📭</div>
+                                            <p>No documents ingested yet</p>
+                                        </div>
+                                    </td>
+                                </tr>
+                            </tbody>
+                        </table>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- ==================== KG EXPLORER PAGE ==================== -->
+        <div id="page-explorer" class="page">
+
+            <div class="tab-pills">
+                <button class="tab-pill active" onclick="switchKgTab('browse')">📂 Browse Documents</button>
+                <button class="tab-pill" onclick="switchKgTab('search')">🔍 Semantic Search</button>
+                <button class="tab-pill" onclick="switchKgTab('edit')">✏️ Metadata Editor</button>
+            </div>
+
+            <!-- KG STATS -->
+            <div class="stats-row" id="kgStatsRow">
+                <div class="stat-card">
+                    <div class="label">Total Chunks</div>
+                    <div class="value" id="kgTotalChunks">—</div>
+                </div>
+                <div class="stat-card">
+                    <div class="label">Unique Documents</div>
+                    <div class="value" id="kgUniqueDocs">—</div>
+                </div>
+                <div class="stat-card">
+                    <div class="label">Document Chunks</div>
+                    <div class="value" id="kgDocChunks">—</div>
+                </div>
+                <div class="stat-card">
+                    <div class="label">Media Chunks</div>
+                    <div class="value" id="kgMediaChunks">—</div>
+                </div>
+            </div>
+
+            <!-- BROWSE SECTION -->
+            <div id="kgSection-browse" class="kg-section active">
+                <div class="card">
+                    <div class="card-header">
+                        <div class="icon" style="background:#e0e7ff;">📂</div>
+                        Documents in Knowledge Graph
+                        <button class="btn btn-outline btn-sm" onclick="loadKgDocuments()" style="margin-left:auto;">🔄
+                            Refresh</button>
+                    </div>
+                    <div class="card-body" style="padding:0;">
+                        <div class="table-wrap">
+                            <table>
+                                <thead>
+                                    <tr>
+                                        <th>Source</th>
+                                        <th>Title</th>
+                                        <th>Type</th>
+                                        <th>Year</th>
+                                        <th>Chunks</th>
+                                        <th>Actions</th>
+                                    </tr>
+                                </thead>
+                                <tbody id="kgDocsBody">
+                                    <tr>
+                                        <td colspan="6">
+                                            <div class="empty-state">
+                                                <div class="icon">⏳</div>
+                                                <p>Loading...</p>
+                                            </div>
+                                        </td>
+                                    </tr>
+                                </tbody>
+                            </table>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- SEARCH SECTION -->
+            <div id="kgSection-search" class="kg-section">
+                <div class="card">
+                    <div class="card-header">
+                        <div class="icon" style="background:#fef3c7;">🔍</div>
+                        Semantic Search
+                    </div>
+                    <div class="card-body">
+                        <div class="search-box">
+                            <input type="text" id="kgSearchInput"
+                                placeholder="Ask a question to search the knowledge graph..."
+                                onkeydown="if(event.key==='Enter') kgSearch()">
+                            <button class="btn btn-primary" onclick="kgSearch()">Search</button>
+                        </div>
+                        <div id="kgSearchResults">
+                            <div class="empty-state" style="padding:2rem;">
+                                <p style="color:var(--text-muted);">Enter a question to find relevant chunks from the
+                                    knowledge graph</p>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- EDIT SECTION -->
+            <div id="kgSection-edit" class="kg-section">
+                <div class="card">
+                    <div class="card-header">
+                        <div class="icon" style="background:#fee2e2;">✏️</div>
+                        Metadata Editor
+                        <span
+                            style="margin-left:auto; font-size:0.78rem; color:var(--text-muted); font-weight:400;">Select
+                            a document below, then edit its metadata across all chunks</span>
+                    </div>
+                    <div class="card-body">
+                        <div style="margin-bottom:1rem;">
+                            <select id="editSourceSelect" class="search-box"
+                                style="display:block; width:100%; padding:0.7rem 1rem; border:1.5px solid var(--border); border-radius:8px; font-family:inherit; font-size:0.88rem;"
+                                onchange="loadEditForm()">
+                                <option value="">— Select a document source to edit —</option>
+                            </select>
+                        </div>
+
+                        <div id="editFormArea" style="display:none;">
+                            <div class="edit-grid" style="margin-bottom:1.25rem;">
+                                <label>Source</label>
+                                <input type="text" id="editSource">
+                                <label>Title</label>
+                                <input type="text" id="editTitle">
+                                <label>Doc Type</label>
+                                <input type="text" id="editDocType">
+                                <label>Year</label>
+                                <input type="text" id="editYear">
+                                <label>Author</label>
+                                <input type="text" id="editAuthor">
+                                <label>Section</label>
+                                <input type="text" id="editSection">
+                                <label>Media Type</label>
+                                <input type="text" id="editMediaType">
+                            </div>
+                            <div style="display:flex; gap:0.5rem;">
+                                <button class="btn btn-primary" onclick="saveMetadataEdits()">💾 Update All
+                                    Chunks</button>
+                                <button class="btn btn-outline" onclick="loadEditForm()">↺ Reset</button>
+                            </div>
+                            <div id="editStatus" style="margin-top:0.75rem; font-size:0.85rem;"></div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+    </div>
+
+    <!-- CHUNK VIEWER MODAL -->
+    <div class="modal-overlay" id="chunkModal">
+        <div class="modal" style="max-width:800px;">
+            <div class="modal-header">
+                <span id="chunkModalTitle">Chunks</span>
+                <button class="icon-btn" onclick="closeChunkModal()">✕</button>
+            </div>
+            <div class="modal-body" id="chunkModalBody" style="max-height:70vh; overflow-y:auto;"></div>
+        </div>
+    </div>
+
+    <!-- PREVIEW MODAL -->
+    <div class="modal-overlay" id="previewModal">
+        <div class="modal">
+            <div class="modal-header">
+                <span id="previewTitle">Preview</span>
+                <button class="icon-btn" onclick="closePreview()">✕</button>
+            </div>
+            <div class="modal-body" id="previewBody"></div>
+        </div>
+    </div>
+
+    <script>
+        let selectedFiles = [];
+        let audioRecorder, videoRecorder, audioStream, videoStream;
+        let audioChunks = [], videoChunks = [];
+        let isAudioRec = false, isVideoRec = false;
+        let timerInterval, timerSeconds = 0;
+
+        // ===== PAGE NAVIGATION =====
+        function showPage(page) {
+            document.querySelectorAll('.page').forEach(p => p.classList.remove('active'));
+            document.querySelectorAll('.nav-btn').forEach(b => b.classList.remove('active'));
+            document.getElementById(`page-${page}`).classList.add('active');
+            event.target.classList.add('active');
+            if (page === 'library') loadLibrary();
+            if (page === 'monitoring') loadMonitoring();
+            if (page === 'evaluation') loadEvaluation();
+            if (page === 'explorer') { loadKgStats(); loadKgDocuments(); }
+        }
+
+        // ===== UPLOAD TABS =====
+        function switchUploadTab(tab) {
+            document.querySelectorAll('.upload-tab').forEach(t => t.classList.remove('active'));
+            document.querySelectorAll('.utab-content').forEach(t => t.classList.remove('active'));
+            document.querySelector(`.upload-tab:nth-child(${tab === 'files' ? 1 : tab === 'audio' ? 2 : 3})`).classList.add('active');
+            document.getElementById(`utab-${tab}`).classList.add('active');
+        }
+
+        // ===== FILE HANDLING =====
+        const dropZone = document.getElementById('dropZone');
+        const fileInput = document.getElementById('fileInput');
+
+        dropZone.addEventListener('dragover', e => { e.preventDefault(); dropZone.classList.add('drag-over'); });
+        dropZone.addEventListener('dragleave', () => dropZone.classList.remove('drag-over'));
+        dropZone.addEventListener('drop', e => { e.preventDefault(); dropZone.classList.remove('drag-over'); addFiles(e.dataTransfer.files); });
+        fileInput.addEventListener('change', e => { addFiles(e.target.files); e.target.value = ''; });
+
+        function addFiles(fileList) {
+            for (const f of fileList) {
+                if (!selectedFiles.some(s => s.name === f.name)) selectedFiles.push(f);
+            }
+            renderFileList();
+        }
+
+        function removeFile(i) { selectedFiles.splice(i, 1); renderFileList(); }
+
+        function renderFileList() {
+            const list = document.getElementById('fileList');
+            list.innerHTML = selectedFiles.map((f, i) => {
+                const isAudio = f.type?.startsWith('audio');
+                const isVideo = f.type?.startsWith('video');
+                const isPDF = f.name.endsWith('.pdf');
+                const iconClass = isAudio ? 'audio' : isVideo ? 'video' : isPDF ? 'pdf' : 'doc';
+                const icon = isAudio ? '🎵' : isVideo ? '🎬' : isPDF ? '📕' : '📄';
+                const size = (f.size / 1024 / 1024).toFixed(2);
+                return `<div class="file-item">
+          <div class="file-icon ${iconClass}">${icon}</div>
+          <div class="file-info"><div class="file-name">${f.name}</div><div class="file-size">${size} MB</div></div>
+          <div class="file-actions">
+            <button class="icon-btn" onclick="previewFile(${i})" title="Preview">👁️</button>
+            <button class="icon-btn danger" onclick="removeFile(${i})" title="Remove">✕</button>
+          </div>
+        </div>`;
+            }).join('');
+            document.getElementById('submitBtn').disabled = selectedFiles.length === 0;
+        }
+
+        // ===== PREVIEW =====
+        function previewFile(i) {
+            const file = selectedFiles[i];
+            const modal = document.getElementById('previewModal');
+            const title = document.getElementById('previewTitle');
+            const body = document.getElementById('previewBody');
+            title.textContent = file.name;
+            const nameLower = file.name.toLowerCase();
+
+            if (nameLower.endsWith('.pdf')) {
+                const url = URL.createObjectURL(file);
+                body.innerHTML = `<embed src="${url}" type="application/pdf" width="100%" height="500px">`;
+            } else if (nameLower.endsWith('.docx') || nameLower.endsWith('.doc')) {
+                body.innerHTML = `<p style="color:var(--text-muted);">⏳ Loading document preview...</p>`;
+                const reader = new FileReader();
+                reader.onload = function (e) {
+                    mammoth.convertToHtml({ arrayBuffer: e.target.result })
+                        .then(result => {
+                            body.innerHTML = `<div style="background:#f8f9fb; border:1px solid var(--border); border-radius:8px; padding:1.25rem; max-height:500px; overflow-y:auto; font-size:0.88rem; line-height:1.7;">${result.value}</div>`;
+                        })
+                        .catch(err => {
+                            body.innerHTML = `<p style="color:var(--error);">❌ Could not preview this document: ${err.message}</p>`;
+                        });
+                };
+                reader.readAsArrayBuffer(file);
+            } else if (file.type?.startsWith('audio')) {
+                const url = URL.createObjectURL(file);
+                body.innerHTML = `<audio controls src="${url}" style="width:100%;"></audio>`;
+            } else if (file.type?.startsWith('video')) {
+                const url = URL.createObjectURL(file);
+                body.innerHTML = `<video controls src="${url}" style="width:100%; max-height:400px; border-radius:8px;"></video>`;
+            } else {
+                body.innerHTML = `<p style="color:var(--text-muted);">Preview not available for this file type. It will be processed upon submission.</p>`;
+            }
+
+            modal.classList.add('active');
+        }
+
+        function closePreview() {
+            document.getElementById('previewModal').classList.remove('active');
+        }
+
+        document.getElementById('previewModal').addEventListener('click', e => {
+            if (e.target === e.currentTarget) closePreview();
+        });
+
+        // ===== AUDIO RECORDING =====
+        async function toggleAudioRec() {
+            const btn = document.getElementById('audioRecBtn');
+            if (!isAudioRec) {
+                try {
+                    audioStream = await navigator.mediaDevices.getUserMedia({ audio: true });
+                    // Try ogg/opus first (better Gemini support), fall back to webm
+                    let mimeType = 'audio/ogg;codecs=opus';
+                    if (!MediaRecorder.isTypeSupported(mimeType)) {
+                        mimeType = 'audio/webm;codecs=opus';
+                    }
+                    if (!MediaRecorder.isTypeSupported(mimeType)) {
+                        mimeType = 'audio/webm';
+                    }
+                    console.log('Audio recording MIME:', mimeType);
+                    audioRecorder = new MediaRecorder(audioStream, { mimeType });
+                    audioChunks = [];
+                    audioRecorder.ondataavailable = e => audioChunks.push(e.data);
+                    audioRecorder.onstop = async () => {
+                        const ext = mimeType.includes('ogg') ? 'ogg' : 'webm';
+                        const blob = new Blob(audioChunks, { type: mimeType.split(';')[0] });
+                        const file = new File([blob], `audio_${Date.now()}.${ext}`, { type: mimeType.split(';')[0] });
+
+                        // Show preview immediately
+                        const playback = document.getElementById('audioPlayback');
+                        playback.src = URL.createObjectURL(blob);
+                        playback.style.display = 'block';
+                        audioStream.getTracks().forEach(t => t.stop());
+
+                        // Transcribe (preview stays even if this fails)
+                        try {
+                            await transcribeAndPreview(file, 'audio');
+                        } catch (err) {
+                            console.error('Transcription error:', err);
+                        }
+                    };
+                    audioRecorder.start();
+                    isAudioRec = true;
+                    btn.classList.add('recording');
+                    startTimer('audioTimer');
+                } catch (err) { alert('Microphone access denied: ' + err.message); }
+            } else {
+                audioRecorder.stop();
+                isAudioRec = false;
+                btn.classList.remove('recording');
+                stopTimer('audioTimer');
+            }
+        }
+
+        // ===== VIDEO RECORDING =====
+        async function toggleVideoRec() {
+            const btn = document.getElementById('videoRecBtn');
+            const live = document.getElementById('videoLive');
+            if (!isVideoRec) {
+                try {
+                    videoStream = await navigator.mediaDevices.getUserMedia({ video: true, audio: true });
+                    live.srcObject = videoStream;
+                    live.style.display = 'block';
+                    videoRecorder = new MediaRecorder(videoStream);
+                    videoChunks = [];
+                    videoRecorder.ondataavailable = e => videoChunks.push(e.data);
+                    videoRecorder.onstop = async () => {
+                        const blob = new Blob(videoChunks, { type: 'video/webm' });
+                        const file = new File([blob], `video_${Date.now()}.webm`, { type: 'video/webm' });
+                        live.srcObject = null;
+                        live.style.display = 'none';
+                        const playback = document.getElementById('videoPlayback');
+                        playback.src = URL.createObjectURL(blob);
+                        playback.style.display = 'block';
+                        videoStream.getTracks().forEach(t => t.stop());
+                        // Transcribe before adding to queue
+                        await transcribeAndPreview(file, 'video');
+                    };
+                    videoRecorder.start();
+                    isVideoRec = true;
+                    btn.classList.add('recording');
+                    startTimer('videoTimer');
+                } catch (err) { alert('Camera access denied: ' + err.message); }
+            } else {
+                videoRecorder.stop();
+                isVideoRec = false;
+                btn.classList.remove('recording');
+                stopTimer('videoTimer');
+            }
+        }
+
+        // ===== TRANSCRIBE AND PREVIEW =====
+        async function transcribeAndPreview(file, type) {
+            const transcriptBox = document.getElementById(`${type}Transcript`);
+            const contentEl = document.getElementById(`${type}TranscriptContent`);
+            const metaEl = document.getElementById(`${type}Metadata`);
+
+            transcriptBox.classList.add('active');
+            contentEl.textContent = '⏳ Transcribing with Gemini 2.5 Flash...';
+            metaEl.innerHTML = '';
+
+            const formData = new FormData();
+            formData.append('file', file);
+
+            try {
+                const resp = await fetch('/transcribe', { method: 'POST', body: formData });
+                const data = await resp.json();
+
+                if (data.status === 'success') {
+                    contentEl.textContent = data.transcript;
+                    const meta = data.metadata || {};
+                    metaEl.innerHTML = Object.entries(meta).map(([k, v]) =>
+                        `<div class="meta-item"><div class="meta-label">${k}</div><div class="meta-value">${v}</div></div>`
+                    ).join('');
+                    // Add to file queue
+                    selectedFiles.push(file);
+                    renderFileList();
+                } else {
+                    contentEl.textContent = '❌ Transcription failed: ' + data.message;
+                }
+            } catch (err) {
+                contentEl.textContent = '❌ Error: ' + err.message;
+            }
+        }
+
+        // ===== TIMER =====
+        function startTimer(id) {
+            timerSeconds = 0;
+            const el = document.getElementById(id);
+            el.classList.add('active');
+            timerInterval = setInterval(() => {
+                timerSeconds++;
+                el.textContent = `${String(Math.floor(timerSeconds / 60)).padStart(2, '0')}:${String(timerSeconds % 60).padStart(2, '0')}`;
+            }, 1000);
+        }
+
+        function stopTimer(id) {
+            clearInterval(timerInterval);
+            document.getElementById(id).classList.remove('active');
+        }
+
+        // ===== LOG =====
+        function showLog() {
+            document.getElementById('logCard').style.display = 'block';
+        }
+
+        function addLog(text, cls = '') {
+            showLog();
+            const box = document.getElementById('logBox');
+            const ts = new Date().toLocaleTimeString();
+            box.innerHTML += `<div class="log-line ${cls}">[${ts}] ${text}</div>`;
+            box.scrollTop = box.scrollHeight;
+        }
+
+        // ===== SUBMIT =====
+        async function submitFiles() {
+            if (selectedFiles.length === 0) return;
+
+            const btn = document.getElementById('submitBtn');
+            const prog = document.getElementById('progressContainer');
+            const bar = document.getElementById('progressBar');
+            const txt = document.getElementById('progressText');
+
+            btn.disabled = true;
+            prog.classList.add('active');
+            document.getElementById('logBox').innerHTML = '';
+
+            const total = selectedFiles.length;
+            let processed = 0;
+
+            for (const file of [...selectedFiles]) {
+                txt.textContent = `Processing ${file.name} (${processed + 1}/${total})...`;
+                bar.style.width = `${(processed / total) * 100}%`;
+                addLog(`📄 Processing: ${file.name}`, 'info');
+
+                const formData = new FormData();
+                formData.append('file', file);
+
+                try {
+                    const resp = await fetch('/upload', { method: 'POST', body: formData });
+                    const data = await resp.json();
+
+                    if (data.status === 'success') {
+                        addLog(`   > Vectorizing ${data.chunks} chunks...`, 'info');
+                        addLog(`   ✅ ${data.chunks} chunks saved to Neo4j index '${data.index || 'wydot_vector_index'}'.`, 'success');
+                    } else {
+                        addLog(`   ❌ Failed: ${data.message}`, 'error');
+                    }
+                } catch (err) {
+                    addLog(`   ❌ Error: ${err.message}`, 'error');
+                }
+                processed++;
+            }
+
+            bar.style.width = '100%';
+            txt.textContent = 'Done!';
+            addLog(`\n🎉 Ingestion complete. Processed ${total} file(s).`, 'success');
+
+            selectedFiles = [];
+            renderFileList();
+            btn.disabled = true;
+            setTimeout(() => prog.classList.remove('active'), 2000);
+        }
+
+        // ===== LIBRARY =====
+        async function loadLibrary() {
+            try {
+                const resp = await fetch('/library');
+                const data = await resp.json();
+                const body = document.getElementById('libraryBody');
+
+                document.getElementById('statTotal').textContent = data.files?.length || 0;
+                document.getElementById('statDocs').textContent = data.files?.filter(f => f.type === 'document').length || 0;
+                document.getElementById('statAudio').textContent = data.files?.filter(f => f.type === 'audio').length || 0;
+                document.getElementById('statVideo').textContent = data.files?.filter(f => f.type === 'video').length || 0;
+
+                if (!data.files || data.files.length === 0) {
+                    body.innerHTML = '<tr><td colspan="5"><div class="empty-state"><div class="icon">📭</div><p>No documents ingested yet</p></div></td></tr>';
+                    return;
+                }
+
+                body.innerHTML = data.files.map(f => {
+                    const badgeClass = f.type === 'audio' ? 'badge-audio' : f.type === 'video' ? 'badge-video' : 'badge-doc';
+                    return `<tr>
+            <td><strong>${f.filename}</strong></td>
+            <td><span class="badge ${badgeClass}">${f.type}</span></td>
+            <td>${f.chunks || '—'}</td>
+            <td>${f.date || '—'}</td>
+            <td>
+              <button class="btn btn-danger btn-sm" onclick="deleteFile('${f.filename}')">🗑️ Remove</button>
+            </td>
+          </tr>`;
+                }).join('');
+            } catch (err) {
+                console.error('Failed to load library:', err);
+            }
+        }
+
+        async function deleteFile(filename) {
+            if (!confirm(`Remove "${filename}" from the knowledge graph? This will delete all chunks associated with this file.`)) return;
+
+            try {
+                const resp = await fetch('/delete', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ filename })
+                });
+                const data = await resp.json();
+
+                if (data.status === 'success') {
+                    alert(`✅ Removed ${data.deleted} chunks for "${filename}".`);
+                    loadLibrary();
+                } else {
+                    alert('❌ Failed: ' + data.message);
+                }
+            } catch (err) {
+                alert('❌ Error: ' + err.message);
+            }
+        }
+
+        // ===== KG EXPLORER: TABS =====
+        function switchKgTab(tab) {
+            document.querySelectorAll('.kg-section').forEach(s => s.classList.remove('active'));
+            document.querySelectorAll('.tab-pill').forEach(b => b.classList.remove('active'));
+            document.getElementById(`kgSection-${tab}`).classList.add('active');
+            event.target.classList.add('active');
+            if (tab === 'edit') loadEditDropdown();
+        }
+
+        // ===== KG EXPLORER: STATS =====
+        async function loadKgStats() {
+            try {
+                const resp = await fetch('/kg/stats');
+                const data = await resp.json();
+                document.getElementById('kgTotalChunks').textContent = data.total_chunks || 0;
+                document.getElementById('kgUniqueDocs').textContent = data.unique_sources || 0;
+                const docChunks = (data.by_type?.document || 0);
+                const mediaChunks = (data.by_type?.audio || 0) + (data.by_type?.video || 0);
+                document.getElementById('kgDocChunks').textContent = docChunks;
+                document.getElementById('kgMediaChunks').textContent = mediaChunks;
+            } catch (err) { console.error('Stats error:', err); }
+        }
+
+        // ===== KG EXPLORER: DOCUMENT LIST =====
+        const GCS_BASE_URL = 'https://storage.googleapis.com/wydot-documents-quiet-era-401008/wydot%20documents/';
+        let kgDocumentsCache = [];
+
+        function getGcsUrl(source) {
+            return GCS_BASE_URL + encodeURIComponent(source);
+        }
+
+        async function loadKgDocuments() {
+            try {
+                const resp = await fetch('/kg/documents');
+                const data = await resp.json();
+                kgDocumentsCache = data.documents || [];
+                const body = document.getElementById('kgDocsBody');
+
+                if (kgDocumentsCache.length === 0) {
+                    body.innerHTML = '<tr><td colspan="6"><div class="empty-state"><div class="icon">📭</div><p>No documents found in the knowledge graph</p></div></td></tr>';
+                    return;
+                }
+
+                body.innerHTML = kgDocumentsCache.map(d => {
+                    const badgeClass = d.media_type === 'audio' ? 'badge-audio' : d.media_type === 'video' ? 'badge-video' : 'badge-doc';
+                    const escapedSrc = d.source.replace(/'/g, "\\'");
+                    return `<tr class="kg-doc-row">
+                        <td><a href="#" onclick="previewGcsDoc('${escapedSrc}'); return false;" style="color:var(--wydot-blue); text-decoration:none; font-weight:600;" title="Click to preview">${d.source}</a></td>
+                        <td style="max-width:200px; overflow:hidden; text-overflow:ellipsis; white-space:nowrap;">${d.title}</td>
+                        <td><span class="badge ${badgeClass}">${d.media_type}</span></td>
+                        <td>${d.year}</td>
+                        <td><strong>${d.chunks}</strong></td>
+                        <td style="white-space:nowrap;">
+                            <button class="btn btn-outline btn-sm" onclick="previewGcsDoc('${escapedSrc}')" title="Preview document">📄</button>
+                            <button class="btn btn-outline btn-sm" onclick="viewChunks('${escapedSrc}')" title="View chunks">👁️</button>
+                        </td>
+                    </tr>`;
+                }).join('');
+            } catch (err) {
+                console.error('Documents error:', err);
+                document.getElementById('kgDocsBody').innerHTML = '<tr><td colspan="6" style="color:var(--error);">Failed to load documents</td></tr>';
+            }
+        }
+
+        function previewGcsDoc(source) {
+            const url = getGcsUrl(source);
+            const modal = document.getElementById('previewModal');
+            const title = document.getElementById('previewTitle');
+            const body = document.getElementById('previewBody');
+            title.textContent = source;
+
+            const lower = source.toLowerCase();
+            if (lower.endsWith('.pdf')) {
+                body.innerHTML = `<embed src="${url}" type="application/pdf" width="100%" height="600px" style="border-radius:8px;">
+                    <p style="margin-top:0.5rem; font-size:0.8rem; color:var(--text-muted);">Can't see the PDF? <a href="${url}" target="_blank" style="color:var(--wydot-blue);">Open in new tab ↗</a></p>`;
+            } else if (lower.match(/\.(png|jpg|jpeg|gif|svg|webp)$/)) {
+                body.innerHTML = `<img src="${url}" alt="${source}" style="max-width:100%; border-radius:8px;">
+                    <p style="margin-top:0.5rem;"><a href="${url}" target="_blank" style="color:var(--wydot-blue);">Open full size ↗</a></p>`;
+            } else if (lower.match(/\.(mp3|wav|ogg|webm|m4a)$/)) {
+                body.innerHTML = `<audio controls src="${url}" style="width:100%;"></audio>`;
+            } else if (lower.match(/\.(mp4|mov|avi|mkv)$/)) {
+                body.innerHTML = `<video controls src="${url}" style="width:100%; max-height:500px; border-radius:8px;"></video>`;
+            } else {
+                body.innerHTML = `<div style="text-align:center; padding:2rem;">
+                    <p style="font-size:1.5rem; margin-bottom:0.5rem;">📄</p>
+                    <p style="margin-bottom:1rem; color:var(--text-secondary);">Preview not available for this file type</p>
+                    <a href="${url}" target="_blank" class="btn btn-primary">⬇️ Download / Open in Browser</a>
+                </div>`;
+            }
+
+            modal.classList.add('active');
+        }
+
+        // ===== KG EXPLORER: VIEW CHUNKS =====
+        async function viewChunks(source) {
+            const modal = document.getElementById('chunkModal');
+            const title = document.getElementById('chunkModalTitle');
+            const body = document.getElementById('chunkModalBody');
+            title.textContent = `Chunks — ${source}`;
+            body.innerHTML = '<p style="color:var(--text-muted);">Loading chunks...</p>';
+            modal.classList.add('active');
+
+            try {
+                const resp = await fetch(`/kg/chunks?source=${encodeURIComponent(source)}`);
+                const data = await resp.json();
+
+                if (!data.chunks || data.chunks.length === 0) {
+                    body.innerHTML = '<p style="color:var(--text-muted);">No chunks found</p>';
+                    return;
+                }
+
+                body.innerHTML = `<p style="margin-bottom:1rem; font-size:0.85rem; color:var(--text-secondary);">${data.total} chunks total</p>` +
+                    data.chunks.map((c, i) => `
+                        <div class="chunk-card">
+                            <div class="chunk-id">Chunk ${i + 1} · Page ${c.page} · Section: ${c.section}</div>
+                            <div class="chunk-text">${escapeHtml(c.text)}</div>
+                        </div>
+                    `).join('');
+            } catch (err) {
+                body.innerHTML = `<p style="color:var(--error);">Error: ${err.message}</p>`;
+            }
+        }
+
+        function closeChunkModal() {
+            document.getElementById('chunkModal').classList.remove('active');
+        }
+
+        document.getElementById('chunkModal').addEventListener('click', e => {
+            if (e.target === e.currentTarget) closeChunkModal();
+        });
+
+        function escapeHtml(text) {
+            const div = document.createElement('div');
+            div.textContent = text || '';
+            return div.innerHTML;
+        }
+
+        // ===== KG EXPLORER: SEMANTIC SEARCH =====
+        async function kgSearch() {
+            const query = document.getElementById('kgSearchInput').value.trim();
+            if (!query) return;
+
+            const container = document.getElementById('kgSearchResults');
+            container.innerHTML = '<p style="color:var(--text-muted); text-align:center; padding:2rem;">🔍 Searching...</p>';
+
+            try {
+                const resp = await fetch('/kg/search', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ query, top_k: 8 })
+                });
+                const data = await resp.json();
+
+                if (!data.results || data.results.length === 0) {
+                    container.innerHTML = '<p style="color:var(--text-muted); text-align:center; padding:2rem;">No matching results found</p>';
+                    return;
+                }
+
+                container.innerHTML = data.results.map(r => `
+                    <div class="search-result">
+                        <div class="score">Score: ${r.score}</div>
+                        <div class="source-tag">📄 ${r.source} · ${r.doc_type} · Page ${r.page}</div>
+                        <div class="text-preview">${escapeHtml(r.text)}</div>
+                    </div>
+                `).join('');
+            } catch (err) {
+                container.innerHTML = `<p style="color:var(--error);">Search error: ${err.message}</p>`;
+            }
+        }
+
+        // ===== KG EXPLORER: METADATA EDITOR =====
+        let editOriginalSource = '';
+
+        async function loadEditDropdown() {
+            const select = document.getElementById('editSourceSelect');
+            if (kgDocumentsCache.length === 0) {
+                try {
+                    const resp = await fetch('/kg/documents');
+                    const data = await resp.json();
+                    kgDocumentsCache = data.documents || [];
+                } catch (err) { return; }
+            }
+            select.innerHTML = '<option value="">— Select a document source to edit —</option>' +
+                kgDocumentsCache.map(d => `<option value="${d.source}">${d.source} (${d.chunks} chunks)</option>`).join('');
+        }
+
+        async function loadEditForm() {
+            const source = document.getElementById('editSourceSelect').value;
+            const area = document.getElementById('editFormArea');
+            if (!source) { area.style.display = 'none'; return; }
+
+            area.style.display = 'block';
+            editOriginalSource = source;
+
+            const doc = kgDocumentsCache.find(d => d.source === source);
+            if (doc) {
+                document.getElementById('editSource').value = doc.source;
+                document.getElementById('editTitle').value = doc.title;
+                document.getElementById('editDocType').value = doc.doc_type;
+                document.getElementById('editYear').value = doc.year;
+                document.getElementById('editAuthor').value = doc.author;
+                document.getElementById('editSection').value = '';
+                document.getElementById('editMediaType').value = doc.media_type;
+            }
+            document.getElementById('editStatus').innerHTML = '';
+        }
+
+        async function saveMetadataEdits() {
+            const updates = {};
+            const fields = ['source', 'title', 'doc_type', 'year', 'author', 'section', 'media_type'];
+            const ids = ['editSource', 'editTitle', 'editDocType', 'editYear', 'editAuthor', 'editSection', 'editMediaType'];
+
+            fields.forEach((f, i) => {
+                const val = document.getElementById(ids[i]).value.trim();
+                if (val) updates[f] = val;
+            });
+
+            if (Object.keys(updates).length === 0) {
+                document.getElementById('editStatus').innerHTML = '<span style="color:var(--warning);">⚠️ No fields to update</span>';
+                return;
+            }
+
+            try {
+                const resp = await fetch('/kg/update', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ source: editOriginalSource, updates })
+                });
+                const data = await resp.json();
+
+                if (data.status === 'success') {
+                    document.getElementById('editStatus').innerHTML = `<span style="color:var(--success);">✅ Updated ${data.updated} chunks (re-embedded ${data.reembedded || 0}). Fields: ${data.fields.join(', ')}</span>`;
+                    loadKgStats();
+                    loadKgDocuments();
+                    loadEditDropdown();
+                } else {
+                    document.getElementById('editStatus').innerHTML = `<span style="color:var(--error);">❌ ${data.message}</span>`;
+                }
+            } catch (err) {
+                document.getElementById('editStatus').innerHTML = `<span style="color:var(--error);">❌ Error: ${err.message}</span>`;
+            }
+        }
+
+        // ===== MONITORING & EVALUATION =====
+
+        let monChart1 = null;
+        let monChart2 = null;
+        let evalChart = null;
+
+        async function loadMonitoring() {
+            try {
+                // 1. Stats
+                const stats = await (await fetch('/api/monitoring/metrics')).json();
+                document.getElementById('mon-count').textContent = stats.count || 0;
+                document.getElementById('mon-latency').textContent = stats.avg || 0;
+                document.getElementById('mon-p95').textContent = stats.p95 || 0;
+                document.getElementById('mon-gen').textContent = stats.avg_generation || 0;
+
+                // 2. Timeseries Chart
+                const tsData = await (await fetch('/api/monitoring/timeseries')).json();
+                renderChart('chart-latency', 'latency', tsData, 'Latency (ms)', 'line');
+
+                // 3. Models Chart
+                // 3. Models Chart
+                const modelDataRaw = await (await fetch('/api/monitoring/models')).json();
+                const modelData = {};
+                if (Array.isArray(modelDataRaw)) {
+                    modelDataRaw.forEach(item => {
+                        modelData[item.model] = item.count;
+                    });
+                } else {
+                    Object.assign(modelData, modelDataRaw);
+                }
+                renderChart('chart-models', 'models', modelData, 'Requests per Model', 'bar');
+
+            } catch (err) { console.error('Monitoring error:', err); }
+        }
+
+        async function loadEvaluation() {
+            try {
+                // 1. Offline Results
+                const offRes = await (await fetch('/api/evaluation/offline/results')).json();
+                document.getElementById('off-score').textContent = offRes.score || '-';
+                document.getElementById('off-ts').textContent = offRes.ts ? new Date(offRes.ts * 1000).toLocaleString() : '-';
+
+                const offList = document.getElementById('offline-results-list');
+                if (offRes.results) {
+                    offList.innerHTML = offRes.results.map(r => `
+                        <div class="file-item" style="display:block;">
+                            <div style="font-weight:600; margin-bottom:5px;">Q: ${r.question}</div>
+                            <div style="font-size:0.9rem; color:#666; margin-bottom:5px;">A: ${r.answer_preview}</div>
+                            <div style="font-size:0.85rem; display:flex; gap:15px;">
+                                <span style="color:${r.total_score > 0.7 ? 'green' : 'orange'}">Score: ${r.total_score}</span>
+                                <span>Context: ${r.context_recall}</span>
+                                <span>Correctness: ${r.answer_correctness}</span>
+                                <span>Latency: ${r.latency_ms}ms</span>
+                            </div>
+                        </div>
+                    `).join('');
+                } else {
+                    offList.innerHTML = '<div style="padding:20px; text-align:center; color:#888;">No offline evaluation run yet.</div>';
+                }
+
+                // 2. Online Stats
+                const onStats = await (await fetch('/api/evaluation/online/scores')).json();
+                document.getElementById('on-relevancy').textContent = onStats.relevancy || 0;
+                document.getElementById('on-util').textContent = onStats.utilization || 0;
+                document.getElementById('on-comp').textContent = onStats.completeness || 0;
+                document.getElementById('on-error').textContent = (onStats.error_rate * 100).toFixed(1) + '%';
+
+                // 3. Trends Chart
+                const history = await (await fetch('/api/evaluation/online/history')).json();
+                renderChart('chart-quality-trend', 'quality', history, 'Quality Trend', 'line');
+
+                // 4. Feedback
+                const fbData = await (await fetch('/api/evaluation/feedback')).json();
+                const fbBody = document.getElementById('feedback-table-body');
+                fbBody.innerHTML = (fbData.recent || []).map(f => `
+                    <tr>
+                        <td>${new Date(f.ts * 1000).toLocaleTimeString()}</td>
+                        <td>User ${f.user_id || '-'}</td>
+                        <td>${f.value === 1 ? '👍' : '👎'}</td>
+                        <td style="font-size:0.85rem;">${f.comment || ''}</td>
+                    </tr>
+                `).join('');
+
+            } catch (err) { console.error('Evaluation error:', err); }
+        }
+
+        async function runOfflineEval() {
+            const btn = document.getElementById('btn-run-eval');
+            const originalText = btn.textContent;
+            btn.textContent = 'Running...';
+            btn.disabled = true;
+            try {
+                const resp = await fetch('/api/evaluation/offline/run', { method: 'POST' });
+                const res = await resp.json();
+                if (res.error) alert('Error: ' + res.error);
+                else {
+                    alert('Evaluation complete! Score: ' + res.average_score);
+                    loadEvaluation();
+                }
+            } catch (err) { alert('Error: ' + err.message); }
+            btn.textContent = originalText;
+            btn.disabled = false;
+        }
+
+        function renderChart(canvasId, type, data, label, chartType) {
+            const ctx = document.getElementById(canvasId).getContext('2d');
+            let config;
+
+            // Destroy previous instance
+            if (canvasId === 'chart-latency') { if (monChart1) monChart1.destroy(); }
+            else if (canvasId === 'chart-models') { if (monChart2) monChart2.destroy(); }
+            else if (canvasId === 'chart-quality-trend') { if (evalChart) evalChart.destroy(); }
+
+            if (type === 'latency') {
+                config = {
+                    type: 'line',
+                    data: {
+                        labels: data.map(d => new Date(d.ts * 1000).toLocaleTimeString()),
+                        datasets: [{
+                            label: 'Avg Latency (ms)',
+                            data: data.map(d => d.avg),
+                            borderColor: '#003366',
+                            tension: 0.1
+                        }, {
+                            label: 'P95 Latency (ms)',
+                            data: data.map(d => d.p95),
+                            borderColor: '#f0a500',
+                            borderDash: [5, 5],
+                            tension: 0.1
+                        }]
+                    },
+                    options: { responsive: true, maintainAspectRatio: false }
+                };
+            } else if (type === 'models') {
+                config = {
+                    type: 'doughnut',
+                    data: {
+                        labels: Object.keys(data),
+                        datasets: [{
+                            data: Object.values(data),
+                            backgroundColor: ['#003366', '#f0a500', '#004a8f', '#ffc233']
+                        }]
+                    },
+                    options: { responsive: true, maintainAspectRatio: false }
+                };
+            } else if (type === 'quality') {
+                config = {
+                    type: 'line',
+                    data: {
+                        labels: data.map(d => new Date(d.ts * 1000).toLocaleTimeString()),
+                        datasets: [{
+                            label: 'Relevancy',
+                            data: data.map(d => d.relevancy),
+                            borderColor: '#28a745',
+                            tension: 0.1
+                        }, {
+                            label: 'Utilization',
+                            data: data.map(d => d.utilization),
+                            borderColor: '#17a2b8',
+                            tension: 0.1
+                        }]
+                    },
+                    options: { responsive: true, maintainAspectRatio: false, scales: { y: { min: 0, max: 1 } } }
+                };
+            }
+
+            const chart = new Chart(ctx, config);
+            if (canvasId === 'chart-latency') monChart1 = chart;
+            else if (canvasId === 'chart-models') monChart2 = chart;
+            else if (canvasId === 'chart-quality-trend') evalChart = chart;
+        }
+    </script>
+</body>
+
+</html>

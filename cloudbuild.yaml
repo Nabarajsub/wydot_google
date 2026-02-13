@@ -1,0 +1,32 @@
+steps:
+  # 1. Build Embedding Service
+  - name: 'gcr.io/cloud-builders/docker'
+    args: ['build', '-t', 'gcr.io/$PROJECT_ID/wydot-embeddings:latest', './deploy/embeddings']
+    
+  # 2. Push Embedding Image
+  - name: 'gcr.io/cloud-builders/docker'
+    args: ['push', 'gcr.io/$PROJECT_ID/wydot-embeddings:latest']
+
+  # 3. Build Chatbot Service (User Facing)
+  - name: 'gcr.io/cloud-builders/docker'
+    args: ['build', '-f', 'Dockerfile.chatbot', '-t', 'gcr.io/$PROJECT_ID/wydot-chatbot:latest', '.']
+
+  # 4. Push Chatbot Image
+  - name: 'gcr.io/cloud-builders/docker'
+    args: ['push', 'gcr.io/$PROJECT_ID/wydot-chatbot:latest']
+
+  # 5. Build Admin/Ingestion Service
+  - name: 'gcr.io/cloud-builders/docker'
+    args: ['build', '-f', 'Dockerfile.admin', '-t', 'gcr.io/$PROJECT_ID/wydot-admin:latest', '.']
+
+  # 6. Push Admin Image
+  - name: 'gcr.io/cloud-builders/docker'
+    args: ['push', 'gcr.io/$PROJECT_ID/wydot-admin:latest']
+
+  # Note: Deployment steps to Cloud Run/Vertex AI are often better handled separate from CI/CD 
+  # for initial setup to avoid overwriting config, but can be added here using 'gcloud run deploy'.
+
+images:
+  - 'gcr.io/$PROJECT_ID/wydot-embeddings:latest'
+  - 'gcr.io/$PROJECT_ID/wydot-chatbot:latest'
+  - 'gcr.io/$PROJECT_ID/wydot-admin:latest'

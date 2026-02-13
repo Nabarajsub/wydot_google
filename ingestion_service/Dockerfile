@@ -17,11 +17,14 @@ RUN pip install --upgrade pip && \
     pip install -r requirements.txt
 
 # Copy application code
-# Copy application code
-COPY . .
-
-# Pre-download embedding model (bakes it into the image)
-RUN python download_model.py
+# --- BAKE MODEL INTO IMAGE ---
+ENV HF_HOME=/app/model_cache
+ENV SENTENCE_TRANSFORMERS_HOME=/app/model_cache
+# Copy download script
+COPY download_model.py .
+# Run download script to populate cache
+RUN python download_model.py && \
+    chmod -R 777 /app/model_cache
 
 # Create non-root user for security
 RUN useradd -m appuser && chown -R appuser:appuser /app

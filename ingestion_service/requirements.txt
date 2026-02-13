@@ -27,3 +27,7 @@ langchain-text-splitters>=0.0.1
 # Embeddings
 langchain-huggingface>=0.0.1
 sentence-transformers>=2.2.0
+
+
+# Transcription (audio/video)
+google-generativeai>=0.8.0

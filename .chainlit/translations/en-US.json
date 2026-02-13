@@ -18,7 +18,7 @@
     },
     "auth": {
         "login": {
-            "title": "Login to access the app",
+            "title": "Login or Sign Up",
             "form": {
                 "email": {
                     "label": "Email address",
@@ -30,12 +30,13 @@
                     "required": "password is a required field"
                 },
                 "actions": {
-                    "signin": "Sign In"
+                    "signin": "Sign In / Register"
                 },
                 "alternativeText": {
                     "or": "OR"
                 }
             },
+            "signupHint": "New user? Enter your email and password above and click the button to create an account.",
             "errors": {
                 "default": "Unable to sign in",
                 "signin": "Try signing in with a different account",
@@ -193,7 +194,7 @@
     "navigation": {
         "header": {
             "chat": "Chat",
-            "readme": "Readme",
+            "readme": "Chat Instructions",
             "theme": {
                 "light": "Light Theme",
                 "dark": "Dark Theme",

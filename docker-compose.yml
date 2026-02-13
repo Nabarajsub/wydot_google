@@ -1,0 +1,56 @@
+version: '3.8'
+
+services:
+  # 1. Embeddings Service (Mimics Vertex AI)
+  embeddings:
+    build:
+      context: ./deploy/embeddings
+    ports:
+      - "8081:8080"  # Host:8081 -> Container:8080
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8080/health"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    networks:
+      - wydot-net
+
+  # 2. Chatbot Service (User Interface)
+  chatbot:
+    build:
+      context: .
+      dockerfile: Dockerfile.chatbot
+    ports:
+      - "8080:8080" # Host:8080 -> Container:8080
+    volumes:
+      - ./chat_history.sqlite3:/app/chat_history.sqlite3
+      - ./chainlit.md:/app/chainlit.md
+    environment:
+      - VERTEX_EMBEDDING_ENDPOINT=http://embeddings:8080/predict
+      - CHAINLIT_HOST=0.0.0.0
+    env_file:
+      - .env
+    depends_on:
+      embeddings:
+        condition: service_healthy
+    networks:
+      - wydot-net
+
+  # 3. Admin Service (Ingestion)
+  admin:
+    build:
+      context: .
+      dockerfile: Dockerfile.admin
+    ports:
+      - "8082:8080" # Host:8082 -> Container:8080
+    volumes:
+      - ./ingestion_service/data:/app/ingestion_service/data
+      - ./chat_history.sqlite3:/app/chat_history.sqlite3
+    env_file:
+      - .env
+    networks:
+      - wydot-net
+
+networks:
+  wydot-net:
+    driver: bridge
