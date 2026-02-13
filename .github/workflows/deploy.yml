@@ -74,7 +74,8 @@ jobs:
             CHAINLIT_DB_FILE=/tmp/chainlit.db
             TELEMETRY_DB_PATH=/tmp/telemetry.sqlite3
             EVAL_DB_PATH=/tmp/evaluation.sqlite3
-            HF_HOME=/tmp/huggingface-cache
+            HF_HOME=/app/model_cache
+            HOME=/tmp
 
       # 5. Deploy Admin to Cloud Run
       - name: 'Deploy Admin'
