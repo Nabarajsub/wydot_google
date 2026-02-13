@@ -21,3 +21,4 @@ advance/.streamlit/
 client_secret_986441629855-7bhr3o6hgljm66d1sn2dcveqhgaapqbj.apps.googleusercontent.com (1).json
 advance/client_secret.json
 llamacheck_metadata/wydot_vector_db
+**/model_cache/
