@@ -27,10 +27,65 @@ EVAL_DB_PATH = os.getenv("EVAL_DB_PATH", os.path.join(os.path.dirname(__file__),
 _lock = threading.Lock()
 _conn = None
 
+def _get_placeholder():
+    return "%s" if os.getenv("DATABASE_URL") and os.getenv("DATABASE_URL", "").startswith("postgres") else "?"
+
 def _get_conn():
     global _conn
     if _conn is not None:
         return _conn
+        
+    db_url = os.getenv("DATABASE_URL")
+    if db_url and db_url.startswith("postgres"):
+        import psycopg2
+        try:
+            _conn = psycopg2.connect(db_url)
+            with _conn.cursor() as cur:
+                # 1. Online Validation Table
+                cur.execute("""
+                    CREATE TABLE IF NOT EXISTS online_evals (
+                        id TEXT PRIMARY KEY,
+                        ts DOUBLE PRECISION NOT NULL,
+                        session_id TEXT,
+                        question TEXT,
+                        answer TEXT,
+                        context TEXT,
+                        num_sources INTEGER,
+                        latency_ms DOUBLE PRECISION,
+                        answer_relevancy DOUBLE PRECISION,
+                        context_utilization DOUBLE PRECISION,
+                        completeness DOUBLE PRECISION,
+                        has_error INTEGER DEFAULT 0
+                    )
+                """)
+                # 2. Aggregates Table
+                cur.execute("""
+                    CREATE TABLE IF NOT EXISTS online_aggregates (
+                        id SERIAL PRIMARY KEY,
+                        ts_start DOUBLE PRECISION,
+                        ts_end DOUBLE PRECISION,
+                        count INTEGER,
+                        avg_relevancy DOUBLE PRECISION,
+                        avg_utilization DOUBLE PRECISION,
+                        avg_completeness DOUBLE PRECISION,
+                        error_rate DOUBLE PRECISION
+                    )
+                """)
+                # 3. Offline Results Table
+                cur.execute("""
+                    CREATE TABLE IF NOT EXISTS offline_runs (
+                        id TEXT PRIMARY KEY,
+                        ts DOUBLE PRECISION,
+                        total_score DOUBLE PRECISION,
+                        details_json TEXT
+                    )
+                """)
+            _conn.commit()
+            return _conn
+        except Exception as e:
+            print(f"⚠️ Evaluation fallback to SQLite (Postgres failed): {e}")
+
+    # Fallback to SQLite
     import sqlite3
     db_dir = os.path.dirname(EVAL_DB_PATH)
     if db_dir:
@@ -38,6 +93,7 @@ def _get_conn():
     _conn = sqlite3.connect(EVAL_DB_PATH, check_same_thread=False, timeout=5)
     _conn.execute("PRAGMA journal_mode=WAL;")
     
+    # [Rest of the existing SQLite table creation code...]
     # 1. Online Validation Table (per question)
     _conn.execute("""
         CREATE TABLE IF NOT EXISTS online_evals (
@@ -176,8 +232,9 @@ async def run_offline_evaluation(search_func, generate_func) -> Dict:
     try:
         with _lock:
             c = _get_conn()
+            ph = _get_placeholder()
             c.execute(
-                "INSERT INTO offline_runs (id, ts, total_score, details_json) VALUES (?, ?, ?, ?)",
+                f"INSERT INTO offline_runs (id, ts, total_score, details_json) VALUES ({ph}, {ph}, {ph}, {ph})",
                 (run_id, time.time(), round(avg_score, 2), json.dumps(results))
             )
             c.commit()
@@ -253,15 +310,16 @@ def record_online_eval(
             with _lock:
                 c = _get_conn()
                 # Insert row
-                c.execute("""
+                ph = _get_placeholder()
+                c.execute(f"""
                     INSERT INTO online_evals (
                         id, ts, session_id, question, answer, context, 
                         num_sources, latency_ms, answer_relevancy, 
                         context_utilization, completeness, has_error
-                    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                    ) VALUES ({ph}, {ph}, {ph}, {ph}, {ph}, {ph}, {ph}, {ph}, {ph}, {ph}, {ph}, {ph})
                 """, (
-                    str(uuid.uuid4()), time.time(), session_id, question, answer, 
-                    context[:500], num_sources, latency_ms, 
+                    str(uuid.uuid4()), time.time(), session_id, str(question), str(answer), 
+                    str(context)[:500], num_sources, latency_ms, 
                     answer_relevancy, context_utilization, completeness, 
                     1 if has_error else 0
                 ))
@@ -294,11 +352,12 @@ def _aggregate_last_10(conn):
     if row:
         count, avg_rel, avg_util, avg_comp, errs, t_start, t_end = row
         err_rate = (errs / count) if count > 0 else 0
-        cursor.execute("""
+        ph = _get_placeholder()
+        cursor.execute(f"""
             INSERT INTO online_aggregates (
                 ts_start, ts_end, count, avg_relevancy, 
                 avg_utilization, avg_completeness, error_rate
-            ) VALUES (?, ?, ?, ?, ?, ?, ?)
+            ) VALUES ({ph}, {ph}, {ph}, {ph}, {ph}, {ph}, {ph})
         """, (t_start, t_end, count, avg_rel, avg_util, avg_comp, err_rate))
         conn.commit()
 

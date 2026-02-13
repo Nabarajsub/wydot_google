@@ -14,11 +14,45 @@ TELEMETRY_DB_PATH = os.getenv("TELEMETRY_DB_PATH", "")
 _lock = threading.Lock()
 _conn = None
 
+def _get_placeholder():
+    return "%s" if os.getenv("DATABASE_URL") and os.getenv("DATABASE_URL", "").startswith("postgres") else "?"
+
 
 def _get_conn():
     global _conn
     if _conn is not None:
         return _conn
+        
+    db_url = os.getenv("DATABASE_URL")
+    if db_url and db_url.startswith("postgres"):
+        import psycopg2
+        try:
+            _conn = psycopg2.connect(db_url)
+            # Create table with Postgres syntax
+            with _conn.cursor() as cur:
+                cur.execute("""
+                    CREATE TABLE IF NOT EXISTS request_metrics (
+                        id TEXT PRIMARY KEY,
+                        ts DOUBLE PRECISION NOT NULL,
+                        user_id INTEGER,
+                        thread_id TEXT,
+                        session_id TEXT,
+                        model_used TEXT,
+                        index_used TEXT,
+                        retrieval_latency_ms DOUBLE PRECISION,
+                        generation_latency_ms DOUBLE PRECISION,
+                        total_latency_ms DOUBLE PRECISION,
+                        num_sources INTEGER,
+                        citation_count INTEGER,
+                        has_error INTEGER DEFAULT 0
+                    )
+                """)
+            _conn.commit()
+            return _conn
+        except Exception as e:
+            print(f"⚠️ Telemetry fallback to SQLite (Postgres failed): {e}")
+
+    # Fallback to SQLite
     path = TELEMETRY_DB_PATH or os.path.join(os.path.dirname(__file__), "..", "telemetry.sqlite3")
     import sqlite3
     db_dir = os.path.dirname(path)
@@ -82,7 +116,7 @@ def record_request(
                         id, ts, user_id, thread_id, session_id, model_used, index_used,
                         retrieval_latency_ms, generation_latency_ms, total_latency_ms,
                         num_sources, citation_count, has_error
-                    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)""",
+                    ) VALUES ({ph}, {ph}, {ph}, {ph}, {ph}, {ph}, {ph}, {ph}, {ph}, {ph}, {ph}, {ph}, {ph})""".format(ph=_get_placeholder()),
                     (
                         str(uuid.uuid4()),
                         time.time(),
@@ -113,7 +147,7 @@ def get_recent_metrics(limit: int = 100):
         with _lock:
             c = _get_conn()
             cur = c.execute(
-                "SELECT * FROM request_metrics ORDER BY ts DESC LIMIT ?",
+                f"SELECT * FROM request_metrics ORDER BY ts DESC LIMIT {_get_placeholder()}",
                 (limit,),
             )
             rows = cur.fetchall()

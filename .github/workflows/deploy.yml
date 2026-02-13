@@ -70,6 +70,11 @@ jobs:
             VERTEX_EMBEDDING_ENDPOINT=${{ secrets.VERTEX_EMBEDDING_ENDPOINT }}
             MISTRAL_API_KEY=${{ secrets.MISTRAL_API_KEY }}
             GEMINI_API_KEY=${{ secrets.GEMINI_API_KEY }}
+            CHAINLIT_FILES_DIRECTORY=/tmp/.files
+            CHAINLIT_DB_FILE=/tmp/chainlit.db
+            TELEMETRY_DB_PATH=/tmp/telemetry.sqlite3
+            EVAL_DB_PATH=/tmp/evaluation.sqlite3
+            HF_HOME=/tmp/huggingface-cache
 
       # 5. Deploy Admin to Cloud Run
       - name: 'Deploy Admin'
@@ -83,4 +88,7 @@ jobs:
             DATABASE_URL=${{ secrets.DATABASE_URL }}
             MISTRAL_API_KEY=${{ secrets.MISTRAL_API_KEY }}
             GEMINI_API_KEY=${{ secrets.GEMINI_API_KEY }}
+            TELEMETRY_DB_PATH=/tmp/telemetry.sqlite3
+            EVAL_DB_PATH=/tmp/evaluation.sqlite3
+            HF_HOME=/tmp/huggingface-cache
 #python3 -m pip install --no-cache-dir torch torchvision torchaudio --index-url https://download.pytorch.org/whl/cpu
