@@ -10,7 +10,12 @@ Features:
 - Audio Input Support
 """
 
-# === CLOUD RUN RUNTIME SETUP ===
+# === CLOUD RUN DIAGNOSTIC LOGGING ===
+print("🚀 App Startup Sequence Initiated")
+print(f"📍 Current Working Directory: {os.getcwd()}")
+print(f"🛠️ K_SERVICE Detection: {os.getenv('K_SERVICE', 'Not in Cloud Run')}")
+print(f"📦 PORT: {os.getenv('PORT', 'Not Set')}")
+
 # Create temp directories at runtime (Cloud Run may reset /tmp between requests)
 import os as _os
 for _d in ["/tmp/.files", "/tmp/.chainlit"]:
@@ -22,10 +27,14 @@ for _d in ["/tmp/.files", "/tmp/.chainlit"]:
 if _os.getenv("K_SERVICE"): # Cloud Run sets this
     _os.environ.setdefault("CHAINLIT_FILES_DIRECTORY", "/tmp/.files")
     _os.environ.setdefault("CHAINLIT_DB_FILE", "/tmp/chainlit.db")
+    print("✅ Cloud Run environment detected. Files redirected to /tmp.")
 else:
     # Local: use project dir for persistence
     _os.environ.setdefault("CHAINLIT_DB_FILE", "chainlit.db")
+    print("🏠 Local environment detected.")
 # === END CLOUD RUN SETUP ===
+
+print("📦 Importing core libraries...")
 
 # =========================================================
 # IMPORTS & CONFIGURATION
@@ -88,6 +97,7 @@ else:
     print(f"⚠️ DOTENV_PATH not found: {dotenv_path}, trying default .env")
     load_dotenv()
 
+print("🔑 Validating Authentication...")
 # Enable login screen: Chainlit only shows auth when CHAINLIT_AUTH_SECRET is set
 if not os.getenv("CHAINLIT_AUTH_SECRET"):
     os.environ["CHAINLIT_AUTH_SECRET"] = "wydot-dev-secret-change-in-production"
@@ -99,13 +109,12 @@ if not os.getenv("CHAINLIT_AUTH_SECRET"):
 NEO4J_URI = os.getenv("NEO4J_URI", "bolt://localhost:7687")
 NEO4J_USERNAME = os.getenv("NEO4J_USERNAME", "neo4j")
 NEO4J_PASSWORD = os.getenv("NEO4J_PASSWORD", "password")
+print(f"🔗 Neo4j Config: {NEO4J_URI} (User: {NEO4J_USERNAME})")
 NEO4J_DATABASE = os.getenv("NEO4J_DATABASE", "neo4j")
-
 NEO4J_INDEX_DEFAULT = os.getenv("NEO4J_INDEX_DEFAULT", "wydot_vector_index")
-NEO4J_INDEX_2021 = os.getenv("NEO4J_INDEX_2010", "wydot_vector_index_2021") # defaulting to 2021 for this var name?? No, check original.
-# Actually original had NEO4J_INDEX_2021 = ..._2021, NEO4J_INDEX_2010 = ..._2010
 NEO4J_INDEX_2021 = os.getenv("NEO4J_INDEX_2021", "wydot_vector_index_2021")
 
+print("💬 Initializing API Keys...")
 MISTRAL_API_KEY = os.getenv("MISTRAL_API_KEY")
 GEMINI_API_KEY = os.getenv("GEMINI_API_KEY")
 LLM_MODEL = os.getenv("LLM_MODEL", "mistral-large-latest")
@@ -136,8 +145,10 @@ try:
     CHAT_DB = get_chat_history_store()
 except ImportError:
     from chat_history_store import get_chat_history_store  # when run from repo root
-    CHAT_DB = get_chat_history_store()
+    print("⚠️ Failure in chat history store import.")
+    CHAT_DB = None
 
+print("📈 Setting up Telemetry and Evaluation...")
 # Online RAG telemetry (local SQLite; Cloud: BigQuery later)
 try:
     from utils import telemetry
