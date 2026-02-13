@@ -63,7 +63,7 @@ jobs:
           service: 'wydot-chatbot'
           image: '${{ env.GAR_LOCATION }}/wydot-chatbot:${{ github.sha }}'
           region: ${{ env.REGION }}
-          flags: '--allow-unauthenticated'
+          flags: '--allow-unauthenticated --memory 2Gi --cpu 2'
           env_vars: |
             CHAINLIT_AUTH_SECRET=${{ secrets.CHAINLIT_AUTH_SECRET }}
             DATABASE_URL=${{ secrets.DATABASE_URL }}
@@ -78,7 +78,7 @@ jobs:
           service: 'wydot-admin'
           image: '${{ env.GAR_LOCATION }}/wydot-admin:${{ github.sha }}'
           region: ${{ env.REGION }}
-          flags: '--allow-unauthenticated'
+          flags: '--allow-unauthenticated --memory 1Gi --cpu 1'
           env_vars: |
             DATABASE_URL=${{ secrets.DATABASE_URL }}
             MISTRAL_API_KEY=${{ secrets.MISTRAL_API_KEY }}
