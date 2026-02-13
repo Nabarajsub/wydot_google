@@ -89,12 +89,18 @@ if _raw_hf and os.path.isabs(_raw_hf):
     except (OSError, PermissionError, FileNotFoundError):
         pass
 if HF_HOME is None:
-    HF_HOME = os.path.join(os.path.dirname(__file__), "model_cache")
+    if os.getenv("K_SERVICE"):
+        HF_HOME = "/tmp/model_cache"
+    else:
+        HF_HOME = os.path.join(os.path.dirname(__file__), "model_cache")
     os.makedirs(HF_HOME, exist_ok=True)
 
 NEO4J_INDEX = os.getenv("NEO4J_INDEX_DEFAULT", "wydot_vector_index")
 GEMINI_API_KEY = os.getenv("GEMINI_API_KEY")
-INGESTED_DIR = os.path.join(os.path.dirname(__file__), "ingested_data")
+if os.getenv("K_SERVICE"):
+    INGESTED_DIR = "/tmp/ingested_data"
+else:
+    INGESTED_DIR = os.path.join(os.path.dirname(__file__), "ingested_data")
 
 os.makedirs(INGESTED_DIR, exist_ok=True)
 if GEMINI_API_KEY and genai:

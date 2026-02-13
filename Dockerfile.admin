@@ -18,6 +18,8 @@ RUN pip install --no-cache-dir -r requirements.txt
 COPY ingestion_service/ ingestion_service/
 COPY utils/ utils/
 COPY ingestion_service/tracker_db.py .
+ENV TELEMETRY_DB_PATH=/tmp/telemetry.sqlite3
+ENV EVAL_DB_PATH=/tmp/evaluation.sqlite3
 
 # Expose port (Cloud Run expects 8080)
 EXPOSE 8080
