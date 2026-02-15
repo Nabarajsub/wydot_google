@@ -12,6 +12,9 @@ echo "🔨 Creating Service Account: $SA_EMAIL..."
 # Initial creation might fail if it already exists, so we use || true but check for real errors
 gcloud iam service-accounts create $SA_NAME --display-name="GitHub Actions Deployer" || echo "Service account might already exist, continuing..."
 
+echo "🚀 Enabling Services (Cloud SQL, Admin, Service Usage)..."
+gcloud services enable sqladmin.googleapis.com serviceusage.googleapis.com run.googleapis.com artifactregistry.googleapis.com
+
 echo "🔑 Granting Roles..."
 gcloud projects add-iam-policy-binding $PROJECT_ID \
     --member="serviceAccount:${SA_EMAIL}" \
@@ -25,6 +28,10 @@ gcloud projects add-iam-policy-binding $PROJECT_ID \
     --member="serviceAccount:${SA_EMAIL}" \
     --role="roles/iam.serviceAccountUser" --condition=None
 
+gcloud projects add-iam-policy-binding $PROJECT_ID \
+    --member="serviceAccount:${SA_EMAIL}" \
+    --role="roles/cloudsql.client" --condition=None
+
 echo "🔗 Binding Workload Identity (Updating Policy)..."
 # We need to know the repo name. Assuming user's current repo remote.
 # But to be safe, we will ask user or use a wildcard for now to unblock.
@@ -32,7 +39,7 @@ echo "🔗 Binding Workload Identity (Updating Policy)..."
 # In DEPLOYMENT_GUIDE code, we used placeholders.
 # Let's try to get it from git remote.
 
-GITHUB_REPO=$(git config --get remote.origin.url | sed 's/https:\/\/github.com\///' | sed 's/.git$//')
+GITHUB_REPO=$(git remote get-url origin | sed -E 's/.*github.com[:\/](.*)(\.git)?/\1/' | sed 's/\.git$//')
 
 if [ -z "$GITHUB_REPO" ]; then
     echo "⚠️ Could not detect GitHub repo from git config. Please verify WIF binding manually if this fails."
