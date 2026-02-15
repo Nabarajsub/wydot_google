@@ -233,10 +233,11 @@ async def run_offline_evaluation(search_func, generate_func) -> Dict:
         with _lock:
             c = _get_conn()
             ph = _get_placeholder()
-            c.execute(
-                f"INSERT INTO offline_runs (id, ts, total_score, details_json) VALUES ({ph}, {ph}, {ph}, {ph})",
-                (run_id, time.time(), round(avg_score, 2), json.dumps(results))
-            )
+            with c.cursor() as cur:
+                cur.execute(
+                    f"INSERT INTO offline_runs (id, ts, total_score, details_json) VALUES ({ph}, {ph}, {ph}, {ph})",
+                    (run_id, time.time(), round(avg_score, 2), json.dumps(results))
+                )
             c.commit()
     except Exception as e:
         logger.error(f"Error saving offline eval: {e}")
@@ -252,8 +253,9 @@ def get_latest_offline_result() -> Optional[Dict]:
     try:
         with _lock:
             c = _get_conn()
-            cur = c.execute("SELECT ts, total_score, details_json FROM offline_runs ORDER BY ts DESC LIMIT 1")
-            row = cur.fetchone()
+            with c.cursor() as cur:
+                cur.execute("SELECT ts, total_score, details_json FROM offline_runs ORDER BY ts DESC LIMIT 1")
+                row = cur.fetchone()
             if row:
                 return {
                     "ts": row[0],
@@ -311,24 +313,30 @@ def record_online_eval(
                 c = _get_conn()
                 # Insert row
                 ph = _get_placeholder()
-                c.execute(f"""
-                    INSERT INTO online_evals (
-                        id, ts, session_id, question, answer, context, 
-                        num_sources, latency_ms, answer_relevancy, 
-                        context_utilization, completeness, has_error
-                    ) VALUES ({ph}, {ph}, {ph}, {ph}, {ph}, {ph}, {ph}, {ph}, {ph}, {ph}, {ph}, {ph})
-                """, (
-                    str(uuid.uuid4()), time.time(), session_id, str(question), str(answer), 
-                    str(context)[:500], num_sources, latency_ms, 
-                    answer_relevancy, context_utilization, completeness, 
-                    1 if has_error else 0
-                ))
+                with c.cursor() as cur:
+                    cur.execute(f"""
+                        INSERT INTO online_evals (
+                            id, ts, session_id, question, answer, context, 
+                            num_sources, latency_ms, answer_relevancy, 
+                            context_utilization, completeness, has_error
+                        ) VALUES ({ph}, {ph}, {ph}, {ph}, {ph}, {ph}, {ph}, {ph}, {ph}, {ph}, {ph}, {ph})
+                    """, (
+                        str(uuid.uuid4()), time.time(), session_id, str(question), str(answer), 
+                        str(context)[:500], num_sources, latency_ms, 
+                        answer_relevancy, context_utilization, completeness, 
+                        1 if has_error else 0
+                    ))
                 c.commit()
                 
                 # Aggregate on every request for real-time dashboard updates
                 _aggregate_last_10(c)
                     
         except Exception as e:
+            try:
+                c = _get_conn()
+                if hasattr(c, "rollback"):
+                    c.rollback()
+            except: pass
             logger.error(f"Error recording online eval: {e}")
 
     threading.Thread(target=_write, daemon=True).start()
@@ -337,40 +345,48 @@ def _aggregate_last_10(conn):
     """Aggregate stats for the last 10 requests."""
     # Create a new cursor for this operation
     cursor = conn.cursor()
-    cursor.execute("""
-        SELECT 
-            COUNT(*), 
-            AVG(answer_relevancy), 
-            AVG(context_utilization), 
-            AVG(completeness),
-            SUM(has_error),
-            MIN(ts),
-            MAX(ts)
-        FROM (SELECT * FROM online_evals ORDER BY ts DESC LIMIT 10)
-    """)
-    row = cursor.fetchone()
-    if row:
-        count, avg_rel, avg_util, avg_comp, errs, t_start, t_end = row
-        err_rate = (errs / count) if count > 0 else 0
-        ph = _get_placeholder()
-        cursor.execute(f"""
-            INSERT INTO online_aggregates (
-                ts_start, ts_end, count, avg_relevancy, 
-                avg_utilization, avg_completeness, error_rate
-            ) VALUES ({ph}, {ph}, {ph}, {ph}, {ph}, {ph}, {ph})
-        """, (t_start, t_end, count, avg_rel, avg_util, avg_comp, err_rate))
-        conn.commit()
+    try:
+        cursor.execute("""
+            SELECT 
+                COUNT(*), 
+                AVG(answer_relevancy), 
+                AVG(context_utilization), 
+                AVG(completeness),
+                SUM(has_error),
+                MIN(ts),
+                MAX(ts)
+            FROM (SELECT * FROM online_evals ORDER BY ts DESC LIMIT 10) AS sub
+        """)
+        row = cursor.fetchone()
+        if row:
+            count, avg_rel, avg_util, avg_comp, errs, t_start, t_end = row
+            err_rate = (errs / count) if count > 0 else 0
+            ph = _get_placeholder()
+            cursor.execute(f"""
+                INSERT INTO online_aggregates (
+                    ts_start, ts_end, count, avg_relevancy, 
+                    avg_utilization, avg_completeness, error_rate
+                ) VALUES ({ph}, {ph}, {ph}, {ph}, {ph}, {ph}, {ph})
+            """, (t_start, t_end, count, avg_rel, avg_util, avg_comp, err_rate))
+            conn.commit()
+    except Exception as e:
+        if hasattr(conn, "rollback"):
+            conn.rollback()
+        raise e
+    finally:
+        cursor.close()
 
 def get_online_stats() -> Dict:
     """Get current aggregate stats (from latest aggregate window)."""
     try:
         with _lock:
             c = _get_conn()
-            cur = c.execute("""
-                SELECT avg_relevancy, avg_utilization, avg_completeness, error_rate 
-                FROM online_aggregates ORDER BY id DESC LIMIT 1
-            """)
-            row = cur.fetchone()
+            with c.cursor() as cur:
+                cur.execute("""
+                    SELECT avg_relevancy, avg_utilization, avg_completeness, error_rate 
+                    FROM online_aggregates ORDER BY id DESC LIMIT 1
+                """)
+                row = cur.fetchone()
             if row:
                 return {
                     "relevancy": round(row[0], 2),
@@ -380,11 +396,12 @@ def get_online_stats() -> Dict:
                 }
             
             # Fallback to raw average of all time if no aggregates yet
-            cur = c.execute("""
-                SELECT AVG(answer_relevancy), AVG(context_utilization), AVG(completeness), AVG(has_error)
-                FROM online_evals
-            """)
-            row = cur.fetchone()
+            with c.cursor() as cur:
+                cur.execute("""
+                    SELECT AVG(answer_relevancy), AVG(context_utilization), AVG(completeness), AVG(has_error)
+                    FROM online_evals
+                """)
+                row = cur.fetchone()
             if row and row[0] is not None:
                  return {
                     "relevancy": round(row[0], 2),
@@ -401,11 +418,12 @@ def get_online_trends() -> List[Dict]:
     try:
         with _lock:
             c = _get_conn()
-            cur = c.execute("""
-                SELECT ts_end, avg_relevancy, avg_utilization, error_rate 
-                FROM online_aggregates ORDER BY id DESC LIMIT 20
-            """)
-            rows = cur.fetchall()
+            with c.cursor() as cur:
+                cur.execute("""
+                    SELECT ts_end, avg_relevancy, avg_utilization, error_rate 
+                    FROM online_aggregates ORDER BY id DESC LIMIT 20
+                """)
+                rows = cur.fetchall()
             # Return in chronological order
             return [
                 {

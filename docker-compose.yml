@@ -23,16 +23,22 @@ services:
     ports:
       - "8080:8080" # Host:8080 -> Container:8080
     volumes:
-      - ./chat_history.sqlite3:/app/chat_history.sqlite3
       - ./chainlit.md:/app/chainlit.md
+      - ./chatapp.py:/app/chatapp.py
+      - ./utils:/app/utils
+      - ./public:/app/public
     environment:
       - VERTEX_EMBEDDING_ENDPOINT=http://embeddings:8080/predict
       - CHAINLIT_HOST=0.0.0.0
+      - DATABASE_URL=postgresql://postgres:password@db:5432/wydot_db
+      - PORT=8080
     env_file:
       - .env
     depends_on:
       embeddings:
         condition: service_healthy
+      db:
+        condition: service_started
     networks:
       - wydot-net
 
@@ -44,12 +50,35 @@ services:
     ports:
       - "8082:8080" # Host:8082 -> Container:8080
     volumes:
-      - ./ingestion_service/data:/app/ingestion_service/data
-      - ./chat_history.sqlite3:/app/chat_history.sqlite3
+      - ./ingestion_service:/app/ingestion_service
+      - ./utils:/app/utils
+    environment:
+      - DATABASE_URL=postgresql://postgres:password@db:5432/wydot_db
+      - PORT=8080
     env_file:
       - .env
+    depends_on:
+      - db
     networks:
       - wydot-net
+
+  # 4. PostgreSQL Database (Replaces Cloud SQL for local dev)
+  db:
+    image: postgres:15-alpine
+    restart: always
+    environment:
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: password
+      POSTGRES_DB: wydot_db
+    ports:
+      - "5435:5432" # Host:5435 -> Container:5432 (Avoid local conflict)
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    networks:
+      - wydot-net
+
+volumes:
+  postgres_data:
 
 networks:
   wydot-net:

@@ -111,31 +111,37 @@ def record_request(
         try:
             with _lock:
                 c = _get_conn()
-                c.execute(
-                    """INSERT INTO request_metrics (
-                        id, ts, user_id, thread_id, session_id, model_used, index_used,
-                        retrieval_latency_ms, generation_latency_ms, total_latency_ms,
-                        num_sources, citation_count, has_error
-                    ) VALUES ({ph}, {ph}, {ph}, {ph}, {ph}, {ph}, {ph}, {ph}, {ph}, {ph}, {ph}, {ph}, {ph})""".format(ph=_get_placeholder()),
-                    (
-                        str(uuid.uuid4()),
-                        time.time(),
-                        user_id,
-                        thread_id,
-                        session_id,
-                        model_used,
-                        index_used,
-                        retrieval_latency_ms,
-                        generation_latency_ms,
-                        total_latency_ms,
-                        num_sources,
-                        citation_count or 0,
-                        1 if has_error else 0,
-                    ),
-                )
+                with c.cursor() as cur:
+                    cur.execute(
+                        """INSERT INTO request_metrics (
+                            id, ts, user_id, thread_id, session_id, model_used, index_used,
+                            retrieval_latency_ms, generation_latency_ms, total_latency_ms,
+                            num_sources, citation_count, has_error
+                        ) VALUES ({ph}, {ph}, {ph}, {ph}, {ph}, {ph}, {ph}, {ph}, {ph}, {ph}, {ph}, {ph}, {ph})""".format(ph=_get_placeholder()),
+                        (
+                            str(uuid.uuid4()),
+                            time.time(),
+                            user_id,
+                            thread_id,
+                            session_id,
+                            model_used,
+                            index_used,
+                            retrieval_latency_ms,
+                            generation_latency_ms,
+                            total_latency_ms,
+                            num_sources,
+                            citation_count or 0,
+                            1 if has_error else 0,
+                        ),
+                    )
                 c.commit()
         except Exception:
-            pass
+            try:
+                c = _get_conn()
+                if hasattr(c, "rollback"):
+                    c.rollback()
+            except:
+                pass
 
     t = threading.Thread(target=_write, daemon=True)
     t.start()
@@ -146,13 +152,14 @@ def get_recent_metrics(limit: int = 100):
     try:
         with _lock:
             c = _get_conn()
-            cur = c.execute(
-                f"SELECT * FROM request_metrics ORDER BY ts DESC LIMIT {_get_placeholder()}",
-                (limit,),
-            )
-            rows = cur.fetchall()
-            cols = [d[0] for d in cur.description]
-            return [dict(zip(cols, r)) for r in rows]
+            with c.cursor() as cur:
+                cur.execute(
+                    f"SELECT * FROM request_metrics ORDER BY ts DESC LIMIT {_get_placeholder()}",
+                    (limit,),
+                )
+                rows = cur.fetchall()
+                cols = [d[0] for d in cur.description]
+                return [dict(zip(cols, r)) for r in rows]
     except Exception:
         return []
 
@@ -164,10 +171,11 @@ def get_latency_stats() -> dict:
             # SQLite specific approximation for P50/95/99 using ORDER BY + LIMIT/OFFSET
             # For simplicity, we'll fetch all non-error latencies and compute in Python
             # unless the dataset is huge (metrics are small rows, should be fine for <100k rows)
-            cur = c.execute(
-                "SELECT total_latency_ms, retrieval_latency_ms, generation_latency_ms FROM request_metrics WHERE has_error=0 ORDER BY total_latency_ms ASC"
-            )
-            rows = cur.fetchall()
+            with c.cursor() as cur:
+                cur.execute(
+                    "SELECT total_latency_ms, retrieval_latency_ms, generation_latency_ms FROM request_metrics WHERE has_error=0 ORDER BY total_latency_ms ASC"
+                )
+                rows = cur.fetchall()
             
             if not rows:
                 return {"count": 0, "avg": 0, "p50": 0, "p95": 0, "p99": 0,
@@ -216,17 +224,18 @@ def get_timeseries(interval_hours: int = 1) -> list:
                 ORDER BY bucket_ts ASC
                 LIMIT 100
             """
-            cur = c.execute(sql)
-            rows = cur.fetchall()
-            return [
-                {
-                    "ts": r[0],
-                    "count": r[1],
-                    "avg_latency": round(r[2] or 0, 1),
-                    "error_count": r[3]
-                }
-                for r in rows
-            ]
+            with c.cursor() as cur:
+                cur.execute(sql)
+                rows = cur.fetchall()
+                return [
+                    {
+                        "ts": r[0],
+                        "count": r[1],
+                        "avg_latency": round(r[2] or 0, 1),
+                        "error_count": r[3]
+                    }
+                    for r in rows
+                ]
     except Exception:
         return []
 
@@ -245,17 +254,18 @@ def get_model_comparison() -> list:
                 FROM request_metrics
                 GROUP BY model_used
             """
-            cur = c.execute(sql)
-            rows = cur.fetchall()
-            return [
-                {
-                    "model": r[0] or "Unknown",
-                    "count": r[1],
-                    "avg_latency": round(r[2] or 0, 1),
-                    "avg_gen_latency": round(r[3] or 0, 1),
-                    "error_rate": round((r[4] / r[1] * 100) if r[1] > 0 else 0, 1)
-                }
-                for r in rows
-            ]
+            with c.cursor() as cur:
+                cur.execute(sql)
+                rows = cur.fetchall()
+                return [
+                    {
+                        "model": r[0] or "Unknown",
+                        "count": r[1],
+                        "avg_latency": round(r[2] or 0, 1),
+                        "avg_gen_latency": round(r[3] or 0, 1),
+                        "error_rate": round((r[4] / r[1] * 100) if r[1] > 0 else 0, 1)
+                    }
+                    for r in rows
+                ]
     except Exception:
         return []
