@@ -63,7 +63,7 @@ jobs:
           service: 'wydot-chatbot'
           image: '${{ env.GAR_LOCATION }}/wydot-chatbot:${{ github.sha }}'
           region: ${{ env.REGION }}
-          flags: '--allow-unauthenticated --memory 2Gi --cpu 2 --add-cloudsql-instances=${{ secrets.GCP_SQL_INSTANCE_NAME }} --set-secrets=/app/.env=shared-dotenv:1'
+          flags: '--allow-unauthenticated --memory 2Gi --cpu 2 --add-cloudsql-instances=${{ secrets.GCP_SQL_INSTANCE_NAME }} --set-secrets=/app/.env=shared-dotenv:1 --timeout=300'
           env_vars: |
             CHAINLIT_AUTH_SECRET=${{ secrets.CHAINLIT_AUTH_SECRET }}
             DATABASE_URL=${{ secrets.DATABASE_URL }}
