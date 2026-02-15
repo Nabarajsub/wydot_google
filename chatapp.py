@@ -59,12 +59,7 @@ from fastapi.responses import JSONResponse
 from pydantic import BaseModel
 
 # GraphRAG / LangChain imports
-from langchain_mistralai import ChatMistralAI
-from langchain_huggingface import HuggingFaceEmbeddings
-from langchain_neo4j import Neo4jVector
-from langchain_core.prompts import ChatPromptTemplate
-from langchain_core.output_parsers import StrOutputParser
-from langchain_core.embeddings import Embeddings
+# Heavy imports moved to lazy loaders below to prevent Cloud Run startup timeouts
 
 # --- CUSTOM AUTH ENDPOINTS ---
 from chainlit.server import app
@@ -109,13 +104,8 @@ async def verify_code(req: VerifyReq):
         return JSONResponse(status_code=500, content={"error": str(e)})
 # --- END CUSTOM AUTH ---
 
-# Google Vertex AI / Gemini
-try:
-    import google.generativeai as genai
-    from google.generativeai import GenerativeModel
-    GEMINI_AVAILABLE = True
-except ImportError:
-    GEMINI_AVAILABLE = False
+# Google Vertex AI / Gemini (imports moved to lazy loaders)
+GEMINI_AVAILABLE = True # Assume true, check imports lazily
 
 # Google Cloud Storage - Public URLs
 def generate_public_url(gcs_uri: str) -> str:
@@ -727,6 +717,7 @@ async def on_audio_end():
     await msg.send()
     
     try:
+        import google.generativeai as genai
         model = genai.GenerativeModel("gemini-2.0-flash")
         
         # Transcribe only - get the question text in English
@@ -821,45 +812,49 @@ Transcribe the following audio:""",
 # MODELS & RETRIEVAL (cached so we don't reload on every message)
 # =========================================================
 
-_EMBEDDINGS_CACHE = {}
-_VECTOR_STORE_CACHE = {}
-
-class VertexCustomEmbeddings(Embeddings):
-    """Custom Embeddings class to call Vertex AI Prediction Endpoint."""
-    def __init__(self, endpoint_url: str):
-        self.endpoint_url = endpoint_url
-        self.session = None
-
-    def _get_session(self):
-        import requests
-        if not self.session:
-            self.session = requests.Session()
-        return self.session
-
-    def embed_documents(self, texts: List[str]) -> List[List[float]]:
-        try:
-            session = self._get_session()
-            response = session.post(self.endpoint_url, json={"instances": texts})
-            response.raise_for_status()
-            return response.json().get("predictions", [])
-        except Exception as e:
-            print(f"Vertex Embedding Error: {e}")
-            return []
-
-    def embed_query(self, text: str) -> List[float]:
-        res = self.embed_documents([text])
-        return res[0] if res else []
-
-class GeminiEmbeddings(Embeddings):
-    def __init__(self, api_key: str):
-        genai.configure(api_key=api_key)
-        self.model = "models/text-embedding-004"
-    def embed_documents(self, texts: List[str]) -> List[List[float]]:
-        return [genai.embed_content(model=self.model, content=t, task_type="retrieval_document")['embedding'] for t in texts]
-    def embed_query(self, text: str) -> List[float]:
-        return genai.embed_content(model=self.model, content=text, task_type="retrieval_query")['embedding']
+# --- Lazy Loaders for Models ---
 
 def get_embeddings_model(use_gemini: bool = False):
+    """Load embeddings once and reuse."""
+    from langchain_core.embeddings import Embeddings
+
+    class VertexCustomEmbeddings(Embeddings):
+        """Custom Embeddings class to call Vertex AI Prediction Endpoint."""
+        def __init__(self, endpoint_url: str):
+            self.endpoint_url = endpoint_url
+            self.session = None
+
+        def _get_session(self):
+            import requests
+            if not self.session:
+                self.session = requests.Session()
+            return self.session
+
+        def embed_documents(self, texts: List[str]) -> List[List[float]]:
+            try:
+                session = self._get_session()
+                response = session.post(self.endpoint_url, json={"instances": texts})
+                response.raise_for_status()
+                return response.json().get("predictions", [])
+            except Exception as e:
+                print(f"Vertex Embedding Error: {e}")
+                return []
+
+        def embed_query(self, text: str) -> List[float]:
+            res = self.embed_documents([text])
+            return res[0] if res else []
+
+    class GeminiEmbeddings(Embeddings):
+        def __init__(self, api_key: str):
+            import google.generativeai as genai
+            genai.configure(api_key=api_key)
+            self.model = "models/text-embedding-004"
+        def embed_documents(self, texts: List[str]) -> List[List[float]]:
+            import google.generativeai as genai
+            return [genai.embed_content(model=self.model, content=t, task_type="retrieval_document")['embedding'] for t in texts]
+        def embed_query(self, text: str) -> List[float]:
+            import google.generativeai as genai
+            return genai.embed_content(model=self.model, content=text, task_type="retrieval_query")['embedding']
     """Load embeddings once and reuse."""
     # check for vertex endpoint override first
     vertex_ep = os.getenv("VERTEX_EMBEDDING_ENDPOINT")
@@ -869,13 +864,14 @@ def get_embeddings_model(use_gemini: bool = False):
     if key in _EMBEDDINGS_CACHE:
         return _EMBEDDINGS_CACHE[key]
 
-    if use_gemini and GEMINI_AVAILABLE and GEMINI_API_KEY:
+    if use_gemini and GEMINI_API_KEY:
         _EMBEDDINGS_CACHE[key] = GeminiEmbeddings(GEMINI_API_KEY)
     elif vertex_ep:
         print(f"🔄 Using Vertex AI Embeddings Endpoint: {vertex_ep}")
         _EMBEDDINGS_CACHE[key] = VertexCustomEmbeddings(vertex_ep)
     else:
         print("🔄 Loading embeddings model (local)...")
+        from langchain_huggingface import HuggingFaceEmbeddings
         _EMBEDDINGS_CACHE[key] = HuggingFaceEmbeddings(model_name="all-MiniLM-L6-v2")
         print("✅ Embeddings model cached.")
     return _EMBEDDINGS_CACHE[key]
@@ -885,6 +881,7 @@ def get_retriever(index_name: str, use_gemini: bool = False):
     if cache_key in _VECTOR_STORE_CACHE:
         return _VECTOR_STORE_CACHE[cache_key]
     try:
+        from langchain_neo4j import Neo4jVector
         embeds = get_embeddings_model(use_gemini)
         retriever = Neo4jVector.from_existing_index(
             embeds,
@@ -995,16 +992,16 @@ def search_graph(query: str, index_name: str, use_gemini: bool = False) -> Tuple
 
 
 def get_gemini_llm():
-    if not GEMINI_AVAILABLE:
-        raise ImportError("google-generativeai not installed")
     if not GEMINI_API_KEY:
         raise ValueError("GEMINI_API_KEY is not set")
+    import google.generativeai as genai
     genai.configure(api_key=GEMINI_API_KEY)
-    return GenerativeModel('gemini-2.5-flash')
+    return genai.GenerativeModel('gemini-2.5-flash')
 
 def get_mistral_llm():
     if not MISTRAL_API_KEY:
         raise ValueError("MISTRAL_API_KEY is not set")
+    from langchain_mistralai import ChatMistralAI
     return ChatMistralAI(
         model=LLM_MODEL,
         temperature=LLM_TEMPERATURE,
@@ -1061,6 +1058,9 @@ Instructions:
 
 async def generate_answer_mistral_stream(question: str, context: str, history: List[Dict[str, Any]], enhanced_citations: bool = True):
     try:
+        from langchain_core.prompts import ChatPromptTemplate
+        from langchain_core.output_parsers import StrOutputParser
+        
         llm = get_mistral_llm()
         full_prompt_str = build_prompt_with_history(question, context, history, enhanced_citations)
        
@@ -1088,6 +1088,9 @@ async def generate_answer_gemini_stream(question: str, context: str, history: Li
 def generate_answer_mistral(question: str, context: str, history: List[Dict[str, Any]], enhanced_citations: bool = True) -> str:
     # Keep sync version for compatibility/fallback
     try:
+        from langchain_core.prompts import ChatPromptTemplate
+        from langchain_core.output_parsers import StrOutputParser
+        
         llm = get_mistral_llm()
         full_prompt_str = build_prompt_with_history(question, context, history, enhanced_citations)
         template = ChatPromptTemplate.from_template("{input_prompt}")
@@ -1212,8 +1215,9 @@ async def main(message: cl.Message):
             
         await msg.stream_token("🧠 **Analyzing media with Gemini...**\n")
         
+        import google.generativeai as genai
         genai.configure(api_key=GEMINI_API_KEY)
-        model = GenerativeModel('gemini-2.5-flash')
+        model = genai.GenerativeModel('gemini-2.5-flash')
         
         parts = [message.content]
         for f in files:

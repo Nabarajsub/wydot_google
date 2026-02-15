@@ -40,6 +40,15 @@ gcloud projects add-iam-policy-binding $PROJECT_ID \
     --member="serviceAccount:${COMPUTE_SA}" \
     --role="roles/cloudsql.client" --condition=None
 
+echo "📜 Granting Service Usage Consumer permissions..."
+gcloud projects add-iam-policy-binding $PROJECT_ID \
+    --member="serviceAccount:${SA_EMAIL}" \
+    --role="roles/serviceusage.serviceUsageConsumer" --condition=None
+
+gcloud projects add-iam-policy-binding $PROJECT_ID \
+    --member="serviceAccount:${COMPUTE_SA}" \
+    --role="roles/serviceusage.serviceUsageConsumer" --condition=None
+
 echo "🔗 Binding Workload Identity (Updating Policy)..."
 # We need to know the repo name. Assuming user's current repo remote.
 # But to be safe, we will ask user or use a wildcard for now to unblock.
