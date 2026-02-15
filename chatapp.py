@@ -11,6 +11,7 @@ Features:
 """
 
 # === CLOUD RUN DIAGNOSTIC LOGGING ===
+import os
 print("🚀 App Startup Sequence Initiated")
 print(f"📍 Current Working Directory: {os.getcwd()}")
 print(f"🛠️ K_SERVICE Detection: {os.getenv('K_SERVICE', 'Not in Cloud Run')}")
@@ -43,8 +44,11 @@ print("📦 Importing core libraries...")
 from typing import List, Dict, Any, Optional, Tuple
 import os
 import re
+import datetime
+import json
 import time
 import tempfile
+import traceback
 import urllib.parse
 from dotenv import load_dotenv
 
@@ -61,6 +65,49 @@ from langchain_neo4j import Neo4jVector
 from langchain_core.prompts import ChatPromptTemplate
 from langchain_core.output_parsers import StrOutputParser
 from langchain_core.embeddings import Embeddings
+
+# --- CUSTOM AUTH ENDPOINTS ---
+from chainlit.server import app
+
+class RegisterReq(BaseModel):
+    email: str
+    password: str
+
+class VerifyReq(BaseModel):
+    email: str
+    code: str
+
+@app.post("/auth/register")
+async def register(req: RegisterReq):
+    print(f"👤 [API] Registration attempt: {req.email}")
+    if not CHAT_DB:
+        return JSONResponse(status_code=500, content={"error": "Database not initialized"})
+    
+    uid, error = CHAT_DB.create_user(req.email, req.password, req.email.split('@')[0])
+    if uid:
+        print(f"✅ [API] Registration successful for {req.email}")
+        return {"message": "Registration successful. Please verify.", "dev_code": "123456"}
+    print(f"❌ [API] Registration failed for {req.email}: {error}")
+    return JSONResponse(status_code=400, content={"error": error})
+
+@app.post("/auth/verify")
+async def verify_code(req: VerifyReq):
+    print(f"🔑 [API] Verification attempt: {req.email}")
+    if not CHAT_DB:
+        return JSONResponse(status_code=500, content={"error": "Database not initialized"})
+    
+    try:
+        conn = CHAT_DB._get_conn()
+        with conn.cursor() as cur:
+            # Mark as verified in DB
+            cur.execute("UPDATE users SET verified = 1 WHERE email = %s", (req.email,))
+            conn.commit()
+            print(f"✅ [API] User {req.email} verified.")
+        return {"status": "success", "message": "Account verified!"}
+    except Exception as e:
+        print(f"🔥 [API] Verification error: {e}")
+        return JSONResponse(status_code=500, content={"error": str(e)})
+# --- END CUSTOM AUTH ---
 
 # Google Vertex AI / Gemini
 try:
@@ -117,6 +164,7 @@ NEO4J_INDEX_2021 = os.getenv("NEO4J_INDEX_2021", "wydot_vector_index_2021")
 print("💬 Initializing API Keys...")
 MISTRAL_API_KEY = os.getenv("MISTRAL_API_KEY")
 GEMINI_API_KEY = os.getenv("GEMINI_API_KEY")
+MAX_HISTORY_MSGS = 20
 LLM_MODEL = os.getenv("LLM_MODEL", "mistral-large-latest")
 LLM_TEMPERATURE = float(os.getenv("LLM_TEMPERATURE", "0"))
 
@@ -188,17 +236,36 @@ class WydotDataLayer(BaseDataLayer):
         )
 
     async def create_user(self, user: cl.User):
-        # Chainlit calls this when a user logs in.
-        # We need to return a PersistedUser.
-        # User class only has: identifier, display_name, metadata
+        """Called during registration or first login."""
+        print(f"👤 [DATALAYER] create_user: {user.identifier}")
         import time
-        db_id = user.metadata.get("db_id", str(int(time.time()*1000)))
+        
+        # Check if user already has db_id in metadata (from auth_callback)
+        db_id = user.metadata.get("db_id")
+        
+        if not db_id:
+            # This is a REGISTRATION flow (user doesn't exist yet)
+            password = getattr(user, "password", None)
+            if password:
+                print(f"📝 [DATALAYER] Registering new user: {user.identifier}")
+                uid, error = CHAT_DB.create_user(user.identifier, password, user.display_name)
+                if uid:
+                    db_id = uid
+                    print(f"✅ [DATALAYER] Registration successful (ID: {uid})")
+                else:
+                    print(f"❌ [DATALAYER] Registration failed: {error}")
+                    return None
+            else:
+                # No password, and no db_id: something is wrong or it's an unsupported flow
+                print(f"⚠️ [DATALAYER] No password or db_id for {user.identifier}")
+                db_id = str(int(time.time()*1000)) # Fallback
+        
         return cl.PersistedUser(
             id=str(db_id),
             createdAt=str(time.time()),
             identifier=user.identifier,
-            display_name=user.metadata.get("name"),
-            metadata=user.metadata
+            display_name=user.display_name or user.identifier,
+            metadata={"db_id": db_id, "name": user.display_name or user.identifier, "verified": True}
         )
 
     async def list_threads(self, pagination: Pagination, filters: ThreadFilter) -> PaginatedResponse[ThreadDict]:
@@ -213,41 +280,45 @@ class WydotDataLayer(BaseDataLayer):
         except ValueError:
              return PaginatedResponse(data=[], pageInfo=cl.types.PageInfo(hasNextPage=False, endCursor=None, startCursor=None))
 
-        # Pass search_keyword to DB
-        sessions = CHAT_DB.get_user_sessions(uid, search_term=search_keyword)
-        
-        # Resolve user email for userIdentifier (Chainlit compares this against user.identifier)
+        # Recover user identifier to check if guest
         user_dict = CHAT_DB.get_user_by_id(uid)
         user_email = user_dict.get("email", "") if user_dict else ""
         
-        # Ensure we return ThreadDict objects
+        # If guest, return empty to maintain stateless UI as requested
+        if user_email == "guest@app.local":
+            return PaginatedResponse(
+                data=[],
+                pageInfo=cl.types.PageInfo(hasNextPage=False, endCursor=None, startCursor=None)
+            )
+
+        # For registered users, fetch and return real threads
+        sessions = CHAT_DB.get_user_sessions(uid, search_term=search_keyword)
         threads: List[ThreadDict] = []
-        import datetime
         for s in sessions:
             try:
                 ts = s["createdAt"]
                 if isinstance(ts, (int, float)):
-                    created_at = datetime.datetime.fromtimestamp(ts).isoformat()
+                    # ISO 8601 string is the most robust format for Chainlit's React frontend
+                    created_at = datetime.datetime.fromtimestamp(ts, datetime.timezone.utc).strftime("%Y-%m-%dT%H:%M:%S.000Z")
                 else:
-                     created_at = str(ts)
+                    created_at = str(ts)
             except Exception:
-                created_at = datetime.datetime.now().isoformat()
-
-            # Use the DB session_id as the thread ID directly
-            thread_id = s["id"]
+                traceback.print_exc()
+                created_at = datetime.datetime.now(datetime.timezone.utc).strftime("%Y-%m-%dT%H:%M:%S.000Z")
 
             threads.append({
-                "id": thread_id,
+                "id": str(s["id"]),
                 "createdAt": created_at, 
-                "name": s["name"],
-                "userId": user_id,
-                "userIdentifier": user_email,  # MUST be email, not numeric ID
+                "name": str(s["name"]),
+                "userId": str(uid),
+                "userIdentifier": str(user_email),
                 "tags": [],
                 "metadata": {},
                 "steps": [],
                 "elements": [],
             })
             
+        print(f"[DEBUG list_threads] Result count: {len(threads)}")
         return PaginatedResponse(
             data=threads,
             pageInfo=cl.types.PageInfo(hasNextPage=False, endCursor=None, startCursor=None)
@@ -269,7 +340,7 @@ class WydotDataLayer(BaseDataLayer):
             return None
             
         ts = thread_info["createdAt"]
-        created_at = datetime.datetime.fromtimestamp(ts).isoformat() if isinstance(ts, (int, float)) else str(ts)
+        created_at = datetime.datetime.fromtimestamp(ts, datetime.timezone.utc).strftime("%Y-%m-%dT%H:%M:%S.000Z") if isinstance(ts, (int, float)) else str(ts)
 
         # Resolve user email for userIdentifier (Chainlit checks this for authorization)
         user_email = ""
@@ -294,70 +365,64 @@ class WydotDataLayer(BaseDataLayer):
             for i, msg in enumerate(raw_msgs):
                 role = msg.get("role", "assistant")
                 content = msg.get("content", "")
-                step_type = "user_message" if role == "user" else "assistant_message"
-                step_name = "user" if role == "user" else "WYDOT Assistant"
+                step_name = "user" if role == "user" else "Assistant"
                 msg_ts = msg.get("ts")
+                
+                # Format timestamp as ISO 8601 string
                 if isinstance(msg_ts, (int, float)):
-                    step_created = datetime.datetime.fromtimestamp(msg_ts).isoformat()
+                    step_created = datetime.datetime.fromtimestamp(msg_ts, datetime.timezone.utc).strftime("%Y-%m-%dT%H:%M:%S.000Z")
                 else:
-                    step_created = created_at  # fallback to thread creation time
-
-                step_id = str(_uuid.uuid4())
+                    step_created = created_at
+                
+                step_id = f"step_{actual_session_id}_{i}"
+                step_elements = [] 
                 
                 # Check for sources to restore elements
                 msg_sources = msg.get("sources")
                 if msg_sources and isinstance(msg_sources, list):
-                    print(f"[DEBUG get_thread] Found {len(msg_sources)} sources for message {i}")
                     for src_idx, src in enumerate(msg_sources):
-                        # Create Element dict manually as we are in Data Layer
-                        # Using deterministic ID: src_{timestamp}_{index}
-                        # Safe fallback if msg_ts is missing
                         safe_ts = int(msg_ts) if isinstance(msg_ts, (int, float)) else 0
                         src_id = f"src_{safe_ts}_{src_idx}"
                         elem = {
                             "id": src_id,
                             "threadId": thread_id,
                             "type": "text",
-                            "url": None,
-                            "chainlitKey": None,
                             "name": f"Source {src.get('index', '?')}",
                             "display": "side",
-                            "objectKey": None,
                             "forId": step_id,
                             "mime": "text/markdown",
-                            # Content of the source text element
                             "content": f"**Source {src.get('index', '?')}: {src.get('title', 'Unknown')}**\n\n**File:** [{src.get('source', 'File')}]({src.get('url', '#')})\n**Page:** {src.get('page', 'N/A')}\n**Section:** {src.get('section', 'N/A')}\n**Year:** {src.get('year', 'N/A')}\n\n**Preview:**\n{src.get('preview', '')}"
                         }
                         elements.append(elem)
+                        step_elements.append(elem)
 
                 steps.append({
                     "id": step_id,
                     "threadId": thread_id,
-                    "parentId": None,
                     "name": step_name,
-                    "type": step_type,
+                    "type": "assistant_message" if role == "assistant" else "user_message",
                     "output": content,
-                    "input": "",
                     "createdAt": step_created,
                     "start": step_created,
                     "end": step_created,
+                    "elements": step_elements,
                     "metadata": {},
                     "streaming": False,
-                    "isError": False,
-                    "showInput": False,
+                    "isError": False
                 })
 
         result = {
             "id": thread_id,
             "createdAt": created_at,
             "name": thread_info["name"],
-            "userId": thread_info["userId"],
+            "userId": str(thread_info["userId"]),
             "userIdentifier": user_email,
             "tags": [],
             "metadata": {},
             "steps": steps,
             "elements": elements 
         }
+        print(f"[DEBUG get_thread] Reconstructed thread {thread_id} with {len(steps)} steps and {len(elements)} elements")
         return result
 
     async def update_thread(self, thread_id: str, name: str = None, user_id: str = None, metadata: Dict = None, tags: List[str] = None):
@@ -379,7 +444,7 @@ class WydotDataLayer(BaseDataLayer):
         pass
 
     async def get_element(self, thread_id, element_id):
-        print(f"[DEBUG get_element] thread_id={thread_id}, element_id={element_id}")
+        print(f"[DEBUG get_element] CALLED thread_id={thread_id}, element_id={element_id}")
         if not element_id.startswith("src_"):
             return None
         
@@ -388,28 +453,42 @@ class WydotDataLayer(BaseDataLayer):
             parts = element_id.split("_")
             if len(parts) < 3:
                 return None
-            ts = int(parts[1])
+            ts_str = parts[1]
             src_idx = int(parts[2])
             
             # Fetch thread info to get userId
             thread_info = CHAT_DB.get_session_by_id(thread_id)
             if not thread_info:
+                # Try with thread_ prefix
+                thread_info = CHAT_DB.get_session_by_id(f"thread_{thread_id}")
+            
+            if not thread_info:
                 return None
             
             uid = int(thread_info["userId"])
             # Fetch messages for this thread
-            msgs = CHAT_DB.get_recent(uid, thread_id, MAX_HISTORY_MSGS)
+            actual_session_id = thread_id
+            if not CHAT_DB.get_session_by_id(actual_session_id):
+                 actual_session_id = f"thread_{thread_id}"
+
+            msgs = CHAT_DB.get_recent(uid, actual_session_id, MAX_HISTORY_MSGS)
             
             # Find the message with matching timestamp
             target_msg = None
             for m in msgs:
                 m_ts = m.get("ts")
-                if isinstance(m_ts, (int, float)) and int(m_ts) == ts:
-                    target_msg = m
-                    break
-                elif ts == 0 and m_ts is None:
-                    target_msg = m
-                    break
+                # Robust matching
+                if m_ts is not None:
+                    # Clean match (ignoring precision)
+                    if str(int(float(m_ts))) == ts_str or ts_str == "0":
+                         target_msg = m
+                         print(f"[DEBUG get_element] Found matching message with sources")
+                         break
+            
+            if not target_msg:
+                # Fallback: check cl.user_session if this is a live non-persisted thread
+                # (Though Data Layer's get_element usually applies to persisted items)
+                pass
             
             if not target_msg:
                 return None
@@ -420,19 +499,13 @@ class WydotDataLayer(BaseDataLayer):
             
             src = msg_sources[src_idx]
             
-            # Reconstruct the element (same content as in get_thread)
-            return {
-                "id": element_id,
-                "threadId": thread_id,
-                "type": "text",
-                "url": None,
-                "chainlitKey": None,
-                "name": f"Source {src.get('index', '?')}",
-                "display": "side",
-                "objectKey": None,
-                "mime": "text/markdown",
-                "content": f"**Source {src.get('index', '?')}: {src.get('title', 'Unknown')}**\n\n**File:** [{src.get('source', 'File')}]({src.get('url', '#')})\n**Page:** {src.get('page', 'N/A')}\n**Section:** {src.get('section', 'N/A')}\n**Year:** {src.get('year', 'N/A')}\n\n**Preview:**\n{src.get('preview', '')}"
-            }
+            # Reconstruct the element
+            return cl.Text(
+                id=element_id,
+                name=f"Source {src.get('index', '?')}",
+                content=f"**Source {src.get('index', '?')}: {src.get('title', 'Unknown')}**\n\n**File:** [{src.get('source', 'File')}]({src.get('url', '#')})\n**Page:** {src.get('page', 'N/A')}\n**Section:** {src.get('section', 'N/A')}\n**Year:** {src.get('year', 'N/A')}\n\n**Preview:**\n{src.get('preview', '')}",
+                display="side"
+            )
         except Exception as e:
             print(f"[DEBUG get_element] Error: {e}")
             return None
@@ -506,20 +579,27 @@ def get_data_layer():
 
 @cl.password_auth_callback
 def auth_callback(username, password):
-    """Login: authenticate ONLY. No auto-registration."""
-    uid, name = CHAT_DB.authenticate(username, password)
-    if uid:
-        if not CHAT_DB.is_verified(uid):
-            # In a real app, we might want to return a specific error or redirect,
-            # but Chainlit auth callback just returns User or None.
-            return None 
-            
-        is_guest = (username == "guest@app.local")
-        return cl.User(
-            # User class has: identifier, display_name, metadata (NO id field)
-            identifier=username,
-            metadata={"db_id": uid, "name": name or username, "verified": True, "is_guest": is_guest},
-        )
+    """Login: authenticate ONLY."""
+    print(f"🔐 [AUTH] Attempt login: {username}")
+    try:
+        uid, name = CHAT_DB.authenticate(username, password)
+        if uid:
+            print(f"✅ [AUTH] Success: {username} (ID: {uid})")
+            if not CHAT_DB.is_verified(uid):
+                print(f"⚠️ [AUTH] User {username} not verified.")
+                return None 
+                
+            is_guest = (username == "guest@app.local")
+            return cl.User(
+                identifier=username,
+                display_name=name or username,
+                metadata={"db_id": uid, "is_guest": is_guest},
+            )
+        print(f"❌ [AUTH] Denied: {username}")
+    except Exception as e:
+        print(f"🔥 [AUTH] Error: {e}")
+        import traceback
+        traceback.print_exc()
     return None
 
 @cl.on_chat_resume
@@ -722,8 +802,8 @@ Transcribe the following audio:""",
         msg.elements = clean_elements
         await msg.update()
         
-        # Persist: Redis (fast) + DB (durable)
-        if user and user.metadata.get("db_id"):
+        # Persist: Redis (fast) + DB (durable) if NOT guest
+        if user and user.metadata.get("db_id") and not user.metadata.get("is_guest"):
             session_id = cl.user_session.get("session_id", "cl_session")
             uid = user.metadata["db_id"]
             conv_mem.append(uid, session_id, "user", f"[Voice] {transcribed_text}")
@@ -1145,7 +1225,7 @@ async def main(message: cl.Message):
         await msg.stream_token(response)
         await msg.send()
         
-        # Persist multimodal interaction
+        # Persist multimodal interaction if NOT guest
         user = cl.user_session.get("user")
         if user and user.metadata.get("db_id") and not user.metadata.get("is_guest"):
             session_id = cl.user_session.get("session_id", "cl_session")
@@ -1189,7 +1269,7 @@ async def main(message: cl.Message):
     user = cl.user_session.get("user")
     session_id = cl.user_session.get("session_id", "cl_session")
 
-    if user and user.metadata.get("db_id"):
+    if user and user.metadata.get("db_id") and not user.metadata.get("is_guest"):
         history_msgs = conv_mem.get_recent(
             user.metadata["db_id"], session_id, limit=MAX_HISTORY_MSGS,
             fallback=CHAT_DB.get_recent,
@@ -1241,9 +1321,12 @@ async def main(message: cl.Message):
     # 5. Create source elements for side panel
     clean_elements = []
     for src in sources:
+        # Reconstruct the source ID for the element name to match the citation format
+        # This ensures that [Source X] in the response links to the correct sidebar element
+        element_name = f"Source {src['index']}"
         clean_elements.append(
             cl.Text(
-                name=f"Source {src['index']}",
+                name=element_name,
                 content=f"**Source {src['index']}: {src['title']}**\n\n**File:** [{src['source']}]({src.get('url', '#')})\n**Page:** {src.get('page', 'N/A')}\n**Section:** {src.get('section', 'N/A')}\n**Year:** {src.get('year', 'N/A')}\n\n**Preview:**\n{src['preview']}",
                 display="side"
             )
@@ -1252,16 +1335,14 @@ async def main(message: cl.Message):
     msg.elements = clean_elements
     await msg.update()
 
-    # Update conversation: Redis + in-session; persist to DB if authenticated AND NOT GUEST
+    # Update conversation: Redis + in-session; persist to DB if NOT guest
     if user and user.metadata.get("db_id") and not user.metadata.get("is_guest"):
         uid = user.metadata["db_id"]
         conv_mem.append(uid, session_id, "user", message.content)
         conv_mem.append(uid, session_id, "assistant", enhanced_answer)
-        # Pass sources to be saved in JSON column
         CHAT_DB.add_message(uid, session_id, "user", message.content)
         CHAT_DB.add_message(uid, session_id, "assistant", enhanced_answer, sources=sources)
     else:
-        history_msgs = cl.user_session.get("memory", [])
         history_msgs.append({"role": "user", "content": message.content})
         history_msgs.append({"role": "assistant", "content": enhanced_answer})
         cl.user_session.set("memory", history_msgs)

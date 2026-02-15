@@ -579,6 +579,20 @@ class CloudSQLChatHistoryStore(BaseChatHistoryStore):
                         ts TIMESTAMP DEFAULT CURRENT_TIMESTAMP
                     )
                 """)
+                # Seed guest user if it doesn't exist or ensure it is verified
+                cur.execute("SELECT id FROM users WHERE email='guest@app.local'")
+                row = cur.fetchone()
+                if not row:
+                    cur.execute(
+                        "INSERT INTO users (email, password_hash, display_name, verified) VALUES (%s, %s, %s, 1)",
+                        ("guest@app.local", pbkdf2_hash("guest"), "Guest User")
+                    )
+                else:
+                    # Ensure it's verified and has the correct password if it exists
+                    cur.execute(
+                        "UPDATE users SET verified = 1, password_hash = %s WHERE email = 'guest@app.local'",
+                        (pbkdf2_hash("guest"),)
+                    )
             conn.commit()
         finally:
             conn.close()
@@ -590,10 +604,14 @@ class CloudSQLChatHistoryStore(BaseChatHistoryStore):
                 cur.execute("SELECT id, password_hash, display_name FROM users WHERE email=%s", (email,))
                 row = cur.fetchone()
                 if not row:
+                    print(f"🔍 [DB] User not found: {email}")
                     return None, "User not found"
                 uid, pw_hash, name = row
                 if not pbkdf2_verify(password, pw_hash):
+                    print(f"🔍 [DB] Password verify failed for {email}. Password length: {len(password)}")
+                    # print(f"🔍 [DB] Provided: '{password}', Hash in DB: '{pw_hash}'") # Careful with logs!
                     return None, "Invalid password"
+                print(f"🔍 [DB] Auth success: {email} (UID: {uid})")
                 return int(uid), (name or email)
         finally:
             conn.close()

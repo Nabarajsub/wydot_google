@@ -3,7 +3,6 @@ Ingestion tracker: SQLite for local (and Cloud SQL later).
 Replaces JSON file so the same code works locally and on Cloud Run with a persistent volume or Cloud SQL.
 """
 import os
-import sqlite3
 import threading
 from datetime import datetime
 from typing import List, Dict, Any, Optional
@@ -13,11 +12,37 @@ _conn = None
 _lock = threading.Lock()
 
 
+def _get_placeholder():
+    return "%s" if os.getenv("DATABASE_URL") and os.getenv("DATABASE_URL", "").startswith("postgres") else "?"
+
+
 def _get_conn():
     global _conn
     if _conn is not None:
         return _conn
+        
+    db_url = os.getenv("DATABASE_URL")
+    if db_url and db_url.startswith("postgres"):
+        import psycopg2
+        try:
+            _conn = psycopg2.connect(db_url)
+            with _conn.cursor() as cur:
+                cur.execute("""
+                    CREATE TABLE IF NOT EXISTS ingestion_metadata (
+                        filename TEXT PRIMARY KEY,
+                        media_type TEXT NOT NULL,
+                        chunks INTEGER NOT NULL,
+                        ingested_at TEXT NOT NULL,
+                        metadata_json TEXT
+                    )
+                """)
+            _conn.commit()
+            return _conn
+        except Exception as e:
+            print(f"⚠️ Ingestion tracker fallback to SQLite: {e}")
+
     path = _db_path or os.path.join(os.path.dirname(__file__), "ingestion_tracker.sqlite3")
+    import sqlite3
     os.makedirs(os.path.dirname(path) or ".", exist_ok=True)
     _conn = sqlite3.connect(path, check_same_thread=False, timeout=10)
     _conn.execute("PRAGMA journal_mode=WAL;")
@@ -38,10 +63,12 @@ def load_tracker() -> Dict[str, Any]:
     """Return {"files": [ {...}, ... ]} compatible with existing frontend."""
     with _lock:
         c = _get_conn()
-        cur = c.execute(
-            "SELECT filename, media_type, chunks, ingested_at, metadata_json FROM ingestion_metadata ORDER BY ingested_at DESC"
-        )
-        rows = cur.fetchall()
+        with c.cursor() if hasattr(c, "cursor") else c as cur:
+            cur.execute(
+                "SELECT filename, media_type, chunks, ingested_at, metadata_json FROM ingestion_metadata ORDER BY ingested_at DESC"
+            )
+            rows = cur.fetchall()
+            
     files = []
     for r in rows:
         fn, mtype, chunks, date, meta_json = r
@@ -65,18 +92,36 @@ def load_tracker() -> Dict[str, Any]:
 def add_to_tracker(filename: str, media_type: str, chunks: int, metadata: Optional[Dict] = None) -> None:
     import json
     meta_json = json.dumps(metadata or {}, default=str)
+    ph = _get_placeholder()
+    # SQL query difference: SQLite uses REPLACE INTO or INSERT OR REPLACE
+    # Postgres uses INSERT INTO ... ON CONFLICT
+    is_postgres = ph == "%s"
+    
     with _lock:
         c = _get_conn()
-        c.execute(
-            """INSERT OR REPLACE INTO ingestion_metadata (filename, media_type, chunks, ingested_at, metadata_json)
-               VALUES (?, ?, ?, ?, ?)""",
-            (filename, media_type, chunks, datetime.utcnow().isoformat(), meta_json),
-        )
-        c.commit()
+        with c.cursor() if hasattr(c, "cursor") else c as cur:
+            if is_postgres:
+                cur.execute(
+                    """INSERT INTO ingestion_metadata (filename, media_type, chunks, ingested_at, metadata_json)
+                       VALUES (%s, %s, %s, %s, %s)
+                       ON CONFLICT (filename) DO UPDATE SET
+                       media_type=EXCLUDED.media_type, chunks=EXCLUDED.chunks, 
+                       ingested_at=EXCLUDED.ingested_at, metadata_json=EXCLUDED.metadata_json""",
+                    (filename, media_type, chunks, datetime.utcnow().isoformat(), meta_json),
+                )
+            else:
+                cur.execute(
+                    """INSERT OR REPLACE INTO ingestion_metadata (filename, media_type, chunks, ingested_at, metadata_json)
+                       VALUES (?, ?, ?, ?, ?)""",
+                    (filename, media_type, chunks, datetime.utcnow().isoformat(), meta_json),
+                )
+            c.commit()
 
 
 def remove_from_tracker(filename: str) -> None:
+    ph = _get_placeholder()
     with _lock:
         c = _get_conn()
-        c.execute("DELETE FROM ingestion_metadata WHERE filename = ?", (filename,))
-        c.commit()
+        with c.cursor() if hasattr(c, "cursor") else c as cur:
+            cur.execute(f"DELETE FROM ingestion_metadata WHERE filename = {ph}", (filename,))
+            c.commit()

@@ -6,8 +6,10 @@
             const prototypeValueSetter = Object.getOwnPropertyDescriptor(prototype, 'value').set;
 
             if (valueSetter && valueSetter !== prototypeValueSetter) {
+                prototypeValueSetter.call(element, ""); // Clear first
                 prototypeValueSetter.call(element, value);
             } else {
+                valueSetter.call(element, ""); // Clear first
                 valueSetter.call(element, value);
             }
             element.dispatchEvent(new Event('input', { bubbles: true }));
@@ -103,7 +105,7 @@
 
                         // Fill credentials
                         setNativeValue(emailInput, "guest@app.local");
-                        setNativeValue(passInput, "guest_password_secure_123");
+                        setNativeValue(passInput, "guest");
 
                         // Force enable submit button just in case
                         if (submitBtn.disabled) {
@@ -113,15 +115,17 @@
 
                         // Delay click to allow React state update
                         setTimeout(() => {
-                            console.log("Simulating submit click");
+                            console.log("Simulating submit click for: " + emailInput.value);
                             submitBtn.click();
 
                             // Reset button in case login fails
                             setTimeout(() => {
-                                guestBtn.textContent = "Continue as Guest";
-                                guestBtn.disabled = false;
+                                if (guestBtn) {
+                                    guestBtn.textContent = "Continue as Guest";
+                                    guestBtn.disabled = false;
+                                }
                             }, 3000);
-                        }, 200);
+                        }, 500); // Increased delay
                     } else {
                         console.error("Inputs not found", { form, emailInput, passInput });
                         // alert("Debug: Email input found? " + !!emailInput + ", Pass found? " + !!passInput);
