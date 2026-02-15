@@ -12,10 +12,10 @@ Features:
 
 # === CLOUD RUN DIAGNOSTIC LOGGING ===
 import os
-print("🚀 App Startup Sequence Initiated")
-print(f"📍 Current Working Directory: {os.getcwd()}")
-print(f"🛠️ K_SERVICE Detection: {os.getenv('K_SERVICE', 'Not in Cloud Run')}")
-print(f"📦 PORT: {os.getenv('PORT', 'Not Set')}")
+print("🚀 App Startup Sequence Initiated", flush=True)
+print(f"📍 Current Working Directory: {os.getcwd()}", flush=True)
+print(f"🛠️ K_SERVICE Detection: {os.getenv('K_SERVICE', 'Not in Cloud Run')}", flush=True)
+print(f"📦 PORT: {os.getenv('PORT', 'Not Set')}", flush=True)
 
 # Create temp directories at runtime (Cloud Run may reset /tmp between requests)
 import os as _os

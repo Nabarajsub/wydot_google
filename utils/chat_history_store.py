@@ -520,15 +520,27 @@ class SQLiteChatHistoryStore(BaseChatHistoryStore):
 class CloudSQLChatHistoryStore(BaseChatHistoryStore):
     def __init__(self, database_url: str):
         self.db_url = database_url
-        try:
-            self._init_tables()
-        except Exception as e:
-            print(f"WARNING: Database initialization failed (app will start, but DB features may break): {e}")
-            import traceback
-            traceback.print_exc()
+        self._tables_initialized = False
+        self._initializing = False
+        print("🔗 CloudSQLChatHistoryStore initialized (lazy table init enabled)")
 
     def _get_conn(self):
         import psycopg2
+        
+        # Lazy initialization check
+        if not self._tables_initialized and not self._initializing:
+            self._initializing = True
+            try:
+                print("🛠️ Lazily initializing database tables...")
+                self._init_tables()
+                self._tables_initialized = True
+                print("✅ Database tables initialized successfully.")
+            except Exception as e:
+                print(f"⚠️ Lazy Table Init Failed: {e}")
+                # We don't set _tables_initialized=True so it retries on next call
+            finally:
+                self._initializing = False
+
         try:
             return psycopg2.connect(self.db_url)
         except Exception as e:
