@@ -105,12 +105,15 @@ async def verify_code(req: VerifyReq):
 # --- END CUSTOM AUTH ---
 
 # --- SOURCE CONTENT ENDPOINT ---
-# Chainlit's frontend fetches text element content from a URL (not from a 'content' field).
-# This endpoint serves the source markdown content for elements in history/resume.
-@app.get("/api/source/{thread_id}/{element_id}")
+# Chainlit's catch-all GET route (/{full_path:path}) is registered before our custom
+# routes, so @app.get() routes get intercepted. Using app.mount() for a sub-app
+# takes priority over router routes in Starlette/FastAPI.
+from fastapi import FastAPI as _FastAPI
+_api_app = _FastAPI()
+
+@_api_app.get("/source/{thread_id}/{element_id}")
 async def get_source_content(thread_id: str, element_id: str):
     """Serve source element content as plain text for Chainlit's frontend to render."""
-    import json as _json
     if not CHAT_DB:
         raise HTTPException(status_code=500, detail="Database not initialized")
 
@@ -176,6 +179,17 @@ async def get_source_content(thread_id: str, element_id: str):
     except Exception as e:
         print(f"[SOURCE ENDPOINT] Error: {e}")
         raise HTTPException(status_code=500, detail=str(e))
+
+# Insert the mount BEFORE Chainlit's catch-all route (/{full_path:path}).
+# app.mount() appends to the end of routes, which comes AFTER the catch-all.
+# We must insert it before the catch-all so it gets matched first.
+from starlette.routing import Mount as _Mount
+_catch_all_idx = next(
+    (i for i, r in enumerate(app.routes)
+     if hasattr(r, "path") and "{full_path" in getattr(r, "path", "")),
+    len(app.routes)
+)
+app.routes.insert(_catch_all_idx, _Mount("/api", app=_api_app))
 # --- END SOURCE CONTENT ENDPOINT ---
 
 # Google Vertex AI / Gemini (imports moved to lazy loaders)
