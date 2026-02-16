@@ -55,7 +55,7 @@ from dotenv import load_dotenv
 import chainlit as cl
 from chainlit.input_widget import Select, Switch
 from fastapi import Request, HTTPException
-from fastapi.responses import JSONResponse
+from fastapi.responses import JSONResponse, PlainTextResponse
 from pydantic import BaseModel
 
 # GraphRAG / LangChain imports
@@ -103,6 +103,94 @@ async def verify_code(req: VerifyReq):
         print(f"🔥 [API] Verification error: {e}")
         return JSONResponse(status_code=500, content={"error": str(e)})
 # --- END CUSTOM AUTH ---
+
+# --- SOURCE CONTENT ENDPOINT ---
+# Chainlit's catch-all GET route (/{full_path:path}) is registered before our custom
+# routes, so @app.get() routes get intercepted. Using app.mount() for a sub-app
+# takes priority over router routes in Starlette/FastAPI.
+from fastapi import FastAPI as _FastAPI
+_api_app = _FastAPI()
+
+@_api_app.get("/source/{thread_id}/{element_id}")
+async def get_source_content(thread_id: str, element_id: str):
+    """Serve source element content as plain text for Chainlit's frontend to render."""
+    if not CHAT_DB:
+        raise HTTPException(status_code=500, detail="Database not initialized")
+
+    if not element_id.startswith("src_"):
+        raise HTTPException(status_code=404, detail="Not a source element")
+
+    try:
+        parts = element_id.split("_")
+        if len(parts) < 3:
+            raise HTTPException(status_code=404, detail="Invalid element ID")
+        ts_str = parts[1]
+        src_idx = int(parts[2])
+
+        # Find the thread
+        thread_info = CHAT_DB.get_session_by_id(thread_id)
+        if not thread_info:
+            thread_info = CHAT_DB.get_session_by_id(f"thread_{thread_id}")
+        if not thread_info:
+            raise HTTPException(status_code=404, detail="Thread not found")
+
+        uid = int(thread_info["userId"])
+        actual_session_id = thread_id
+        if not CHAT_DB.get_session_by_id(actual_session_id):
+            actual_session_id = f"thread_{thread_id}"
+
+        msgs = CHAT_DB.get_recent(uid, actual_session_id, MAX_HISTORY_MSGS)
+
+        # Find matching message with sources
+        target_msg = None
+        for m in msgs:
+            if not m.get("sources"):
+                continue
+            m_ts = m.get("ts")
+            if m_ts is not None and str(int(float(m_ts))) == ts_str:
+                target_msg = m
+                break
+
+        # Fallback: last assistant message with sources
+        if not target_msg:
+            msgs_with_sources = [m for m in msgs if m.get("sources") and m.get("role") == "assistant"]
+            if msgs_with_sources:
+                target_msg = msgs_with_sources[-1]
+
+        if not target_msg:
+            raise HTTPException(status_code=404, detail="Message not found")
+
+        msg_sources = target_msg.get("sources")
+        if not msg_sources or src_idx >= len(msg_sources):
+            raise HTTPException(status_code=404, detail="Source index out of range")
+
+        src = msg_sources[src_idx]
+        content = (
+            f"**Source {src.get('index', '?')}: {src.get('title', 'Unknown')}**\n\n"
+            f"**File:** [{src.get('source', 'File')}]({src.get('url', '#')})\n"
+            f"**Page:** {src.get('page', 'N/A')}\n"
+            f"**Section:** {src.get('section', 'N/A')}\n"
+            f"**Year:** {src.get('year', 'N/A')}\n\n"
+            f"**Preview:**\n{src.get('preview', '')}"
+        )
+        return PlainTextResponse(content=content, media_type="text/plain")
+    except HTTPException:
+        raise
+    except Exception as e:
+        print(f"[SOURCE ENDPOINT] Error: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+# Insert the mount BEFORE Chainlit's catch-all route (/{full_path:path}).
+# app.mount() appends to the end of routes, which comes AFTER the catch-all.
+# We must insert it before the catch-all so it gets matched first.
+from starlette.routing import Mount as _Mount
+_catch_all_idx = next(
+    (i for i, r in enumerate(app.routes)
+     if hasattr(r, "path") and "{full_path" in getattr(r, "path", "")),
+    len(app.routes)
+)
+app.routes.insert(_catch_all_idx, _Mount("/api", app=_api_app))
+# --- END SOURCE CONTENT ENDPOINT ---
 
 # Google Vertex AI / Gemini (imports moved to lazy loaders)
 GEMINI_AVAILABLE = True # Assume true, check imports lazily
@@ -380,8 +468,8 @@ class WydotDataLayer(BaseDataLayer):
                             "name": f"Source {src.get('index', '?')}",
                             "display": "side",
                             "forId": step_id,
-                            "mime": "text/markdown",
-                            "content": f"**Source {src.get('index', '?')}: {src.get('title', 'Unknown')}**\n\n**File:** [{src.get('source', 'File')}]({src.get('url', '#')})\n**Page:** {src.get('page', 'N/A')}\n**Section:** {src.get('section', 'N/A')}\n**Year:** {src.get('year', 'N/A')}\n\n**Preview:**\n{src.get('preview', '')}"
+                            "mime": "text/plain",
+                            "url": f"/api/source/{thread_id}/{src_id}",
                         }
                         elements.append(elem)
                         step_elements.append(elem)
@@ -463,23 +551,27 @@ class WydotDataLayer(BaseDataLayer):
 
             msgs = CHAT_DB.get_recent(uid, actual_session_id, MAX_HISTORY_MSGS)
             
-            # Find the message with matching timestamp
+            # Find the message with matching timestamp that has sources
             target_msg = None
             for m in msgs:
+                if not m.get("sources"):
+                    continue
                 m_ts = m.get("ts")
-                # Robust matching
                 if m_ts is not None:
-                    # Clean match (ignoring precision)
-                    if str(int(float(m_ts))) == ts_str or ts_str == "0":
+                    if str(int(float(m_ts))) == ts_str:
                          target_msg = m
-                         print(f"[DEBUG get_element] Found matching message with sources")
+                         print(f"[DEBUG get_element] Found matching message with sources (ts match)")
                          break
-            
+
+            # Fallback for ts_str=="0" or no exact match: find the nth assistant message with sources
             if not target_msg:
-                # Fallback: check cl.user_session if this is a live non-persisted thread
-                # (Though Data Layer's get_element usually applies to persisted items)
-                pass
-            
+                msgs_with_sources = [m for m in msgs if m.get("sources") and m.get("role") == "assistant"]
+                if msgs_with_sources:
+                    # Use the source index to guess which message it belongs to
+                    # For now take the last one (most recent) as a reasonable default
+                    target_msg = msgs_with_sources[-1]
+                    print(f"[DEBUG get_element] Using fallback: last assistant message with sources")
+
             if not target_msg:
                 return None
             
@@ -488,14 +580,18 @@ class WydotDataLayer(BaseDataLayer):
                 return None
             
             src = msg_sources[src_idx]
-            
-            # Reconstruct the element
-            return cl.Text(
-                id=element_id,
-                name=f"Source {src.get('index', '?')}",
-                content=f"**Source {src.get('index', '?')}: {src.get('title', 'Unknown')}**\n\n**File:** [{src.get('source', 'File')}]({src.get('url', '#')})\n**Page:** {src.get('page', 'N/A')}\n**Section:** {src.get('section', 'N/A')}\n**Year:** {src.get('year', 'N/A')}\n\n**Preview:**\n{src.get('preview', '')}",
-                display="side"
-            )
+
+            # Return an ElementDict (plain dict) with url pointing to content endpoint.
+            # Chainlit's frontend fetches element content from 'url', not 'content'.
+            return {
+                "id": element_id,
+                "threadId": thread_id,
+                "type": "text",
+                "name": f"Source {src.get('index', '?')}",
+                "display": "side",
+                "mime": "text/plain",
+                "url": f"/api/source/{thread_id}/{element_id}",
+            }
         except Exception as e:
             print(f"[DEBUG get_element] Error: {e}")
             return None
@@ -812,6 +908,9 @@ Transcribe the following audio:""",
 # MODELS & RETRIEVAL (cached so we don't reload on every message)
 # =========================================================
 
+_EMBEDDINGS_CACHE = {}
+_VECTOR_STORE_CACHE = {}
+
 # --- Lazy Loaders for Models ---
 
 def get_embeddings_model(use_gemini: bool = False):
@@ -1114,28 +1213,36 @@ def generate_answer_gemini(question: str, context: str, history: List[Dict[str, 
 # =========================================================
 
 def enhance_citations_in_response(response: str, sources: List[Dict[str, Any]]) -> str:
-    """Transform [SOURCE_X] citations into compact numbered citations [1], [2], etc."""
-    
+    """Transform [SOURCE_X] citations into clickable element references.
+
+    Chainlit's frontend (a4e function) scans message text for element names
+    and converts them to clickable links. We output just 'SOURCE X' (no brackets)
+    so a4e can wrap it as [Source X](Source_X) for the side panel link.
+    """
+
     def replace_citation(match):
         citation_text = match.group(0)
         source_num_match = re.search(r'SOURCE_(\d+)', citation_text)
-        
+
         if not source_num_match:
             return citation_text
-            
+
         source_num = source_num_match.group(1)
         source_id = f"source_{source_num}"
-        
+
         # Check if source exists
         source_exists = any(src['id'] == source_id for src in sources)
-        
+
         if source_exists:
-            # Return citation that matches element name: [Source 1]
-            return f"[Source {source_num}]"
-        
+            # Return element name without brackets so Chainlit's a4e function
+            # can find it and wrap it as a clickable [Source X](Source_X) link.
+            # Using brackets like [Source X] would cause a4e to produce
+            # [[Source X](Source_X)] which is broken markdown.
+            return f"Source {source_num}"
+
         return citation_text
-    
-    # Replace [SOURCE_X] pattern
+
+    # Replace [SOURCE_X] pattern (including surrounding brackets)
     pattern = r'\[?SOURCE_(\d+)\]?'
     
     return re.sub(pattern, replace_citation, response)
