@@ -17,12 +17,15 @@ print(f"📍 Current Working Directory: {os.getcwd()}", flush=True)
 print(f"🛠️ K_SERVICE Detection: {os.getenv('K_SERVICE', 'Not in Cloud Run')}", flush=True)
 print(f"📦 PORT: {os.getenv('PORT', 'Not Set')}", flush=True)
 
+# Preserve Cloud Run's PORT=8080 before .env loading can overwrite it
+_cloud_run_port = os.getenv("PORT") if os.getenv("K_SERVICE") else None
+
 # Create temp directories at runtime (Cloud Run may reset /tmp between requests)
 import os as _os
 for _d in ["/tmp/.files", "/tmp/.chainlit"]:
     _os.makedirs(_d, exist_ok=True)
 
-# Force Chainlit to use /tmp for everything (config.toml override) 
+# Force Chainlit to use /tmp for everything (config.toml override)
 # ONLY if running in Cloud Run (detected via env var or if needed)
 # For local dev, we want persistence.
 if _os.getenv("K_SERVICE"): # Cloud Run sets this
@@ -217,10 +220,15 @@ def generate_public_url(gcs_uri: str) -> str:
 dotenv_path = os.getenv("DOTENV_PATH", ".env")
 if os.path.exists(dotenv_path):
     print(f"📂 Loading environment from: {dotenv_path}")
-    load_dotenv(dotenv_path)
+    load_dotenv(dotenv_path, override=False)  # Never override existing env vars
 else:
     print(f"⚠️ DOTENV_PATH not found: {dotenv_path}, trying default .env")
-    load_dotenv()
+    load_dotenv(override=False)
+
+# Restore Cloud Run PORT if .env overwrote it
+if _cloud_run_port:
+    os.environ["PORT"] = _cloud_run_port
+    print(f"🔒 PORT restored to Cloud Run value: {_cloud_run_port}")
 
 print("🔑 Validating Authentication...")
 # Enable login screen: Chainlit only shows auth when CHAINLIT_AUTH_SECRET is set
@@ -270,8 +278,14 @@ try:
     from utils.chat_history_store import get_chat_history_store
     CHAT_DB = get_chat_history_store()
 except ImportError:
-    from chat_history_store import get_chat_history_store  # when run from repo root
-    print("⚠️ Failure in chat history store import.")
+    try:
+        from chat_history_store import get_chat_history_store  # when run from repo root
+        CHAT_DB = get_chat_history_store()
+    except Exception as _e:
+        print(f"⚠️ Failure in chat history store import: {_e}")
+        CHAT_DB = None
+except Exception as _e:
+    print(f"⚠️ Chat history store init failed: {_e}")
     CHAT_DB = None
 
 print("📈 Setting up Telemetry and Evaluation...")
@@ -280,7 +294,14 @@ try:
     from utils import telemetry
     from utils import evaluation as online_eval
 except ImportError:
-    import telemetry
+    try:
+        import telemetry
+    except ImportError:
+        # Create a stub telemetry module so the app can still start
+        class _TelemetryStub:
+            def record_request(self, **kwargs): pass
+        telemetry = _TelemetryStub()
+        print("⚠️ Telemetry module not available, using stub")
 
 # Conversation memory: Redis (fast) with DB fallback
 try:
