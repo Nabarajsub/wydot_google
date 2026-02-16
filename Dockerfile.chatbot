@@ -32,6 +32,12 @@ COPY utils/ utils/
 # Copy configuration and static assets (CRITICAL for design)
 COPY .chainlit/ .chainlit/
 COPY public/ public/
+COPY chainlit.md .
+
+# Pre-create directories that Chainlit tries to mkdir at import time.
+# Cloud Run has a read-only filesystem, so these must exist in the image.
+# Chainlit config.py line 60: FILES_DIRECTORY = Path(APP_ROOT) / ".files"
+RUN mkdir -p /app/.files /tmp/.files /tmp/.chainlit
 
 # Expose port
 EXPOSE 8080
