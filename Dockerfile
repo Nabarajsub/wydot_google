@@ -46,4 +46,4 @@ ENV CHAINLIT_STORAGE_PATH=/tmp/.chainlit
 ENV CHAINLIT_FILES_DIRECTORY=/tmp/.files
 
 # Run chainlit DIRECTLY
-CMD ["chainlit", "run", "chatapp.py", "--port", "8080", "--host", "0.0.0.0" "--headless"]
+CMD ["chainlit", "run", "chatapp.py", "--port", "8080", "--host", "0.0.0.0", "--headless"]

@@ -463,23 +463,27 @@ class WydotDataLayer(BaseDataLayer):
 
             msgs = CHAT_DB.get_recent(uid, actual_session_id, MAX_HISTORY_MSGS)
             
-            # Find the message with matching timestamp
+            # Find the message with matching timestamp that has sources
             target_msg = None
             for m in msgs:
+                if not m.get("sources"):
+                    continue
                 m_ts = m.get("ts")
-                # Robust matching
                 if m_ts is not None:
-                    # Clean match (ignoring precision)
-                    if str(int(float(m_ts))) == ts_str or ts_str == "0":
+                    if str(int(float(m_ts))) == ts_str:
                          target_msg = m
-                         print(f"[DEBUG get_element] Found matching message with sources")
+                         print(f"[DEBUG get_element] Found matching message with sources (ts match)")
                          break
-            
+
+            # Fallback for ts_str=="0" or no exact match: find the nth assistant message with sources
             if not target_msg:
-                # Fallback: check cl.user_session if this is a live non-persisted thread
-                # (Though Data Layer's get_element usually applies to persisted items)
-                pass
-            
+                msgs_with_sources = [m for m in msgs if m.get("sources") and m.get("role") == "assistant"]
+                if msgs_with_sources:
+                    # Use the source index to guess which message it belongs to
+                    # For now take the last one (most recent) as a reasonable default
+                    target_msg = msgs_with_sources[-1]
+                    print(f"[DEBUG get_element] Using fallback: last assistant message with sources")
+
             if not target_msg:
                 return None
             
@@ -488,14 +492,18 @@ class WydotDataLayer(BaseDataLayer):
                 return None
             
             src = msg_sources[src_idx]
-            
-            # Reconstruct the element
-            return cl.Text(
-                id=element_id,
-                name=f"Source {src.get('index', '?')}",
-                content=f"**Source {src.get('index', '?')}: {src.get('title', 'Unknown')}**\n\n**File:** [{src.get('source', 'File')}]({src.get('url', '#')})\n**Page:** {src.get('page', 'N/A')}\n**Section:** {src.get('section', 'N/A')}\n**Year:** {src.get('year', 'N/A')}\n\n**Preview:**\n{src.get('preview', '')}",
-                display="side"
-            )
+
+            # Return an ElementDict (plain dict), not a cl.Text object.
+            # Chainlit's data layer get_element() must return a dict.
+            return {
+                "id": element_id,
+                "threadId": thread_id,
+                "type": "text",
+                "name": f"Source {src.get('index', '?')}",
+                "display": "side",
+                "mime": "text/markdown",
+                "content": f"**Source {src.get('index', '?')}: {src.get('title', 'Unknown')}**\n\n**File:** [{src.get('source', 'File')}]({src.get('url', '#')})\n**Page:** {src.get('page', 'N/A')}\n**Section:** {src.get('section', 'N/A')}\n**Year:** {src.get('year', 'N/A')}\n\n**Preview:**\n{src.get('preview', '')}"
+            }
         except Exception as e:
             print(f"[DEBUG get_element] Error: {e}")
             return None
@@ -811,6 +819,9 @@ Transcribe the following audio:""",
 # =========================================================
 # MODELS & RETRIEVAL (cached so we don't reload on every message)
 # =========================================================
+
+_EMBEDDINGS_CACHE = {}
+_VECTOR_STORE_CACHE = {}
 
 # --- Lazy Loaders for Models ---
 
