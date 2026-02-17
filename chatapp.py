@@ -95,12 +95,11 @@ async def verify_code(req: VerifyReq):
         return JSONResponse(status_code=500, content={"error": "Database not initialized"})
     
     try:
-        conn = CHAT_DB._get_conn()
-        with conn.cursor() as cur:
-            # Mark as verified in DB
-            cur.execute("UPDATE users SET verified = 1 WHERE email = %s", (req.email,))
-            conn.commit()
-            print(f"✅ [API] User {req.email} verified.")
+        user = CHAT_DB.get_user_by_email(req.email)
+        if not user:
+            return JSONResponse(status_code=404, content={"error": "User not found"})
+        CHAT_DB.set_verified(user["id"])
+        print(f"✅ [API] User {req.email} verified.")
         return {"status": "success", "message": "Account verified!"}
     except Exception as e:
         print(f"🔥 [API] Verification error: {e}")

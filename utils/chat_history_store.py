@@ -203,6 +203,19 @@ class SQLiteChatHistoryStore(BaseChatHistoryStore):
         """)
         self._conn.commit()
 
+        # Seed guest user if not exists (same as CloudSQLChatHistoryStore)
+        try:
+            cur = self._conn.execute("SELECT id FROM users WHERE email='guest@app.local'")
+            if not cur.fetchone():
+                self._conn.execute(
+                    "INSERT INTO users (email, password_hash, display_name, verified) VALUES (?, ?, ?, 1)",
+                    ("guest@app.local", pbkdf2_hash("guest"), "Guest User"),
+                )
+                self._conn.commit()
+                print("✅ Guest user seeded in SQLite.")
+        except Exception as e:
+            print(f"⚠️ Guest user seeding failed: {e}")
+
     def authenticate(self, email: str, password: str) -> Tuple[Optional[int], Optional[str]]:
         email = (email or "").strip().lower()
         with self._lock:
@@ -857,6 +870,15 @@ class CloudSQLChatHistoryStore(BaseChatHistoryStore):
         finally:
             conn.close()
             
+    def set_verified(self, user_id: int) -> None:
+        conn = self._get_conn()
+        try:
+            with conn.cursor() as cur:
+                cur.execute("UPDATE users SET verified=1 WHERE id=%s", (user_id,))
+            conn.commit()
+        finally:
+            conn.close()
+
     def is_verified(self, user_id: int) -> bool:
         conn = self._get_conn()
         try:
