@@ -19,8 +19,6 @@ spec:
           value: /etc/secrets/.env
         - name: DATABASE_URL
           value: ""
-        - name: PORT
-          value: "8080"
         - name: TELEMETRY_DB_PATH
           value: /tmp/telemetry.sqlite3
         - name: EVAL_DB_PATH
