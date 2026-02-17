@@ -41,6 +41,9 @@ google-genai>=0.3.0
 google-auth>=2.29
 google-cloud-storage
 
+# HTTP Client (for OpenRouter streaming)
+httpx>=0.27.0
+
 # System / Serialization
 protobuf>=4.25,<6
 grpcio>=1.62

@@ -17,8 +17,10 @@ print(f"📍 Current Working Directory: {os.getcwd()}", flush=True)
 print(f"🛠️ K_SERVICE Detection: {os.getenv('K_SERVICE', 'Not in Cloud Run')}", flush=True)
 print(f"📦 PORT: {os.getenv('PORT', 'Not Set')}", flush=True)
 
-# Preserve Cloud Run's PORT=8080 before .env loading can overwrite it
+# Preserve Cloud Run env vars before .env loading can overwrite them
 _cloud_run_port = os.getenv("PORT") if os.getenv("K_SERVICE") else None
+# DATABASE_URL="" in YAML forces SQLite; don't let .env overwrite it with PostgreSQL URL
+_cloud_run_db_url = os.environ.get("DATABASE_URL") if os.getenv("K_SERVICE") else None
 
 # Create temp directories at runtime (Cloud Run may reset /tmp between requests)
 import os as _os
@@ -226,10 +228,13 @@ else:
     print(f"⚠️ DOTENV_PATH not found: {dotenv_path}, trying default .env")
     load_dotenv(override=True)
 
-# Restore Cloud Run PORT if .env overwrote it
+# Restore Cloud Run env vars if .env overwrote them
 if _cloud_run_port:
     os.environ["PORT"] = _cloud_run_port
     print(f"🔒 PORT restored to Cloud Run value: {_cloud_run_port}")
+if _cloud_run_db_url is not None:
+    os.environ["DATABASE_URL"] = _cloud_run_db_url
+    print(f"🔒 DATABASE_URL restored to Cloud Run value: '{_cloud_run_db_url}' (empty=SQLite)")
 
 print("🔑 Validating Authentication...")
 # Enable login screen: Chainlit only shows auth when CHAINLIT_AUTH_SECRET is set
