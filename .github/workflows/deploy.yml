@@ -11,7 +11,6 @@ on:
 env:
   PROJECT_ID: ${{ secrets.GCP_PROJECT }}
   REGION: ${{ secrets.GCP_LOCATION || 'us-central1' }}
-  # Matches user's existing "apps" repo pattern in "us" multi-region
   GAR_LOCATION: us-docker.pkg.dev/${{ secrets.GCP_PROJECT }}/apps
 
 jobs:
@@ -25,7 +24,7 @@ jobs:
       - name: Checkout
         uses: actions/checkout@v4
 
-      # Authenticate using Workload Identity (using the SA you just created)
+      # Authenticate using Workload Identity
       - id: 'auth'
         name: 'Authenticate to Google Cloud'
         uses: 'google-github-actions/auth@v2'
@@ -33,10 +32,15 @@ jobs:
           workload_identity_provider: ${{ secrets.WIF_PROVIDER }}
           service_account: github-deployer@${{ secrets.GCP_PROJECT }}.iam.gserviceaccount.com
 
-      # Authenticate Docker to Artifact Registry (us-docker)
+      # Set up gcloud CLI (required for gcloud run services replace)
+      - name: 'Set up Cloud SDK'
+        uses: 'google-github-actions/setup-gcloud@v2'
+        with:
+          project_id: ${{ secrets.GCP_PROJECT }}
+
+      # Authenticate Docker to Artifact Registry
       - name: 'Docker Auth'
-        run: |-
-          gcloud auth configure-docker us-docker.pkg.dev --quiet
+        run: gcloud auth configure-docker us-docker.pkg.dev --quiet
 
       # 1. Build and Push Chatbot
       - name: 'Build and Push Chatbot'
@@ -56,28 +60,29 @@ jobs:
           docker build -t "${{ env.GAR_LOCATION }}/wydot-embeddings:${{ github.sha }}" ./deploy/embeddings
           docker push "${{ env.GAR_LOCATION }}/wydot-embeddings:${{ github.sha }}"
 
-      # 4. Deploy Chatbot to Cloud Run
+      # 4. Deploy Chatbot via Knative YAML (matches working flash-cloud pattern)
+      - name: 'Prepare Chatbot YAML'
+        run: |-
+          IMAGE="${{ env.GAR_LOCATION }}/wydot-chatbot:${{ github.sha }}"
+          sed -e "s|\${PROJECT_ID}|${{ env.PROJECT_ID }}|g" \
+              -e "s|\${IMAGE}|${IMAGE}|g" \
+              cloudrun/chatbot.yaml > /tmp/chatbot-deploy.yaml
+          echo "=== Rendered YAML ==="
+          cat /tmp/chatbot-deploy.yaml
+
       - name: 'Deploy Chatbot'
-        uses: 'google-github-actions/deploy-cloudrun@v2'
-        with:
-          service: 'wydot-chatbot'
-          image: '${{ env.GAR_LOCATION }}/wydot-chatbot:${{ github.sha }}'
-          region: ${{ env.REGION }}
-          flags: '--allow-unauthenticated --memory 4Gi --cpu 4 --timeout=300 --cpu-boost'
-          env_vars: |
-            CHAINLIT_AUTH_SECRET=${{ secrets.CHAINLIT_AUTH_SECRET }}
-            MISTRAL_API_KEY=${{ secrets.MISTRAL_API_KEY }}
-            GEMINI_API_KEY=${{ secrets.GEMINI_API_KEY }}
-            NEO4J_URI=${{ secrets.NEO4J_URI }}
-            NEO4J_USERNAME=${{ secrets.NEO4J_USERNAME }}
-            NEO4J_PASSWORD=${{ secrets.NEO4J_PASSWORD }}
-            CHAINLIT_FILES_DIRECTORY=/tmp/.files
-            CHAINLIT_DB_FILE=/tmp/chainlit.db
-            TELEMETRY_DB_PATH=/tmp/telemetry.sqlite3
-            EVAL_DB_PATH=/tmp/evaluation.sqlite3
-            CHAT_DB_PATH=/tmp/chat_history.sqlite3
-            HF_HOME=/app/model_cache
-            HOME=/tmp
+        run: |-
+          gcloud run services replace /tmp/chatbot-deploy.yaml \
+            --region="${{ env.REGION }}" \
+            --project="${{ env.PROJECT_ID }}"
+
+      - name: 'Allow Unauthenticated Access to Chatbot'
+        run: |-
+          gcloud run services add-iam-policy-binding wydot-chatbot \
+            --region="${{ env.REGION }}" \
+            --project="${{ env.PROJECT_ID }}" \
+            --member="allUsers" \
+            --role="roles/run.invoker"
 
       # 5. Deploy Admin to Cloud Run
       - name: 'Deploy Admin'
@@ -94,4 +99,3 @@ jobs:
             EVAL_DB_PATH=/tmp/evaluation.sqlite3
             CHAT_DB_PATH=/tmp/chat_history.sqlite3
             HF_HOME=/tmp/huggingface-cache
-#python3 -m pip install --no-cache-dir torch torchvision torchaudio --index-url https://download.pytorch.org/whl/cpu
