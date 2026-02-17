@@ -33,8 +33,15 @@ except ImportError:
     pass
 
 logging.getLogger("pypdf").setLevel(logging.ERROR)
-load_dotenv(os.path.join(os.path.dirname(__file__), "..", ".env"))
-load_dotenv()
+
+# Load environment: DOTENV_PATH (set by Cloud Run YAML) takes priority, then local .env
+_dotenv_path = os.getenv("DOTENV_PATH", os.path.join(os.path.dirname(__file__), "..", ".env"))
+if os.path.exists(_dotenv_path):
+    print(f"📂 Loading environment from: {_dotenv_path}")
+    load_dotenv(_dotenv_path, override=True)
+else:
+    print(f"⚠️ DOTENV_PATH not found: {_dotenv_path}, trying default .env")
+    load_dotenv(override=True)
 
 # Optional GCP logging (only in cloud)
 try:
