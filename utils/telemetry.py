@@ -31,7 +31,8 @@ def _get_conn():
             clean_url = db_url.replace("postgresql+psycopg2://", "postgresql://")
             _conn = psycopg2.connect(clean_url)
             # Create table with Postgres syntax
-            with _conn.cursor() as cur:
+            cur = _conn.cursor()
+            try:
                 cur.execute("""
                     CREATE TABLE IF NOT EXISTS request_metrics (
                         id TEXT PRIMARY KEY,
@@ -49,6 +50,8 @@ def _get_conn():
                         has_error INTEGER DEFAULT 0
                     )
                 """)
+            finally:
+                cur.close()
             _conn.commit()
             return _conn
         except Exception as e:
@@ -113,7 +116,8 @@ def record_request(
         try:
             with _lock:
                 c = _get_conn()
-                with c.cursor() as cur:
+                cur = c.cursor()
+                try:
                     cur.execute(
                         """INSERT INTO request_metrics (
                             id, ts, user_id, thread_id, session_id, model_used, index_used,
@@ -136,6 +140,8 @@ def record_request(
                             1 if has_error else 0,
                         ),
                     )
+                finally:
+                    cur.close()
                 c.commit()
         except Exception:
             try:
@@ -154,7 +160,8 @@ def get_recent_metrics(limit: int = 100):
     try:
         with _lock:
             c = _get_conn()
-            with c.cursor() as cur:
+            cur = c.cursor()
+            try:
                 cur.execute(
                     f"SELECT * FROM request_metrics ORDER BY ts DESC LIMIT {_get_placeholder()}",
                     (limit,),
@@ -162,6 +169,8 @@ def get_recent_metrics(limit: int = 100):
                 rows = cur.fetchall()
                 cols = [d[0] for d in cur.description]
                 return [dict(zip(cols, r)) for r in rows]
+            finally:
+                cur.close()
     except Exception:
         return []
 
@@ -173,11 +182,14 @@ def get_latency_stats() -> dict:
             # SQLite specific approximation for P50/95/99 using ORDER BY + LIMIT/OFFSET
             # For simplicity, we'll fetch all non-error latencies and compute in Python
             # unless the dataset is huge (metrics are small rows, should be fine for <100k rows)
-            with c.cursor() as cur:
+            cur = c.cursor()
+            try:
                 cur.execute(
                     "SELECT total_latency_ms, retrieval_latency_ms, generation_latency_ms FROM request_metrics WHERE has_error=0 ORDER BY total_latency_ms ASC"
                 )
                 rows = cur.fetchall()
+            finally:
+                cur.close()
             
             if not rows:
                 return {"count": 0, "avg": 0, "p50": 0, "p95": 0, "p99": 0,
@@ -226,7 +238,8 @@ def get_timeseries(interval_hours: int = 1) -> list:
                 ORDER BY bucket_ts ASC
                 LIMIT 100
             """
-            with c.cursor() as cur:
+            cur = c.cursor()
+            try:
                 cur.execute(sql)
                 rows = cur.fetchall()
                 return [
@@ -238,6 +251,8 @@ def get_timeseries(interval_hours: int = 1) -> list:
                     }
                     for r in rows
                 ]
+            finally:
+                cur.close()
     except Exception:
         return []
 
@@ -256,7 +271,8 @@ def get_model_comparison() -> list:
                 FROM request_metrics
                 GROUP BY model_used
             """
-            with c.cursor() as cur:
+            cur = c.cursor()
+            try:
                 cur.execute(sql)
                 rows = cur.fetchall()
                 return [
@@ -269,5 +285,7 @@ def get_model_comparison() -> list:
                     }
                     for r in rows
                 ]
+            finally:
+                cur.close()
     except Exception:
         return []

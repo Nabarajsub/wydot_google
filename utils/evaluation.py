@@ -42,7 +42,8 @@ def _get_conn():
             # Strip SQLAlchemy dialect prefix — psycopg2 needs plain libpq format
             clean_url = db_url.replace("postgresql+psycopg2://", "postgresql://")
             _conn = psycopg2.connect(clean_url)
-            with _conn.cursor() as cur:
+            cur = _conn.cursor()
+            try:
                 # 1. Online Validation Table
                 cur.execute("""
                     CREATE TABLE IF NOT EXISTS online_evals (
@@ -82,6 +83,8 @@ def _get_conn():
                         details_json TEXT
                     )
                 """)
+            finally:
+                cur.close()
             _conn.commit()
             return _conn
         except Exception as e:
@@ -234,13 +237,16 @@ async def run_offline_evaluation(search_func, generate_func) -> Dict:
     try:
         with _lock:
             c = _get_conn()
-            ph = _get_placeholder()
-            with c.cursor() as cur:
+            cur = c.cursor()
+            try:
+                ph = _get_placeholder()
                 cur.execute(
                     f"INSERT INTO offline_runs (id, ts, total_score, details_json) VALUES ({ph}, {ph}, {ph}, {ph})",
                     (run_id, time.time(), round(avg_score, 2), json.dumps(results))
                 )
-            c.commit()
+                c.commit()
+            finally:
+                cur.close()
     except Exception as e:
         logger.error(f"Error saving offline eval: {e}")
 
@@ -255,9 +261,12 @@ def get_latest_offline_result() -> Optional[Dict]:
     try:
         with _lock:
             c = _get_conn()
-            with c.cursor() as cur:
+            cur = c.cursor()
+            try:
                 cur.execute("SELECT ts, total_score, details_json FROM offline_runs ORDER BY ts DESC LIMIT 1")
                 row = cur.fetchone()
+            finally:
+                cur.close()
             if row:
                 return {
                     "ts": row[0],
@@ -315,7 +324,8 @@ def record_online_eval(
                 c = _get_conn()
                 # Insert row
                 ph = _get_placeholder()
-                with c.cursor() as cur:
+                cur = c.cursor()
+                try:
                     cur.execute(f"""
                         INSERT INTO online_evals (
                             id, ts, session_id, question, answer, context, 
@@ -328,7 +338,9 @@ def record_online_eval(
                         answer_relevancy, context_utilization, completeness, 
                         1 if has_error else 0
                     ))
-                c.commit()
+                    c.commit()
+                finally:
+                    cur.close()
                 
                 # Aggregate on every request for real-time dashboard updates
                 _aggregate_last_10(c)
@@ -383,12 +395,15 @@ def get_online_stats() -> Dict:
     try:
         with _lock:
             c = _get_conn()
-            with c.cursor() as cur:
+            cur = c.cursor()
+            try:
                 cur.execute("""
                     SELECT avg_relevancy, avg_utilization, avg_completeness, error_rate 
                     FROM online_aggregates ORDER BY id DESC LIMIT 1
                 """)
                 row = cur.fetchone()
+            finally:
+                cur.close()
             if row:
                 return {
                     "relevancy": round(row[0], 2),
@@ -398,12 +413,15 @@ def get_online_stats() -> Dict:
                 }
             
             # Fallback to raw average of all time if no aggregates yet
-            with c.cursor() as cur:
+            cur = c.cursor()
+            try:
                 cur.execute("""
                     SELECT AVG(answer_relevancy), AVG(context_utilization), AVG(completeness), AVG(has_error)
                     FROM online_evals
                 """)
                 row = cur.fetchone()
+            finally:
+                cur.close()
             if row and row[0] is not None:
                  return {
                     "relevancy": round(row[0], 2),
@@ -420,12 +438,15 @@ def get_online_trends() -> List[Dict]:
     try:
         with _lock:
             c = _get_conn()
-            with c.cursor() as cur:
+            cur = c.cursor()
+            try:
                 cur.execute("""
                     SELECT ts_end, avg_relevancy, avg_utilization, error_rate 
                     FROM online_aggregates ORDER BY id DESC LIMIT 20
                 """)
                 rows = cur.fetchall()
+            finally:
+                cur.close()
             # Return in chronological order
             return [
                 {
