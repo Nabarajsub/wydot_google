@@ -542,7 +542,9 @@ class CloudSQLChatHistoryStore(BaseChatHistoryStore):
                 self._initializing = False
 
         try:
-            return psycopg2.connect(self.db_url)
+            # Strip SQLAlchemy dialect prefix — psycopg2 needs plain libpq format
+            clean_url = self.db_url.replace("postgresql+psycopg2://", "postgresql://")
+            return psycopg2.connect(clean_url)
         except Exception as e:
             print(f"Db connection failed: {e}")
             raise e
@@ -871,5 +873,7 @@ def get_chat_history_store() -> BaseChatHistoryStore:
     db_url = os.getenv("DATABASE_URL")
     if db_url and db_url.startswith("postgres"):
         return CloudSQLChatHistoryStore(db_url)
-    db_path = os.getenv("CHAT_DB_PATH", os.path.join(os.path.dirname(__file__), "..", "chat_history.sqlite3"))
+    # On Cloud Run, filesystem is read-only except /tmp
+    _default_db = "/tmp/chat_history.sqlite3" if os.getenv("K_SERVICE") else os.path.join(os.path.dirname(__file__), "..", "chat_history.sqlite3")
+    db_path = os.getenv("CHAT_DB_PATH", _default_db)
     return SQLiteChatHistoryStore(db_path)
