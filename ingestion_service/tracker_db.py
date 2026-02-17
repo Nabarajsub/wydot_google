@@ -63,11 +63,14 @@ def load_tracker() -> Dict[str, Any]:
     """Return {"files": [ {...}, ... ]} compatible with existing frontend."""
     with _lock:
         c = _get_conn()
-        with c.cursor() if hasattr(c, "cursor") else c as cur:
+        cur = c.cursor() if hasattr(c, "cursor") else c
+        try:
             cur.execute(
                 "SELECT filename, media_type, chunks, ingested_at, metadata_json FROM ingestion_metadata ORDER BY ingested_at DESC"
             )
             rows = cur.fetchall()
+        finally:
+            if hasattr(cur, "close"): cur.close()
             
     files = []
     for r in rows:
@@ -99,7 +102,8 @@ def add_to_tracker(filename: str, media_type: str, chunks: int, metadata: Option
     
     with _lock:
         c = _get_conn()
-        with c.cursor() if hasattr(c, "cursor") else c as cur:
+        cur = c.cursor() if hasattr(c, "cursor") else c
+        try:
             if is_postgres:
                 cur.execute(
                     """INSERT INTO ingestion_metadata (filename, media_type, chunks, ingested_at, metadata_json)
@@ -116,12 +120,17 @@ def add_to_tracker(filename: str, media_type: str, chunks: int, metadata: Option
                     (filename, media_type, chunks, datetime.utcnow().isoformat(), meta_json),
                 )
             c.commit()
+        finally:
+            if hasattr(cur, "close"): cur.close()
 
 
 def remove_from_tracker(filename: str) -> None:
     ph = _get_placeholder()
     with _lock:
         c = _get_conn()
-        with c.cursor() if hasattr(c, "cursor") else c as cur:
+        cur = c.cursor() if hasattr(c, "cursor") else c
+        try:
             cur.execute(f"DELETE FROM ingestion_metadata WHERE filename = {ph}", (filename,))
             c.commit()
+        finally:
+            if hasattr(cur, "close"): cur.close()
