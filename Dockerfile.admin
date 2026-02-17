@@ -14,9 +14,11 @@ RUN apt-get update && apt-get install -y \
 
 # Install dependencies
 COPY requirements.txt .
-# Install CPU-only torch first to avoid downloading huge GPU libs
+# Install CPU-only torch first to avoid downloading huge GPU libs (~200MB vs ~2GB)
 RUN pip install --no-cache-dir torch torchvision torchaudio --index-url https://download.pytorch.org/whl/cpu
-RUN pip install --no-cache-dir -r requirements.txt
+# Install remaining deps but skip torch (already installed as CPU-only above)
+RUN grep -v -E '^torch(vision|audio)?>=' requirements.txt > /tmp/requirements-no-torch.txt \
+    && pip install --no-cache-dir -r /tmp/requirements-no-torch.txt
 
 # Copy application code
 COPY ingestion_service/ ingestion_service/
