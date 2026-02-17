@@ -34,6 +34,9 @@ except ImportError:
 
 logging.getLogger("pypdf").setLevel(logging.ERROR)
 
+# Preserve Cloud Run env vars before .env loading can overwrite them
+_cloud_run_db_url = os.environ.get("DATABASE_URL") if os.getenv("K_SERVICE") else None
+
 # Load environment: DOTENV_PATH (set by Cloud Run YAML) takes priority, then local .env
 _dotenv_path = os.getenv("DOTENV_PATH", os.path.join(os.path.dirname(__file__), "..", ".env"))
 if os.path.exists(_dotenv_path):
@@ -42,6 +45,11 @@ if os.path.exists(_dotenv_path):
 else:
     print(f"⚠️ DOTENV_PATH not found: {_dotenv_path}, trying default .env")
     load_dotenv(override=True)
+
+# Restore Cloud Run DATABASE_URL if .env overwrote it (empty string = SQLite mode)
+if _cloud_run_db_url is not None:
+    os.environ["DATABASE_URL"] = _cloud_run_db_url
+    print(f"🔒 DATABASE_URL restored to Cloud Run value: '{_cloud_run_db_url}'")
 
 # Optional GCP logging (only in cloud)
 try:
