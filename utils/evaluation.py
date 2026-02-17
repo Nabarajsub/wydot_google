@@ -39,7 +39,9 @@ def _get_conn():
     if db_url and db_url.startswith("postgres"):
         import psycopg2
         try:
-            _conn = psycopg2.connect(db_url)
+            # Strip SQLAlchemy dialect prefix — psycopg2 needs plain libpq format
+            clean_url = db_url.replace("postgresql+psycopg2://", "postgresql://")
+            _conn = psycopg2.connect(clean_url)
             with _conn.cursor() as cur:
                 # 1. Online Validation Table
                 cur.execute("""
