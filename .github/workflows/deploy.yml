@@ -84,18 +84,26 @@ jobs:
             --member="allUsers" \
             --role="roles/run.invoker"
 
-      # 5. Deploy Admin to Cloud Run
+      # 5. Deploy Admin via Knative YAML (matches chatbot pattern)
+      - name: 'Prepare Admin YAML'
+        run: |-
+          IMAGE="${{ env.GAR_LOCATION }}/wydot-admin:${{ github.sha }}"
+          sed -e "s|\${PROJECT_ID}|${{ env.PROJECT_ID }}|g" \
+              -e "s|\${IMAGE}|${IMAGE}|g" \
+              cloudrun/admin.yaml > /tmp/admin-deploy.yaml
+          echo "=== Rendered Admin YAML ==="
+          cat /tmp/admin-deploy.yaml
+
       - name: 'Deploy Admin'
-        uses: 'google-github-actions/deploy-cloudrun@v2'
-        with:
-          service: 'wydot-admin'
-          image: '${{ env.GAR_LOCATION }}/wydot-admin:${{ github.sha }}'
-          region: ${{ env.REGION }}
-          flags: '--allow-unauthenticated --memory 1Gi --cpu 1'
-          env_vars: |
-            MISTRAL_API_KEY=${{ secrets.MISTRAL_API_KEY }}
-            GEMINI_API_KEY=${{ secrets.GEMINI_API_KEY }}
-            TELEMETRY_DB_PATH=/tmp/telemetry.sqlite3
-            EVAL_DB_PATH=/tmp/evaluation.sqlite3
-            CHAT_DB_PATH=/tmp/chat_history.sqlite3
-            HF_HOME=/tmp/huggingface-cache
+        run: |-
+          gcloud run services replace /tmp/admin-deploy.yaml \
+            --region="${{ env.REGION }}" \
+            --project="${{ env.PROJECT_ID }}"
+
+      - name: 'Allow Unauthenticated Access to Admin'
+        run: |-
+          gcloud run services add-iam-policy-binding wydot-admin \
+            --region="${{ env.REGION }}" \
+            --project="${{ env.PROJECT_ID }}" \
+            --member="allUsers" \
+            --role="roles/run.invoker"

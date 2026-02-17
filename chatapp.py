@@ -55,11 +55,13 @@ import traceback
 import urllib.parse
 from dotenv import load_dotenv
 
+import httpx
 import chainlit as cl
-from chainlit.input_widget import Select, Switch
+from chainlit.input_widget import Select, Switch, Slider
 from fastapi import Request, HTTPException
 from fastapi.responses import JSONResponse, PlainTextResponse
 from pydantic import BaseModel
+from flashrank import Ranker, RerankRequest
 
 # GraphRAG / LangChain imports
 # Heavy imports moved to lazy loaders below to prevent Cloud Run startup timeouts
@@ -219,10 +221,10 @@ def generate_public_url(gcs_uri: str) -> str:
 dotenv_path = os.getenv("DOTENV_PATH", ".env")
 if os.path.exists(dotenv_path):
     print(f"📂 Loading environment from: {dotenv_path}")
-    load_dotenv(dotenv_path, override=False)  # Never override existing env vars
+    load_dotenv(dotenv_path, override=True)  # Force override for local development
 else:
     print(f"⚠️ DOTENV_PATH not found: {dotenv_path}, trying default .env")
-    load_dotenv(override=False)
+    load_dotenv(override=True)
 
 # Restore Cloud Run PORT if .env overwrote it
 if _cloud_run_port:
@@ -249,12 +251,47 @@ NEO4J_INDEX_2021 = os.getenv("NEO4J_INDEX_2021", "wydot_vector_index_2021")
 print("💬 Initializing API Keys...")
 MISTRAL_API_KEY = os.getenv("MISTRAL_API_KEY")
 GEMINI_API_KEY = os.getenv("GEMINI_API_KEY")
+OPENROUTER_API_KEY = os.getenv("OPENROUTER_API_KEY")
+
+# Mapping of model names (UI) to OpenRouter IDs
+OPENROUTER_MODELS = {
+    "GPT-5.2 Pro": "openai/gpt-5.2-pro",
+    "GPT-5.2 Chat": "openai/gpt-5.2-chat",
+    "Claude Opus 4.6": "anthropic/claude-opus-4.6",
+    "Claude Sonnet 4.6": "anthropic/claude-sonnet-4.6",
+    "Gemini 3 Flash": "google/gemini-3-flash",
+    "MiniMax M2.5": "minimax/minimax-m2.5",
+    "Step 3.5 Flash": "stepfun/step-3.5-flash",
+    "Llama 3.1 405B": "meta-llama/llama-3.1-405b-instruct",
+    "Llama 3.3 70B": "meta-llama/llama-3.3-70b-instruct",
+    "DeepSeek V3": "deepseek/deepseek-chat-v3",
+    "DeepSeek V3.2 Speciale": "deepseek/deepseek-v3.2-speciale",
+    "DeepSeek Coder V2": "deepseek/deepseek-coder-v2",
+    "Qwen 2.5 72B": "qwen/qwen-2.5-72b-instruct",
+    "Mistral Nemo": "mistralai/mistral-nemo"
+}
+
 MAX_HISTORY_MSGS = 20
 LLM_MODEL = os.getenv("LLM_MODEL", "mistral-large-latest")
 LLM_TEMPERATURE = float(os.getenv("LLM_TEMPERATURE", "0"))
 
-RETRIEVAL_K = int(os.getenv("RETRIEVAL_K", "8"))
-MAX_HISTORY_MSGS = 20
+RETRIEVAL_K = int(os.getenv("RETRIEVAL_K", "10"))
+FETCH_K = int(os.getenv("FETCH_K", "25"))
+
+# Global Ranker Instance (lazy initialization recommended if memory is tight, 
+# but for local we'll go direct)
+_RANKER_INSTANCE = None
+
+def get_reranker():
+    global _RANKER_INSTANCE
+    if _RANKER_INSTANCE is None:
+        try:
+            print("🚀 Initializing FlashRank Ranker...")
+            _RANKER_INSTANCE = Ranker()
+            print("✅ FlashRank Ranker ready.")
+        except Exception as e:
+            print(f"❌ Failed to initialize FlashRank: {e}")
+    return _RANKER_INSTANCE
 
 # Debug: Print configuration (hide password)
 print("=" * 60)
@@ -267,6 +304,9 @@ print(f"  Index: {NEO4J_INDEX_DEFAULT}")
 print(f"🔧 API KEYS:")
 print(f"  MISTRAL_API_KEY: {'SET' if MISTRAL_API_KEY else 'NOT SET'}")
 print(f"  GEMINI_API_KEY: {'SET' if GEMINI_API_KEY else 'NOT SET'}")
+print(f"  OPENROUTER_API_KEY: {'SET' if OPENROUTER_API_KEY else 'NOT SET'}")
+if OPENROUTER_API_KEY:
+    print(f"  OPENROUTER_API_KEY (debug): {str(OPENROUTER_API_KEY)[:8]}...")
 print("=" * 60)
 
 # =========================================================
@@ -731,7 +771,7 @@ async def on_chat_resume(thread: Dict):
                 Select(
                     id="model",
                     label="Model",
-                    values=["Mistral Large", "Gemini 2.5 Flash"],
+                    values=["Mistral Large", "Gemini 2.5 Flash"] + list(OPENROUTER_MODELS.keys()),
                     initial_index=0,
                 ),
                 Select(
@@ -742,6 +782,7 @@ async def on_chat_resume(thread: Dict):
                 ),
                 Switch(id="thinking_mode", label="Thinking Mode (Slower, Detailed)", initial=False),
                 Switch(id="multihop", label="Multi-hop Reasoning", initial=False),
+                Slider(id="fetch_k", label="Initial Candidates (FETCH_K)", min=10, max=100, step=5, initial=25),
             ]
         ).send()
         cl.user_session.set("settings", settings)
@@ -975,24 +1016,19 @@ def get_embeddings_model(use_gemini: bool = False):
             import google.generativeai as genai
             return genai.embed_content(model=self.model, content=text, task_type="retrieval_query")['embedding']
     """Load embeddings once and reuse."""
-    # check for vertex endpoint override first
-    vertex_ep = os.getenv("VERTEX_EMBEDDING_ENDPOINT")
+    # Priority: Force local sentence-transformers as requested
+    # We ignore use_gemini and vertex_ep if we want to be strict, 
+    # but let's just make 'huggingface' the default and primary choice.
     
-    key = "gemini" if use_gemini else ("vertex" if vertex_ep else "huggingface")
-    
+    key = "huggingface"
     if key in _EMBEDDINGS_CACHE:
         return _EMBEDDINGS_CACHE[key]
 
-    if use_gemini and GEMINI_API_KEY:
-        _EMBEDDINGS_CACHE[key] = GeminiEmbeddings(GEMINI_API_KEY)
-    elif vertex_ep:
-        print(f"🔄 Using Vertex AI Embeddings Endpoint: {vertex_ep}")
-        _EMBEDDINGS_CACHE[key] = VertexCustomEmbeddings(vertex_ep)
-    else:
-        print("🔄 Loading embeddings model (local)...")
-        from langchain_huggingface import HuggingFaceEmbeddings
-        _EMBEDDINGS_CACHE[key] = HuggingFaceEmbeddings(model_name="all-MiniLM-L6-v2")
-        print("✅ Embeddings model cached.")
+    print("🔄 Loading sentence-transformer model (all-MiniLM-L6-v2)...")
+    from langchain_huggingface import HuggingFaceEmbeddings
+    _EMBEDDINGS_CACHE[key] = HuggingFaceEmbeddings(model_name="all-MiniLM-L6-v2")
+    print("✅ Embeddings model cached.")
+    return _EMBEDDINGS_CACHE[key]
     return _EMBEDDINGS_CACHE[key]
 
 def get_retriever(index_name: str, use_gemini: bool = False):
@@ -1002,6 +1038,11 @@ def get_retriever(index_name: str, use_gemini: bool = False):
     try:
         from langchain_neo4j import Neo4jVector
         embeds = get_embeddings_model(use_gemini)
+        
+        # Hybrid Search: Neo4j allows combining vector with keyword search
+        # We can implement this by providing a search_type="hybrid" if the provider supports it,
+        # or by customizing the retrieval query.
+        
         retriever = Neo4jVector.from_existing_index(
             embeds,
             url=NEO4J_URI,
@@ -1012,24 +1053,71 @@ def get_retriever(index_name: str, use_gemini: bool = False):
             node_label="Chunk",
             text_node_property="text",
             embedding_node_property="embedding"
-        ).as_retriever(search_kwargs={"k": RETRIEVAL_K})
+        ).as_retriever(search_kwargs={"k": FETCH_K})
+        
         _VECTOR_STORE_CACHE[cache_key] = retriever
         return retriever
     except Exception as e:
-        print(f"Retriever error: {e}")
-        return None
+        print(f"Retriever error: {e}. Falling back to standard vector search.")
+        try:
+            from langchain_neo4j import Neo4jVector
+            embeds = get_embeddings_model(use_gemini)
+            retriever = Neo4jVector.from_existing_index(
+                embeds,
+                url=NEO4J_URI,
+                username=NEO4J_USERNAME,
+                password=NEO4J_PASSWORD,
+                database=NEO4J_DATABASE,
+                index_name=index_name,
+                node_label="Chunk",
+                text_node_property="text",
+                embedding_node_property="embedding"
+            ).as_retriever(search_kwargs={"k": FETCH_K})
+            _VECTOR_STORE_CACHE[cache_key] = retriever
+            return retriever
+        except:
+            return None
+
+def get_neighbors(source_file: str, section: str, count: int = 1) -> str:
+    """Fetch adjacent chunks from the same document section for more context."""
+    if not source_file or not section:
+        return ""
+    try:
+        from neo4j import GraphDatabase
+        driver = GraphDatabase.driver(NEO4J_URI, auth=(NEO4J_USERNAME, NEO4J_PASSWORD))
+        with driver.session(database=NEO4J_DATABASE) as session:
+            # Simple query to get chunks from same source and section
+            # assuming 'source' and 'section' are properties on Chunk nodes
+            query = """
+            MATCH (c:Chunk {source: $source, section: $section})
+            RETURN c.text as text
+            LIMIT $limit
+            """
+            result = session.run(query, source=source_file, section=section, limit=count)
+            texts = [record["text"] for record in result]
+            return "\n".join(texts)
+    except Exception as e:
+        print(f"Error fetching neighbors: {e}")
+        return ""
 
 
 async def search_graph_async(query: str, index_name: str, use_gemini: bool = False) -> Tuple[str, List[Dict]]:
     ret = get_retriever(index_name, use_gemini)
     if not ret: return "", []
+    # Use session setting for FETCH_K if available
+    settings = cl.user_session.get("settings") or {}
+    k_val = int(settings.get("fetch_k", FETCH_K))
+    
     try:
         # Use ainvoke if available, otherwise run in thread
         if hasattr(ret, "ainvoke"):
+            # Set k to k_val for initial retrieval
+            ret.search_kwargs["k"] = k_val
             docs = await ret.ainvoke(query)
         else:
             # Fallback for older LangChain versions or synchronous retrievers
             import asyncio
+            ret.search_kwargs["k"] = k_val
             docs = await asyncio.to_thread(ret.invoke, query)
             
         chunks, sources = [], []
@@ -1072,6 +1160,48 @@ async def search_graph_async(query: str, index_name: str, use_gemini: bool = Fal
                 public_url += f"#page={page}"
                 
             sources[-1]["url"] = public_url
+
+        # --- FlashRank Reranking ---
+        if chunks:
+            ranker = get_reranker()
+            if ranker:
+                try:
+                    # Prepare format for FlashRank
+                    passages = [
+                        {"id": i, "text": doc.page_content, "meta": doc.metadata} 
+                        for i, doc in enumerate(docs)
+                    ]
+                    
+                    rerank_request = RerankRequest(query=query, passages=passages)
+                    results = ranker.rerank(rerank_request)
+                    
+                    # Select Top K
+                    top_results = results[:RETRIEVAL_K]
+                    
+                    # Reconstruct chunks and sources from top results
+                    reranked_chunks = []
+                    reranked_sources = []
+                    
+                    for i, res in enumerate(top_results):
+                        idx = res['id']
+                        s_info = sources[idx]
+                        s_info.update({"index": i + 1, "id": f"source_{i+1}", "score": f"{res['score']:.2f}"})
+                        reranked_sources.append(s_info)
+                        
+                        # Re-read page_content from 'passages' since we have ID
+                        content = str(passages[idx]['text'])
+                        
+                        # Enhancement: Graph-aware context expansion (Pulling in neighbors)
+                        neighbors = get_neighbors(s_info.get("source"), s_info.get("section"), count=1)
+                        if neighbors and neighbors.strip() not in content:
+                             content += "\n--- Additional Context from same Section ---\n" + neighbors
+                        
+                        reranked_chunks.append(f"[SOURCE_{i+1}]\n{content}")
+                    
+                    return "\n\n".join(reranked_chunks), reranked_sources
+                except Exception as e:
+                    print(f"Reranking failed, falling back to vector results: {e}")
+
         return "\n\n".join(chunks), sources
     except Exception as e:
         print(f"Search error: {e}")
@@ -1082,6 +1212,7 @@ def search_graph(query: str, index_name: str, use_gemini: bool = False) -> Tuple
     ret = get_retriever(index_name, use_gemini)
     if not ret: return "", []
     try:
+        ret.search_kwargs["k"] = FETCH_K
         docs = ret.invoke(query)
         chunks, sources = [], []
         for i, doc in enumerate(docs):
@@ -1101,13 +1232,126 @@ def search_graph(query: str, index_name: str, use_gemini: bool = False) -> Tuple
                 "page": meta.get("page", ""),
                 "preview": doc.page_content[:300]
             })
-            # Generate public URL logic omitted for brevity in sync fallback to avoid duplication, or strictly copy if needed.
-            # For now, simplistic fallback:
             sources[-1]["url"] = "#"
+
+        # --- FlashRank Reranking ---
+        if chunks:
+            ranker = get_reranker()
+            if ranker:
+                try:
+                    passages = [{"id": i, "text": doc.page_content, "meta": doc.metadata} for i, doc in enumerate(docs)]
+                    rerank_request = RerankRequest(query=query, passages=passages)
+                    results = ranker.rerank(rerank_request)
+                    top_results = results[:RETRIEVAL_K]
+                    
+                    reranked_chunks, reranked_sources = [], []
+                    for i, res in enumerate(top_results):
+                        idx = res['id']
+                        s_info = sources[idx]
+                        s_info.update({"index": i + 1, "id": f"source_{i+1}", "score": f"{res['score']:.2f}"})
+                        reranked_sources.append(s_info)
+                        
+                        content = str(passages[idx]['text'])
+                        
+                        # Enhancement: Graph-aware context expansion
+                        neighbors = get_neighbors(str(s_info.get("source")), str(s_info.get("section")), count=1)
+                        if neighbors and neighbors.strip() not in content:
+                             content += "\n--- Additional Context from same Section ---\n" + neighbors
+                             
+                        reranked_chunks.append(f"[SOURCE_{i+1}]\n{content}")
+                    return "\n\n".join(reranked_chunks), reranked_sources
+                except Exception as e:
+                    print(f"Sync Reranking failed: {e}")
+
         return "\n\n".join(chunks), sources
     except Exception as e:
         print(f"Search error: {e}")
         return "", []
+
+async def decompose_query(query: str, model_type: str = "mistral") -> List[str]:
+    decomposition_prompt = f"""Break down this complex question into 2-3 simpler sub-questions that need to be answered to fully address the main question.
+
+Main Question: {query}
+
+Provide the sub-questions as a numbered list, one per line. Be concise. Do NOT add any preamble.
+"""
+    try:
+        if model_type == "gemini":
+            model = get_gemini_llm()
+            response = await model.generate_content_async(decomposition_prompt)
+            result = response.text
+        else:
+            from langchain_core.prompts import ChatPromptTemplate
+            from langchain_core.output_parsers import StrOutputParser
+            llm = get_mistral_llm()
+            template = ChatPromptTemplate.from_template("{input_prompt}")
+            chain = template | llm | StrOutputParser()
+            result = await chain.ainvoke({"input_prompt": decomposition_prompt})
+        
+        lines = result.strip().split('\n')
+        sub_queries = []
+        for line in lines:
+            line = line.strip()
+            line = re.sub(r'^\d+[\.\)]\s*', '', line)
+            if line and len(line) > 10:
+                sub_queries.append(line)
+        
+        return sub_queries[:3] if sub_queries else [query]
+    except Exception as e:
+        print(f"Query decomposition failed: {e}")
+        return [query]
+
+async def search_graph_multihop_async(query: str, index_name: str, use_gemini: bool = False) -> Tuple[str, List[Dict]]:
+    model_type = "gemini" if use_gemini else "mistral"
+    sub_queries = await decompose_query(query, model_type)
+    
+    if len(sub_queries) == 1 and sub_queries[0] == query:
+        return await search_graph_async(query, index_name, use_gemini)
+    
+    print(f"🧠 Multi-hop: Decomposed into {sub_queries}")
+    
+    import asyncio
+    tasks = [search_graph_async(sq, index_name, use_gemini) for sq in sub_queries]
+    results = await asyncio.gather(*tasks)
+    
+    all_chunks = []
+    all_sources = []
+    seen_content = set()
+    
+    # Merge results
+    for ctx, sources in results:
+        # ctx is a string of [SOURCE_X] blocs
+        # We need to parse them back or just append them and let ranker handle it
+        # However, search_graph_async already reranks. 
+        # For multihop, we should ideally retrieve from ALL subqueries and then do one FINAL rerank.
+        # But to keep it simple and reuse existing logic, we'll collect the reranked results from each.
+        if ctx:
+            all_chunks.append(ctx)
+        all_sources.extend(sources)
+
+    # De-duplicate sources by title/source/preview
+    unique_sources = []
+    seen_sources = set()
+    for s in all_sources:
+        s_key = (s.get("title"), s.get("source"), s.get("preview", "")[:100])
+        if s_key not in seen_sources:
+            seen_sources.add(s_key)
+            unique_sources.append(s)
+    
+    # Re-index sources for the LLM
+    final_chunks = []
+    for i, s in enumerate(unique_sources[:RETRIEVAL_K]):
+        s["index"] = i + 1
+        s["id"] = f"source_{i+1}"
+        # We don't have the clean page_content easily here without repeating search_graph_async's work
+        # but the search_graph_async returns the top chunks.
+        # Let's just combine the contexts and inform the LLM
+        pass
+
+    # Simplified merge: join all contexts and deduplicate sources
+    combined_context = "\n\n".join(all_chunks)
+    
+    return combined_context, unique_sources[:RETRIEVAL_K]
 
 
 def get_gemini_llm():
@@ -1149,7 +1393,15 @@ Example: "The concrete strength must be 4000 psi [SOURCE_1]. However, other spec
 Do NOT include specific source titles or descriptions in the text. Just use the bracketed identifier.
 """
    
-    prompt = f"""You are a WYDOT expert assistant. Answer based on the context below.
+    prompt = f"""You are a high-level WYDOT expert assistant. 
+    
+Your goal is to provide **comprehensive, accurate, and high-quality answers** based on the provided context.
+Synthesize information from multiple sources to give a complete picture.
+
+PRECISION & FORMATTING:
+1. **Tables**: If the answer involves values from multiple sections, years, or categories, use a Markdown table for comparison.
+2. **Exhaustive**: If a question asks for requirements, list ALL relevant requirements found in the context.
+3. **Accuracy**: If information is missing or contradictory, state it clearly citing the specific sources.
 
 METADATA GUIDE:
 - SOURCE: Filename
@@ -1167,10 +1419,11 @@ CONTEXT:
 QUESTION: {question}
 
 Instructions:
-- Provide accurate, helpful answers based on the context
-- Cite specific sections when relevant using the SOURCE_X format
-- If the answer isn't in the context, say so clearly
-- Keep answers concise but comprehensive
+- Provide accurate, helpful answers based on the context.
+- Cite specific sections when relevant using the [SOURCE_X] format.
+- If the answer isn't in the context, say so clearly.
+- Keep answers concise but comprehensive.
+- Structure your answer with clear headings and bullet points where appropriate.
 """
     return prompt
 
@@ -1226,6 +1479,64 @@ def generate_answer_gemini(question: str, context: str, history: List[Dict[str, 
         return response.text
     except Exception as e:
         return f"Error: {e}"
+
+# 1. Shared HTTP Client for Anyio stability
+_HTTP_CLIENT = httpx.AsyncClient(timeout=httpx.Timeout(120.0, connect=10.0), verify=True)
+
+async def generate_answer_openrouter_stream(model_id: str, question: str, context: str, history: List[Dict[str, Any]], enhanced_citations: bool = True):
+    if not OPENROUTER_API_KEY:
+        yield "Error: OPENROUTER_API_KEY is not set."
+        return
+    full_prompt = build_prompt_with_history(question, context, history, enhanced_citations)
+    messages = [{"role": "system", "content": "You are a high-level WYDOT expert assistant."}]
+    for msg in history[-MAX_HISTORY_MSGS:]:
+        messages.append({"role": msg["role"], "content": msg["content"]})
+    messages.append({"role": "user", "content": full_prompt})
+    import json
+    url = "https://openrouter.ai/api/v1/chat/completions"
+    headers = {"Authorization": f"Bearer {OPENROUTER_API_KEY}", "HTTP-Referer": "https://wydot.gov", "X-Title": "WYDOT Assistant", "Content-Type": "application/json"}
+    payload = {"model": model_id, "messages": messages, "stream": True, "temperature": LLM_TEMPERATURE}
+    try:
+        async with _HTTP_CLIENT.stream("POST", url, headers=headers, json=payload) as response:
+            if response.status_code != 200:
+                err_body = await response.aread()
+                yield f"OpenRouter Error ({response.status_code}): {err_body.decode()}"
+                if response.status_code == 401:
+                    print(f"❌ OpenRouter 401 Details: {err_body.decode()}")
+                return
+            async for line in response.aiter_lines():
+                    if line.startswith("data: "):
+                        data_str = line[6:].strip()
+                        if data_str == "[DONE]": break
+                        try:
+                            data = json.loads(data_str)
+                            chunk = data["choices"][0]["delta"].get("content", "")
+                            if chunk: yield chunk
+                        except: continue
+    except Exception as e:
+        yield f"OpenRouter Connection Error: {e}"
+
+async def generate_answer_openrouter(model_id: str, question: str, context: str, history: List[Dict[str, Any]], enhanced_citations: bool = True) -> str:
+    if not OPENROUTER_API_KEY: return "Error: OPENROUTER_API_KEY is not set."
+    full_prompt = build_prompt_with_history(question, context, history, enhanced_citations)
+    messages = [{"role": "system", "content": "You are a high-level WYDOT expert assistant."}]
+    for msg in history[-MAX_HISTORY_MSGS:]:
+        messages.append({"role": msg["role"], "content": msg["content"]})
+    messages.append({"role": "user", "content": full_prompt})
+    url = "https://openrouter.ai/api/v1/chat/completions"
+    headers = {"Authorization": f"Bearer {OPENROUTER_API_KEY}", "Content-Type": "application/json"}
+    payload = {"model": model_id, "messages": messages, "temperature": LLM_TEMPERATURE}
+    try:
+        response = await _HTTP_CLIENT.post(url, headers=headers, json=payload)
+        if response.status_code == 200:
+            return response.json()["choices"][0]["message"]["content"]
+        else:
+            err_body = response.text
+            if response.status_code == 401:
+                print(f"❌ OpenRouter 401 Details: {err_body}")
+            return f"OpenRouter Error ({response.status_code}): {err_body}"
+    except Exception as e:
+        return f"OpenRouter Connection Error: {e}"
 
 
 # =========================================================
@@ -1289,7 +1600,7 @@ async def start():
             Select(
                 id="model",
                 label="Model",
-                values=["Mistral Large", "Gemini 2.5 Flash"],
+                values=["Mistral Large", "Gemini 2.5 Flash"] + list(OPENROUTER_MODELS.keys()),
                 initial_index=0,
             ),
             Select(
@@ -1300,6 +1611,7 @@ async def start():
             ),
             Switch(id="thinking_mode", label="Thinking Mode (Slower, Detailed)", initial=False),
             Switch(id="multihop", label="Multi-hop Reasoning", initial=False),
+            Slider(id="fetch_k", label="Initial Candidates (FETCH_K)", min=10, max=100, step=5, initial=25),
         ]
     ).send()
     
@@ -1372,12 +1684,17 @@ async def main(message: cl.Message):
     t0 = time.perf_counter()
     await msg.stream_token("🔍 **Searching documents...**\n")
     
+    use_gemini = "Gemini" in model_choice
     if thinking_mode:
         # SYNC (Blocking) Search
         context, sources = search_graph(message.content, index_name)
+    elif multihop:
+        # MULTI-HOP Search
+        await msg.stream_token("🧠 **Analyzing multi-part question...**\n")
+        context, sources = await search_graph_multihop_async(message.content, index_name, use_gemini)
     else:
         # ASYNC Search
-        context, sources = await search_graph_async(message.content, index_name)
+        context, sources = await search_graph_async(message.content, index_name, use_gemini)
         
     retrieval_ms = (time.perf_counter() - t0) * 1000
 
@@ -1396,7 +1713,13 @@ async def main(message: cl.Message):
         return
 
     # 3. Generate Answer (Streaming)
-    model_type = "gemini" if "Gemini" in model_choice else "mistral"
+    if model_choice == "Gemini 2.5 Flash":
+        model_type = "gemini"
+    elif model_choice == "Mistral Large":
+        model_type = "mistral"
+    else:
+        model_type = "openrouter"
+        model_id = OPENROUTER_MODELS.get(model_choice, "openai/gpt-5.2-pro")
     user = cl.user_session.get("user")
     session_id = cl.user_session.get("session_id", "cl_session")
 
@@ -1417,8 +1740,10 @@ async def main(message: cl.Message):
             # SYNC Generation (Wait for full answer)
             if model_type == "gemini":
                 full_answer = generate_answer_gemini(message.content, context, history_msgs, enhanced_citations=True)
-            else:
+            elif model_type == "mistral":
                 full_answer = generate_answer_mistral(message.content, context, history_msgs, enhanced_citations=True)
+            else:
+                full_answer = await generate_answer_openrouter(model_id, message.content, context, history_msgs, enhanced_citations=True)
             await msg.stream_token(full_answer) # Send all at once
         else:
             # ASYNC / Streaming Generation
@@ -1426,8 +1751,12 @@ async def main(message: cl.Message):
                 async for chunk in generate_answer_gemini_stream(message.content, context, history_msgs, enhanced_citations=True):
                     await msg.stream_token(chunk)
                     full_answer += chunk
-            else:
+            elif model_type == "mistral":
                 async for chunk in generate_answer_mistral_stream(message.content, context, history_msgs, enhanced_citations=True):
+                    await msg.stream_token(chunk)
+                    full_answer += chunk
+            else:
+                async for chunk in generate_answer_openrouter_stream(model_id, message.content, context, history_msgs, enhanced_citations=True):
                     await msg.stream_token(chunk)
                     full_answer += chunk
                     
