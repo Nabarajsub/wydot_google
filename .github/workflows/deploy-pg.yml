@@ -1,9 +1,16 @@
-name: Build and Deploy to Cloud Run (SQLite - DISABLED)
+name: Deploy PostgreSQL Services to Cloud Run
 
-# DISABLED: Existing wydot-chatbot is already deployed and working.
-# Use deploy-pg.yml for new PostgreSQL-based deployments.
+# This pipeline deploys wydot-chatbot-pg and wydot-admin-pg
+# These are SEPARATE services from the existing wydot-chatbot and wydot-admin
+# They use PostgreSQL (Cloud SQL) instead of SQLite
+
 on:
-  workflow_dispatch:  # Manual trigger only — won't run on push
+  push:
+    branches:
+      - main
+    paths-ignore:
+      - 'README.md'
+      - 'docs/**'
 
 env:
   PROJECT_ID: ${{ secrets.GCP_PROJECT }}
@@ -11,7 +18,7 @@ env:
   GAR_LOCATION: us-docker.pkg.dev/${{ secrets.GCP_PROJECT }}/apps
 
 jobs:
-  build-and-deploy:
+  deploy-pg:
     runs-on: ubuntu-latest
     permissions:
       contents: 'read'
@@ -29,7 +36,7 @@ jobs:
           workload_identity_provider: ${{ secrets.WIF_PROVIDER }}
           service_account: github-deployer@${{ secrets.GCP_PROJECT }}.iam.gserviceaccount.com
 
-      # Set up gcloud CLI (required for gcloud run services replace)
+      # Set up gcloud CLI
       - name: 'Set up Cloud SDK'
         uses: 'google-github-actions/setup-gcloud@v2'
         with:
@@ -51,55 +58,49 @@ jobs:
           docker build -f Dockerfile.admin -t "${{ env.GAR_LOCATION }}/wydot-admin:${{ github.sha }}" .
           docker push "${{ env.GAR_LOCATION }}/wydot-admin:${{ github.sha }}"
 
-      # 3. Build and Push Embeddings (Vertex AI Image)
-      - name: 'Build and Push Embeddings'
-        run: |-
-          docker build -t "${{ env.GAR_LOCATION }}/wydot-embeddings:${{ github.sha }}" ./deploy/embeddings
-          docker push "${{ env.GAR_LOCATION }}/wydot-embeddings:${{ github.sha }}"
-
-      # 4. Deploy Chatbot via Knative YAML (matches working flash-cloud pattern)
-      - name: 'Prepare Chatbot YAML'
+      # 3. Deploy Chatbot-PG via Knative YAML (PostgreSQL via Cloud SQL proxy)
+      - name: 'Prepare Chatbot-PG YAML'
         run: |-
           IMAGE="${{ env.GAR_LOCATION }}/wydot-chatbot:${{ github.sha }}"
           sed -e "s|\${PROJECT_ID}|${{ env.PROJECT_ID }}|g" \
               -e "s|\${IMAGE}|${IMAGE}|g" \
-              cloudrun/chatbot.yaml > /tmp/chatbot-deploy.yaml
-          echo "=== Rendered YAML ==="
-          cat /tmp/chatbot-deploy.yaml
+              cloudrun/chatbot-pg.yaml > /tmp/chatbot-pg-deploy.yaml
+          echo "=== Rendered Chatbot-PG YAML ==="
+          cat /tmp/chatbot-pg-deploy.yaml
 
-      - name: 'Deploy Chatbot'
+      - name: 'Deploy Chatbot-PG'
         run: |-
-          gcloud run services replace /tmp/chatbot-deploy.yaml \
+          gcloud run services replace /tmp/chatbot-pg-deploy.yaml \
             --region="${{ env.REGION }}" \
             --project="${{ env.PROJECT_ID }}"
 
-      - name: 'Allow Unauthenticated Access to Chatbot'
+      - name: 'Allow Unauthenticated Access to Chatbot-PG'
         run: |-
-          gcloud run services add-iam-policy-binding wydot-chatbot \
+          gcloud run services add-iam-policy-binding wydot-chatbot-pg \
             --region="${{ env.REGION }}" \
             --project="${{ env.PROJECT_ID }}" \
             --member="allUsers" \
             --role="roles/run.invoker"
 
-      # 5. Deploy Admin via Knative YAML (matches chatbot pattern)
-      - name: 'Prepare Admin YAML'
+      # 4. Deploy Admin-PG via Knative YAML (PostgreSQL via Cloud SQL proxy)
+      - name: 'Prepare Admin-PG YAML'
         run: |-
           IMAGE="${{ env.GAR_LOCATION }}/wydot-admin:${{ github.sha }}"
           sed -e "s|\${PROJECT_ID}|${{ env.PROJECT_ID }}|g" \
               -e "s|\${IMAGE}|${IMAGE}|g" \
-              cloudrun/admin.yaml > /tmp/admin-deploy.yaml
-          echo "=== Rendered Admin YAML ==="
-          cat /tmp/admin-deploy.yaml
+              cloudrun/admin-pg.yaml > /tmp/admin-pg-deploy.yaml
+          echo "=== Rendered Admin-PG YAML ==="
+          cat /tmp/admin-pg-deploy.yaml
 
-      - name: 'Deploy Admin'
+      - name: 'Deploy Admin-PG'
         run: |-
-          gcloud run services replace /tmp/admin-deploy.yaml \
+          gcloud run services replace /tmp/admin-pg-deploy.yaml \
             --region="${{ env.REGION }}" \
             --project="${{ env.PROJECT_ID }}"
 
-      - name: 'Allow Unauthenticated Access to Admin'
+      - name: 'Allow Unauthenticated Access to Admin-PG'
         run: |-
-          gcloud run services add-iam-policy-binding wydot-admin \
+          gcloud run services add-iam-policy-binding wydot-admin-pg \
             --region="${{ env.REGION }}" \
             --project="${{ env.PROJECT_ID }}" \
             --member="allUsers" \
