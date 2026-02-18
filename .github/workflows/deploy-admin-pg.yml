@@ -9,7 +9,8 @@ on:
       - main
     paths:
       - 'ingestion_service/**'
-      - 'utils/tracker_db.py'
+      - 'utils/chat_history_store.py'
+      - 'ingestion_service/tracker_db.py'
       - 'cloudrun/admin-pg.yaml'
       - '.github/workflows/deploy-admin-pg.yml'
       - 'Dockerfile.admin'
@@ -53,7 +54,7 @@ jobs:
       - name: 'Ensure Cloud SQL Client role for Cloud Run SA'
         run: |-
           gcloud projects add-iam-policy-binding "${{ env.PROJECT_ID }}" \
-            --member="serviceAccount:cloud-run-sa@${{ env.PROJECT_ID }}.iam.gserviceaccount.com" \
+            --member="serviceAccount:cloud-run-sa@${{ env.PROJECT_ID.iam.gserviceaccount.com }}" \
             --role="roles/cloudsql.client" \
             --condition=None \
             --quiet || echo "⚠️ Could not grant cloudsql.client (may already exist or insufficient permissions)"

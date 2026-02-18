@@ -23,6 +23,10 @@ spec:
           value: "postgresql://postgres:WydotDB123%23@/chat_history?host=/cloudsql/${PROJECT_ID}:us-central1:wydot-db-instance"
         - name: HF_HOME
           value: /app/model_cache
+        - name: HF_HUB_OFFLINE
+          value: "1"
+        - name: TRANSFORMERS_OFFLINE
+          value: "1"
         - name: HOME
           value: /tmp
         - name: PYTHONUNBUFFERED
