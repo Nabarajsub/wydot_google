@@ -35,6 +35,7 @@ except ImportError:
 logging.getLogger("pypdf").setLevel(logging.ERROR)
 
 # Preserve Cloud Run env vars before .env loading can overwrite them
+_cloud_run_port = os.environ.get("PORT") if os.getenv("K_SERVICE") else None
 _cloud_run_db_url = os.environ.get("DATABASE_URL") if os.getenv("K_SERVICE") else None
 
 # Load environment: DOTENV_PATH (set by Cloud Run YAML) takes priority, then local .env
@@ -50,6 +51,10 @@ else:
 if _cloud_run_db_url is not None:
     os.environ["DATABASE_URL"] = _cloud_run_db_url
     print(f"🔒 DATABASE_URL restored to Cloud Run value: '{_cloud_run_db_url}'")
+
+if _cloud_run_port:
+    os.environ["PORT"] = _cloud_run_port
+    print(f"🔒 PORT restored to Cloud Run value: {_cloud_run_port}")
 
 # Optional GCP logging (only in cloud)
 try:
