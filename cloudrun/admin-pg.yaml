@@ -35,7 +35,7 @@ spec:
             cpu: "4"
         startupProbe:
           httpGet:
-            path: /
+            path: /health
             port: 8080
           initialDelaySeconds: 15
           periodSeconds: 10
