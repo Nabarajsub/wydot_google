@@ -1,5 +1,8 @@
 name: Deploy Admin PostgreSQL Service to Cloud Run
 
+# This pipeline deploys ONLY wydot-admin-pg
+# It uses PostgreSQL (Cloud SQL) instead of SQLite
+
 on:
   push:
     branches:
@@ -29,6 +32,7 @@ jobs:
       - name: Checkout
         uses: actions/checkout@v4
 
+      # Authenticate using Workload Identity
       - id: 'auth'
         name: 'Authenticate to Google Cloud'
         uses: 'google-github-actions/auth@v2'
@@ -36,33 +40,40 @@ jobs:
           workload_identity_provider: ${{ secrets.WIF_PROVIDER }}
           service_account: github-deployer@${{ secrets.GCP_PROJECT }}.iam.gserviceaccount.com
 
+      # Set up gcloud CLI
       - name: 'Set up Cloud SDK'
         uses: 'google-github-actions/setup-gcloud@v2'
         with:
           project_id: ${{ secrets.GCP_PROJECT }}
 
+      # Authenticate Docker to Artifact Registry
       - name: 'Docker Auth'
         run: gcloud auth configure-docker us-docker.pkg.dev --quiet
 
+      # Grant Cloud SQL Client role to Cloud Run service account (idempotent)
       - name: 'Ensure Cloud SQL Client role for Cloud Run SA'
         run: |-
           gcloud projects add-iam-policy-binding "${{ env.PROJECT_ID }}" \
-            --member="serviceAccount:cloud-run-sa@${{ env.PROJECT_ID }}.iam.gserviceaccount.com" \
+            --member="serviceAccount:cloud-run-sa@${{ env.PROJECT_ID.iam.gserviceaccount.com }}" \
             --role="roles/cloudsql.client" \
             --condition=None \
-            --quiet || echo "⚠️ Could not grant cloudsql.client"
+            --quiet || echo "⚠️ Could not grant cloudsql.client (may already exist or insufficient permissions)"
 
+      # Build and Push Admin
       - name: 'Build and Push Admin'
         run: |-
           docker build -f Dockerfile.admin -t "${{ env.GAR_LOCATION }}/wydot-admin:${{ github.sha }}" .
           docker push "${{ env.GAR_LOCATION }}/wydot-admin:${{ github.sha }}"
 
+      # Deploy Admin-PG via Knative YAML (PostgreSQL via Cloud SQL proxy)
       - name: 'Prepare Admin-PG YAML'
         run: |-
           IMAGE="${{ env.GAR_LOCATION }}/wydot-admin:${{ github.sha }}"
           sed -e "s|\${PROJECT_ID}|${{ env.PROJECT_ID }}|g" \
               -e "s|\${IMAGE}|${IMAGE}|g" \
               cloudrun/admin-pg.yaml > /tmp/admin-pg-deploy.yaml
+          echo "=== Rendered Admin-PG YAML ==="
+          cat /tmp/admin-pg-deploy.yaml
 
       - name: 'Deploy Admin-PG'
         run: |-
