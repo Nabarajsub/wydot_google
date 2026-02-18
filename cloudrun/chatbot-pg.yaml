@@ -18,8 +18,10 @@ spec:
         env:
         - name: DOTENV_PATH
           value: /etc/secrets/.env
-        # DATABASE_URL is NOT set here — .env provides the PostgreSQL URL
-        # which flows through naturally (no restore/override)
+        # PostgreSQL via Cloud SQL Unix socket proxy
+        # Password # is URL-encoded as %23 to avoid URL fragment truncation
+        - name: DATABASE_URL
+          value: "postgresql://postgres:WydotDB123%23@/chat_history?host=/cloudsql/${PROJECT_ID}:us-central1:wydot-db-instance"
         - name: CHAINLIT_FILES_DIRECTORY
           value: /tmp/.files
         - name: CHAINLIT_DB_FILE
