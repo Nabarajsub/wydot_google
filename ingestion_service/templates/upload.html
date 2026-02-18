@@ -1099,8 +1099,10 @@
                         <thead>
                             <tr>
                                 <th>Time</th>
-                                <th>User</th>
+                                <th style="width:120px;">User</th>
+                                <th style="width:250px;">Question</th>
                                 <th>Feedback</th>
+                                <th>Result / Sources</th>
                                 <th>Comment</th>
                             </tr>
                         </thead>
@@ -2121,14 +2123,26 @@
                 // 4. Feedback
                 const fbData = await (await fetch('/api/evaluation/feedback')).json();
                 const fbBody = document.getElementById('feedback-table-body');
-                fbBody.innerHTML = (fbData.recent || []).map(f => `
+                fbBody.innerHTML = (fbData.recent || []).map(f => {
+                    let sourcesHtml = '';
+                    try {
+                        const srcs = typeof f.sources === 'string' ? JSON.parse(f.sources) : (f.sources || []);
+                        sourcesHtml = srcs.map(s => {
+                            const name = s.source || s.name || 'Unknown';
+                            return `<span class="badge badge-doc" style="margin:2px; font-size:0.65rem;">${name}</span>`;
+                        }).join(' ');
+                    } catch (e) { console.warn("Sources parse error", e); }
+
+                    return `
                     <tr>
-                        <td>${new Date(f.ts * 1000).toLocaleTimeString()}</td>
-                        <td>User ${f.user_id || '-'}</td>
-                        <td>${f.value === 1 ? '👍' : '👎'}</td>
-                        <td style="font-size:0.85rem;">${f.comment || ''}</td>
+                        <td style="white-space:nowrap; color:#666;">${new Date(f.ts * 1000).toLocaleTimeString()}</td>
+                        <td style="font-weight:500;">${f.user || 'Anonymous'}</td>
+                        <td style="max-width:250px; font-size:0.8rem; color:#444;">${f.question || '<em style="color:#999;">Question unknown</em>'}</td>
+                        <td style="font-size:1.2rem; text-align:center;">${f.value === 1 ? '👍' : '👎'}</td>
+                        <td>${sourcesHtml || '<em style="color:#999;">No sources cited</em>'}</td>
+                        <td style="font-size:0.85rem; color:#1a2332; font-style:italic;">"${f.comment || ''}"</td>
                     </tr>
-                `).join('');
+                `}).join('');
 
             } catch (err) { console.error('Evaluation error:', err); }
         }
@@ -2218,6 +2232,19 @@
             else if (canvasId === 'chart-models') monChart2 = chart;
             else if (canvasId === 'chart-quality-trend') evalChart = chart;
         }
+
+        // Initialize
+        loadFiles();
+        loadStats();
+
+        // 🔄 Live Dashboard Updates: Poll evaluation every 10s when active
+        setInterval(() => {
+            const evalPage = document.getElementById('page-evaluation');
+            if (evalPage && evalPage.classList.contains('active')) {
+                console.log("🔄 Auto-refreshing evaluation data...");
+                loadEvaluation();
+            }
+        }, 10000);
     </script>
 </body>
 
