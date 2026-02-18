@@ -535,11 +535,49 @@ class CloudSQLChatHistoryStore(BaseChatHistoryStore):
         self.db_url = database_url
         self._tables_initialized = False
         self._initializing = False
+        self._db_created = False
         print("🔗 CloudSQLChatHistoryStore initialized (lazy table init enabled)")
+
+    def _ensure_database_exists(self):
+        """Auto-create the target database if it doesn't exist."""
+        if self._db_created:
+            return
+        import psycopg2
+        from urllib.parse import urlparse, urlunparse, parse_qs, urlencode
+        try:
+            clean_url = self.db_url.replace("postgresql+psycopg2://", "postgresql://")
+            parsed = urlparse(clean_url)
+            target_db = parsed.path.lstrip("/")  # e.g. "chat_history"
+            if not target_db or target_db == "postgres":
+                self._db_created = True
+                return
+            # Connect to default 'postgres' database to create the target DB
+            admin_parsed = parsed._replace(path="/postgres")
+            admin_url = urlunparse(admin_parsed)
+            print(f"🔍 Checking if database '{target_db}' exists...")
+            admin_conn = psycopg2.connect(admin_url)
+            admin_conn.autocommit = True  # CREATE DATABASE cannot run inside a transaction
+            cur = admin_conn.cursor()
+            cur.execute("SELECT 1 FROM pg_database WHERE datname = %s", (target_db,))
+            if not cur.fetchone():
+                print(f"📦 Creating database '{target_db}'...")
+                cur.execute(f'CREATE DATABASE "{target_db}"')
+                print(f"✅ Database '{target_db}' created.")
+            else:
+                print(f"✅ Database '{target_db}' already exists.")
+            cur.close()
+            admin_conn.close()
+            self._db_created = True
+        except Exception as e:
+            print(f"⚠️ Database auto-create check failed: {e}")
+            self._db_created = True  # Don't retry endlessly
 
     def _get_conn(self):
         import psycopg2
-        
+
+        # Ensure the database itself exists before connecting
+        self._ensure_database_exists()
+
         # Lazy initialization check
         if not self._tables_initialized and not self._initializing:
             self._initializing = True
