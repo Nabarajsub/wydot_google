@@ -1,12 +1,9 @@
-name: Build and Deploy to Cloud Run
+name: Build and Deploy to Cloud Run (SQLite - DISABLED)
 
+# DISABLED: Existing wydot-chatbot is already deployed and working.
+# Use deploy-pg.yml for new PostgreSQL-based deployments.
 on:
-  push:
-    branches:
-      - main
-    paths-ignore:
-      - 'README.md'
-      - 'docs/**'
+  workflow_dispatch:  # Manual trigger only — won't run on push
 
 env:
   PROJECT_ID: ${{ secrets.GCP_PROJECT }}
