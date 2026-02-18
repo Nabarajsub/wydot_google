@@ -318,18 +318,24 @@ print("=" * 60)
 # DATABASE / AUTH STORE (abstracted for local SQLite → Cloud SQL)
 # =========================================================
 
+print(f"🏗️ Initializing CHAT_DB...", flush=True)
+print(f"   DATABASE_URL at init time: '{os.getenv('DATABASE_URL', '(not set)')[:60]}...'", flush=True)
 try:
     from utils.chat_history_store import get_chat_history_store
     CHAT_DB = get_chat_history_store()
+    print(f"✅ CHAT_DB initialized: {type(CHAT_DB).__name__}", flush=True)
 except ImportError:
     try:
         from chat_history_store import get_chat_history_store  # when run from repo root
         CHAT_DB = get_chat_history_store()
+        print(f"✅ CHAT_DB initialized (alt import): {type(CHAT_DB).__name__}", flush=True)
     except Exception as _e:
-        print(f"⚠️ Failure in chat history store import: {_e}")
+        print(f"⚠️ Failure in chat history store import: {_e}", flush=True)
+        import traceback; traceback.print_exc()
         CHAT_DB = None
 except Exception as _e:
-    print(f"⚠️ Chat history store init failed: {_e}")
+    print(f"⚠️ Chat history store init failed: {_e}", flush=True)
+    import traceback; traceback.print_exc()
     CHAT_DB = None
 
 print("📈 Setting up Telemetry and Evaluation...")
@@ -731,26 +737,38 @@ def get_data_layer():
 @cl.password_auth_callback
 def auth_callback(username, password):
     """Login: authenticate ONLY."""
-    print(f"🔐 [AUTH] Attempt login: {username}")
+    print(f"🔐 [AUTH] ====== LOGIN ATTEMPT ======", flush=True)
+    print(f"🔐 [AUTH] Username: {username}", flush=True)
+    print(f"🔐 [AUTH] CHAT_DB type: {type(CHAT_DB).__name__ if CHAT_DB else 'None'}", flush=True)
+    if not CHAT_DB:
+        print(f"❌ [AUTH] CHAT_DB is None! Cannot authenticate.", flush=True)
+        return None
     try:
-        uid, name = CHAT_DB.authenticate(username, password)
+        result = CHAT_DB.authenticate(username, password)
+        print(f"🔐 [AUTH] authenticate() returned: {result}", flush=True)
+        uid, name = result
         if uid:
-            print(f"✅ [AUTH] Success: {username} (ID: {uid})")
-            if not CHAT_DB.is_verified(uid):
-                print(f"⚠️ [AUTH] User {username} not verified.")
-                return None 
-                
+            print(f"✅ [AUTH] Success: {username} (ID: {uid})", flush=True)
+            verified = CHAT_DB.is_verified(uid)
+            print(f"🔐 [AUTH] is_verified({uid}) = {verified}", flush=True)
+            if not verified:
+                print(f"⚠️ [AUTH] User {username} not verified. Returning None.", flush=True)
+                return None
+
             is_guest = (username == "guest@app.local")
-            return cl.User(
+            user = cl.User(
                 identifier=username,
                 display_name=name or username,
                 metadata={"db_id": uid, "is_guest": is_guest},
             )
-        print(f"❌ [AUTH] Denied: {username}")
+            print(f"✅ [AUTH] Returning cl.User: identifier={user.identifier}, is_guest={is_guest}", flush=True)
+            return user
+        print(f"❌ [AUTH] Denied: {username} (name={name})", flush=True)
     except Exception as e:
-        print(f"🔥 [AUTH] Error: {e}")
+        print(f"🔥 [AUTH] Error: {e}", flush=True)
         import traceback
         traceback.print_exc()
+    print(f"❌ [AUTH] Returning None for {username}", flush=True)
     return None
 
 @cl.on_chat_resume

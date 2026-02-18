@@ -536,44 +536,89 @@ class CloudSQLChatHistoryStore(BaseChatHistoryStore):
         self._tables_initialized = False
         self._initializing = False
         self._db_created = False
-        print("🔗 CloudSQLChatHistoryStore initialized (lazy table init enabled)")
+        # Parse connection params once for reliable connections
+        self._conn_params = self._parse_db_url(database_url)
+        # Log masked URL for debugging
+        masked = database_url
+        try:
+            from urllib.parse import urlparse
+            p = urlparse(database_url.replace("postgresql+psycopg2://", "postgresql://"))
+            masked = f"postgresql://{p.username}:****@{p.hostname or '(socket)'}/{p.path.lstrip('/')}?{p.query}"
+        except Exception:
+            pass
+        print(f"🔗 CloudSQLChatHistoryStore initialized (lazy table init enabled)", flush=True)
+        print(f"   DB URL (masked): {masked}", flush=True)
+        print(f"   Parsed conn params: dbname={self._conn_params.get('dbname')}, "
+              f"user={self._conn_params.get('user')}, "
+              f"host={self._conn_params.get('host', '(default)')}", flush=True)
+
+    @staticmethod
+    def _parse_db_url(url: str) -> dict:
+        """Parse DATABASE_URL into explicit psycopg2 connection params.
+        This avoids issues with URL-encoding (%23 for #) that psycopg2's
+        URI parser may not handle correctly."""
+        from urllib.parse import urlparse, unquote, parse_qs
+        clean = url.replace("postgresql+psycopg2://", "postgresql://")
+        parsed = urlparse(clean)
+        params = {}
+        params["user"] = unquote(parsed.username) if parsed.username else "postgres"
+        params["password"] = unquote(parsed.password) if parsed.password else ""
+        params["dbname"] = parsed.path.lstrip("/") or "postgres"
+        # Check for Unix socket host in query params (Cloud SQL proxy)
+        qs = parse_qs(parsed.query)
+        if "host" in qs:
+            params["host"] = qs["host"][0]
+        elif parsed.hostname:
+            params["host"] = parsed.hostname
+            if parsed.port:
+                params["port"] = str(parsed.port)
+        return params
+
+    def _make_conn(self, dbname_override: str = None):
+        """Create a psycopg2 connection using parsed params.
+        Optionally override the database name (for admin ops like CREATE DATABASE)."""
+        import psycopg2
+        params = dict(self._conn_params)
+        if dbname_override:
+            params["dbname"] = dbname_override
+        print(f"   🔌 Connecting to DB: dbname={params['dbname']}, "
+              f"user={params['user']}, host={params.get('host', '(default)')}", flush=True)
+        conn = psycopg2.connect(**params)
+        print(f"   ✅ Connected! server_version={conn.server_version}", flush=True)
+        return conn
 
     def _ensure_database_exists(self):
         """Auto-create the target database if it doesn't exist."""
         if self._db_created:
             return
-        import psycopg2
-        from urllib.parse import urlparse, urlunparse, parse_qs, urlencode
+        import traceback
+        target_db = self._conn_params.get("dbname", "postgres")
+        if not target_db or target_db == "postgres":
+            self._db_created = True
+            return
         try:
-            clean_url = self.db_url.replace("postgresql+psycopg2://", "postgresql://")
-            parsed = urlparse(clean_url)
-            target_db = parsed.path.lstrip("/")  # e.g. "chat_history"
-            if not target_db or target_db == "postgres":
-                self._db_created = True
-                return
-            # Connect to default 'postgres' database to create the target DB
-            admin_parsed = parsed._replace(path="/postgres")
-            admin_url = urlunparse(admin_parsed)
-            print(f"🔍 Checking if database '{target_db}' exists...")
-            admin_conn = psycopg2.connect(admin_url)
+            print(f"🔍 Checking if database '{target_db}' exists...", flush=True)
+            admin_conn = self._make_conn(dbname_override="postgres")
             admin_conn.autocommit = True  # CREATE DATABASE cannot run inside a transaction
             cur = admin_conn.cursor()
             cur.execute("SELECT 1 FROM pg_database WHERE datname = %s", (target_db,))
             if not cur.fetchone():
-                print(f"📦 Creating database '{target_db}'...")
+                print(f"📦 Creating database '{target_db}'...", flush=True)
                 cur.execute(f'CREATE DATABASE "{target_db}"')
-                print(f"✅ Database '{target_db}' created.")
+                print(f"✅ Database '{target_db}' created.", flush=True)
             else:
-                print(f"✅ Database '{target_db}' already exists.")
+                print(f"✅ Database '{target_db}' already exists.", flush=True)
             cur.close()
             admin_conn.close()
             self._db_created = True
         except Exception as e:
-            print(f"⚠️ Database auto-create check failed: {e}")
+            print(f"⚠️ Database auto-create check failed: {e}", flush=True)
+            traceback.print_exc()
             self._db_created = True  # Don't retry endlessly
 
     def _get_conn(self):
-        import psycopg2
+        """Get a connection, lazily initializing tables on first call."""
+        import traceback
 
         # Ensure the database itself exists before connecting
         self._ensure_database_exists()
@@ -582,30 +627,31 @@ class CloudSQLChatHistoryStore(BaseChatHistoryStore):
         if not self._tables_initialized and not self._initializing:
             self._initializing = True
             try:
-                print("🛠️ Lazily initializing database tables...")
+                print("🛠️ Lazily initializing database tables...", flush=True)
                 self._init_tables()
                 self._tables_initialized = True
-                print("✅ Database tables initialized successfully.")
+                print("✅ Database tables initialized successfully.", flush=True)
             except Exception as e:
-                print(f"⚠️ Lazy Table Init Failed: {e}")
+                print(f"⚠️ Lazy Table Init Failed: {e}", flush=True)
+                traceback.print_exc()
                 # We don't set _tables_initialized=True so it retries on next call
             finally:
                 self._initializing = False
 
         try:
-            # Strip SQLAlchemy dialect prefix — psycopg2 needs plain libpq format
-            clean_url = self.db_url.replace("postgresql+psycopg2://", "postgresql://")
-            return psycopg2.connect(clean_url)
+            return self._make_conn()
         except Exception as e:
-            print(f"Db connection failed: {e}")
+            print(f"❌ Db connection failed: {e}", flush=True)
+            traceback.print_exc()
             raise e
 
     def _init_tables(self):
-        # We assume tables are created via schema.sql or migration script
-        # But we can try to create them if not exist for convenience
-        conn = self._get_conn()
+        # Create tables and seed guest user
+        print("📋 [DB] _init_tables() starting...", flush=True)
+        conn = self._make_conn()  # Direct connection (bypasses _get_conn to avoid recursion)
         try:
             with conn.cursor() as cur:
+                print("   Creating users table...", flush=True)
                 # Users
                 cur.execute("""
                     CREATE TABLE IF NOT EXISTS users (
@@ -645,45 +691,79 @@ class CloudSQLChatHistoryStore(BaseChatHistoryStore):
                     )
                 """)
                 # Seed guest user if it doesn't exist or ensure it is verified
+                print("   Seeding/updating guest user...", flush=True)
                 cur.execute("SELECT id FROM users WHERE email='guest@app.local'")
                 row = cur.fetchone()
+                guest_hash = pbkdf2_hash("guest")
                 if not row:
                     cur.execute(
                         "INSERT INTO users (email, password_hash, display_name, verified) VALUES (%s, %s, %s, 1)",
-                        ("guest@app.local", pbkdf2_hash("guest"), "Guest User")
+                        ("guest@app.local", guest_hash, "Guest User")
                     )
+                    print("   ✅ Guest user created (verified=1)", flush=True)
                 else:
                     # Ensure it's verified and has the correct password if it exists
                     cur.execute(
                         "UPDATE users SET verified = 1, password_hash = %s WHERE email = 'guest@app.local'",
-                        (pbkdf2_hash("guest"),)
+                        (guest_hash,)
                     )
+                    print(f"   ✅ Guest user updated (id={row[0]}, verified=1)", flush=True)
+                # Verify guest user was created/updated correctly
+                cur.execute("SELECT id, email, verified, length(password_hash) FROM users WHERE email='guest@app.local'")
+                check = cur.fetchone()
+                print(f"   Guest user check: id={check[0]}, email={check[1]}, verified={check[2]}, hash_len={check[3]}", flush=True)
             conn.commit()
+            print("📋 [DB] _init_tables() completed successfully!", flush=True)
+        except Exception as e:
+            print(f"❌ [DB] _init_tables() FAILED: {e}", flush=True)
+            import traceback; traceback.print_exc()
+            raise
         finally:
             conn.close()
 
     def authenticate(self, email: str, password: str) -> Tuple[Optional[int], Optional[str]]:
-        conn = self._get_conn()
+        import traceback
+        print(f"🔐 [DB] authenticate() called for: {email}", flush=True)
+        try:
+            conn = self._get_conn()
+        except Exception as e:
+            print(f"❌ [DB] authenticate() connection failed: {e}", flush=True)
+            traceback.print_exc()
+            return None, f"Database connection error: {e}"
         try:
             with conn.cursor() as cur:
-                cur.execute("SELECT id, password_hash, display_name FROM users WHERE email=%s", (email,))
+                cur.execute("SELECT id, password_hash, display_name, verified FROM users WHERE email=%s", (email,))
                 row = cur.fetchone()
                 if not row:
-                    print(f"🔍 [DB] User not found: {email}")
+                    # List all users for debugging
+                    cur.execute("SELECT id, email, verified FROM users ORDER BY id")
+                    all_users = cur.fetchall()
+                    print(f"🔍 [DB] User not found: {email}. Existing users: {all_users}", flush=True)
                     return None, "User not found"
-                uid, pw_hash, name = row
+                uid, pw_hash, name, verified = row
+                print(f"🔍 [DB] Found user: id={uid}, name={name}, verified={verified}, hash_len={len(pw_hash) if pw_hash else 0}", flush=True)
                 if not pbkdf2_verify(password, pw_hash):
-                    print(f"🔍 [DB] Password verify failed for {email}. Password length: {len(password)}")
-                    # print(f"🔍 [DB] Provided: '{password}', Hash in DB: '{pw_hash}'") # Careful with logs!
+                    print(f"🔍 [DB] Password verify FAILED for {email}. Password length: {len(password)}", flush=True)
                     return None, "Invalid password"
-                print(f"🔍 [DB] Auth success: {email} (UID: {uid})")
+                print(f"✅ [DB] Auth success: {email} (UID: {uid}, verified={verified})", flush=True)
                 return int(uid), (name or email)
+        except Exception as e:
+            print(f"❌ [DB] authenticate() query failed: {e}", flush=True)
+            traceback.print_exc()
+            return None, f"Database error: {e}"
         finally:
             conn.close()
 
     def create_user(self, email: str, password: str, display_name: Optional[str] = None) -> Tuple[Optional[int], Optional[str]]:
         import psycopg2
-        conn = self._get_conn()
+        import traceback
+        print(f"📝 [DB] create_user() called: email={email}, display_name={display_name}", flush=True)
+        try:
+            conn = self._get_conn()
+        except Exception as e:
+            print(f"❌ [DB] create_user() connection failed: {e}", flush=True)
+            traceback.print_exc()
+            return None, f"Database connection error: {e}"
         try:
             with conn.cursor() as cur:
                 pw_hash = pbkdf2_hash(password)
@@ -694,10 +774,16 @@ class CloudSQLChatHistoryStore(BaseChatHistoryStore):
                     )
                     uid = cur.fetchone()[0]
                     conn.commit()
+                    print(f"✅ [DB] User created: {email} (UID: {uid})", flush=True)
                     return uid, None
                 except psycopg2.IntegrityError:
                     conn.rollback()
+                    print(f"⚠️ [DB] User already exists: {email}", flush=True)
                     return None, "Email already exists"
+        except Exception as e:
+            print(f"❌ [DB] create_user() failed: {e}", flush=True)
+            traceback.print_exc()
+            return None, f"Database error: {e}"
         finally:
             conn.close()
 
@@ -918,12 +1004,19 @@ class CloudSQLChatHistoryStore(BaseChatHistoryStore):
             conn.close()
 
     def is_verified(self, user_id: int) -> bool:
+        print(f"🔍 [DB] is_verified() called for user_id={user_id}", flush=True)
         conn = self._get_conn()
         try:
             with conn.cursor() as cur:
                 cur.execute("SELECT verified FROM users WHERE id=%s", (user_id,))
                 row = cur.fetchone()
-                return bool(row[0]) if row else False
+                result = bool(row[0]) if row else False
+                print(f"   is_verified result: {result} (raw={row})", flush=True)
+                return result
+        except Exception as e:
+            print(f"❌ [DB] is_verified() failed: {e}", flush=True)
+            import traceback; traceback.print_exc()
+            return False
         finally:
             conn.close()
 
@@ -931,9 +1024,15 @@ class CloudSQLChatHistoryStore(BaseChatHistoryStore):
 def get_chat_history_store() -> BaseChatHistoryStore:
     """Return store: SQLite for local. Set DATABASE_URL (postgres) for Cloud SQL (add PGChatHistoryStore later)."""
     db_url = os.getenv("DATABASE_URL")
+    print(f"🏗️ get_chat_history_store() called", flush=True)
+    print(f"   DATABASE_URL present: {bool(db_url)}", flush=True)
+    if db_url:
+        print(f"   DATABASE_URL starts with: {db_url[:30]}...", flush=True)
     if db_url and db_url.startswith("postgres"):
+        print(f"   → Using CloudSQLChatHistoryStore (PostgreSQL)", flush=True)
         return CloudSQLChatHistoryStore(db_url)
     # On Cloud Run, filesystem is read-only except /tmp
     _default_db = "/tmp/chat_history.sqlite3" if os.getenv("K_SERVICE") else os.path.join(os.path.dirname(__file__), "..", "chat_history.sqlite3")
     db_path = os.getenv("CHAT_DB_PATH", _default_db)
+    print(f"   → Using SQLiteChatHistoryStore at: {db_path}", flush=True)
     return SQLiteChatHistoryStore(db_path)

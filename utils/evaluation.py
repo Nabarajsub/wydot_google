@@ -38,10 +38,25 @@ def _get_conn():
     db_url = os.getenv("DATABASE_URL")
     if db_url and db_url.startswith("postgres"):
         import psycopg2
+        from urllib.parse import urlparse, unquote, parse_qs
         try:
-            # Strip SQLAlchemy dialect prefix — psycopg2 needs plain libpq format
-            clean_url = db_url.replace("postgresql+psycopg2://", "postgresql://")
-            _conn = psycopg2.connect(clean_url)
+            # Parse URL into explicit params (avoids %23 encoding issues with psycopg2)
+            clean = db_url.replace("postgresql+psycopg2://", "postgresql://")
+            parsed = urlparse(clean)
+            pg_params = {
+                "user": unquote(parsed.username) if parsed.username else "postgres",
+                "password": unquote(parsed.password) if parsed.password else "",
+                "dbname": parsed.path.lstrip("/") or "postgres",
+            }
+            qs = parse_qs(parsed.query)
+            if "host" in qs:
+                pg_params["host"] = qs["host"][0]
+            elif parsed.hostname:
+                pg_params["host"] = parsed.hostname
+                if parsed.port:
+                    pg_params["port"] = str(parsed.port)
+            print(f"📊 [evaluation] Connecting to PG: dbname={pg_params['dbname']}, host={pg_params.get('host', '(default)')}", flush=True)
+            _conn = psycopg2.connect(**pg_params)
             cur = _conn.cursor()
             try:
                 # 1. Online Validation Table

@@ -30,6 +30,14 @@ spec:
           value: /app/model_cache
         - name: HOME
           value: /tmp
+        - name: TELEMETRY_DB_PATH
+          value: /tmp/telemetry.sqlite3
+        - name: EVAL_DB_PATH
+          value: /tmp/evaluation.sqlite3
+        - name: CHAT_DB_PATH
+          value: /tmp/chat_history.sqlite3
+        - name: PYTHONUNBUFFERED
+          value: "1"
         ports:
         - containerPort: 8080
         resources:
