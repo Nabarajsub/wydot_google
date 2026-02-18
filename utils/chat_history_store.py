@@ -480,13 +480,14 @@ class SQLiteChatHistoryStore(BaseChatHistoryStore):
             # Look up user email via messages table subquery (since sessions table doesn't exist)
             cur = self._conn.execute("""
                 SELECT f.value, f.comment, f.thread_id, f.ts,
-                       COALESCE(
-                           (SELECT u.email FROM messages m
-                            JOIN users u ON m.user_id = u.id
-                            WHERE m.session_id = f.thread_id LIMIT 1),
-                           'Anonymous'
-                       ) as user_email
+                       COALESCE(u.email, 'Anonymous') as user_email,
+                       (SELECT content FROM messages m2 
+                        WHERE m2.session_id = f.thread_id AND m2.role = 'user' AND m2.ts <= m_asst.ts 
+                        ORDER BY m2.ts DESC LIMIT 1) as question,
+                       m_asst.sources as sources
                 FROM feedback f
+                LEFT JOIN messages m_asst ON (f.for_id = CAST(m_asst.id AS TEXT) OR f.for_id = m_asst.id)
+                LEFT JOIN users u ON m_asst.user_id = u.id
                 ORDER BY f.ts DESC LIMIT ?
             """, (limit,))
             rows = cur.fetchall()
@@ -496,7 +497,9 @@ class SQLiteChatHistoryStore(BaseChatHistoryStore):
                     "comment": r[1],
                     "thread_id": r[2],
                     "ts": r[3],
-                    "user": r[4] or "Anonymous"
+                    "user": r[4],
+                    "question": r[5],
+                    "sources": r[6]
                 }
                 for r in rows
             ]
@@ -937,13 +940,14 @@ class CloudSQLChatHistoryStore(BaseChatHistoryStore):
             with conn.cursor() as cur:
                 cur.execute("""
                     SELECT f.value, f.comment, f.thread_id, extract(epoch from f.ts),
-                           COALESCE(
-                               (SELECT u.email FROM messages m
-                                JOIN users u ON m.user_id = u.id
-                                WHERE m.session_id = f.thread_id LIMIT 1),
-                               'Anonymous'
-                           ) as user_email
+                           COALESCE(u.email, 'Anonymous') as user_email,
+                           (SELECT content FROM messages m2 
+                            WHERE m2.session_id = f.thread_id AND m2.role = 'user' AND m2.ts <= m_asst.ts 
+                            ORDER BY m2.ts DESC LIMIT 1) as question,
+                           m_asst.sources as sources
                     FROM feedback f
+                    LEFT JOIN messages m_asst ON (f.for_id = CAST(m_asst.id AS TEXT) OR f.for_id = m_asst.id)
+                    LEFT JOIN users u ON m_asst.user_id = u.id
                     ORDER BY f.ts DESC LIMIT %s
                 """, (limit,))
                 rows = cur.fetchall()
@@ -953,7 +957,9 @@ class CloudSQLChatHistoryStore(BaseChatHistoryStore):
                         "comment": r[1],
                         "thread_id": r[2],
                         "ts": r[3],
-                        "user_email": r[4]
+                        "user": r[4],
+                        "question": r[5],
+                        "sources": r[6]
                     }
                     for r in rows
                 ]

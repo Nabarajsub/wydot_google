@@ -145,7 +145,7 @@ def get_embeddings():
     if _embeddings is None:
         logger.info("🔄 Loading sentence-transformer model (all-MiniLM-L6-v2)...")
         _embeddings = HuggingFaceEmbeddings(
-            model_name="all-MiniLM-L6-v2",
+            model_name="sentence-transformers/all-MiniLM-L6-v2",
             cache_folder=HF_HOME,
         )
         logger.info("✅ Embeddings model loaded.")
