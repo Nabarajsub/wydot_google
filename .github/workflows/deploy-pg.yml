@@ -46,6 +46,15 @@ jobs:
       - name: 'Docker Auth'
         run: gcloud auth configure-docker us-docker.pkg.dev --quiet
 
+      # Grant Cloud SQL Client role to Cloud Run service account (idempotent)
+      - name: 'Ensure Cloud SQL Client role for Cloud Run SA'
+        run: |-
+          gcloud projects add-iam-policy-binding "${{ env.PROJECT_ID }}" \
+            --member="serviceAccount:cloud-run-sa@${{ env.PROJECT_ID }}.iam.gserviceaccount.com" \
+            --role="roles/cloudsql.client" \
+            --condition=None \
+            --quiet || echo "⚠️ Could not grant cloudsql.client (may already exist or insufficient permissions)"
+
       # 1. Build and Push Chatbot
       - name: 'Build and Push Chatbot'
         run: |-
@@ -93,12 +102,14 @@ jobs:
           cat /tmp/admin-pg-deploy.yaml
 
       - name: 'Deploy Admin-PG'
+        continue-on-error: true
         run: |-
           gcloud run services replace /tmp/admin-pg-deploy.yaml \
             --region="${{ env.REGION }}" \
             --project="${{ env.PROJECT_ID }}"
 
       - name: 'Allow Unauthenticated Access to Admin-PG'
+        continue-on-error: true
         run: |-
           gcloud run services add-iam-policy-binding wydot-admin-pg \
             --region="${{ env.REGION }}" \

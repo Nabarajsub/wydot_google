@@ -1029,8 +1029,23 @@ def get_chat_history_store() -> BaseChatHistoryStore:
     if db_url:
         print(f"   DATABASE_URL starts with: {db_url[:30]}...", flush=True)
     if db_url and db_url.startswith("postgres"):
-        print(f"   → Using CloudSQLChatHistoryStore (PostgreSQL)", flush=True)
-        return CloudSQLChatHistoryStore(db_url)
+        print(f"   → Creating CloudSQLChatHistoryStore (PostgreSQL)", flush=True)
+        store = CloudSQLChatHistoryStore(db_url)
+        # Eagerly test connection so errors show in startup logs
+        try:
+            print(f"   → Testing PostgreSQL connection...", flush=True)
+            test_conn = store._make_conn(dbname_override="postgres")
+            print(f"   ✅ PostgreSQL connection test PASSED (server_version={test_conn.server_version})", flush=True)
+            test_conn.close()
+        except Exception as e:
+            print(f"   ❌ PostgreSQL connection test FAILED: {e}", flush=True)
+            print(f"   ❌ HINT: Ensure the Cloud Run service account has 'roles/cloudsql.client' IAM role", flush=True)
+            print(f"   ❌ HINT: Run: gcloud projects add-iam-policy-binding PROJECT_ID "
+                  f"--member='serviceAccount:cloud-run-sa@PROJECT_ID.iam.gserviceaccount.com' "
+                  f"--role='roles/cloudsql.client'", flush=True)
+            import traceback; traceback.print_exc()
+            # Don't fallback — let the real error surface to the user
+        return store
     # On Cloud Run, filesystem is read-only except /tmp
     _default_db = "/tmp/chat_history.sqlite3" if os.getenv("K_SERVICE") else os.path.join(os.path.dirname(__file__), "..", "chat_history.sqlite3")
     db_path = os.getenv("CHAT_DB_PATH", _default_db)
