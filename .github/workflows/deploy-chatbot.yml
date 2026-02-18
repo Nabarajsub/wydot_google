@@ -1,16 +1,17 @@
-name: Deploy Admin PostgreSQL Service to Cloud Run
+name: Deploy Chatbot SQLite Service to Cloud Run
 
 on:
   push:
     branches:
       - main
     paths:
-      - 'ingestion_service/**'
-      - 'utils/chat_history_store.py'
-      - 'ingestion_service/tracker_db.py'
-      - 'cloudrun/admin-pg.yaml'
-      - '.github/workflows/deploy-admin-pg.yml'
-      - 'Dockerfile.admin'
+      - 'chatapp.py'
+      - '.chainlit/**'
+      - 'public/**'
+      - 'utils/**'
+      - 'cloudrun/chatbot.yaml'
+      - '.github/workflows/deploy-chatbot.yml'
+      - 'Dockerfile.chatbot'
       - 'requirements.txt'
 
 env:
@@ -19,7 +20,7 @@ env:
   GAR_LOCATION: us-docker.pkg.dev/${{ secrets.GCP_PROJECT }}/apps
 
 jobs:
-  deploy-admin-pg:
+  deploy-chatbot-sqlite:
     runs-on: ubuntu-latest
     permissions:
       contents: 'read'
@@ -44,35 +45,27 @@ jobs:
       - name: 'Docker Auth'
         run: gcloud auth configure-docker us-docker.pkg.dev --quiet
 
-      - name: 'Ensure Cloud SQL Client role for Cloud Run SA'
+      - name: 'Build and Push Chatbot'
         run: |-
-          gcloud projects add-iam-policy-binding "${{ env.PROJECT_ID }}" \
-            --member="serviceAccount:cloud-run-sa@${{ env.PROJECT_ID }}.iam.gserviceaccount.com" \
-            --role="roles/cloudsql.client" \
-            --condition=None \
-            --quiet || echo "⚠️ Could not grant cloudsql.client"
+          docker build -f Dockerfile.chatbot -t "${{ env.GAR_LOCATION }}/wydot-chatbot-sqlite:${{ github.sha }}" .
+          docker push "${{ env.GAR_LOCATION }}/wydot-chatbot-sqlite:${{ github.sha }}"
 
-      - name: 'Build and Push Admin'
+      - name: 'Prepare Chatbot-SQLite YAML'
         run: |-
-          docker build -f Dockerfile.admin -t "${{ env.GAR_LOCATION }}/wydot-admin:${{ github.sha }}" .
-          docker push "${{ env.GAR_LOCATION }}/wydot-admin:${{ github.sha }}"
-
-      - name: 'Prepare Admin-PG YAML'
-        run: |-
-          IMAGE="${{ env.GAR_LOCATION }}/wydot-admin:${{ github.sha }}"
+          IMAGE="${{ env.GAR_LOCATION }}/wydot-chatbot-sqlite:${{ github.sha }}"
           sed -e "s|\${PROJECT_ID}|${{ env.PROJECT_ID }}|g" \
               -e "s|\${IMAGE}|${IMAGE}|g" \
-              cloudrun/admin-pg.yaml > /tmp/admin-pg-deploy.yaml
+              cloudrun/chatbot.yaml > /tmp/chatbot-sqlite-deploy.yaml
 
-      - name: 'Deploy Admin-PG'
+      - name: 'Deploy Chatbot-SQLite'
         run: |-
-          gcloud run services replace /tmp/admin-pg-deploy.yaml \
+          gcloud run services replace /tmp/chatbot-sqlite-deploy.yaml \
             --region="${{ env.REGION }}" \
             --project="${{ env.PROJECT_ID }}"
 
-      - name: 'Allow Unauthenticated Access to Admin-PG'
+      - name: 'Allow Unauthenticated Access to Chatbot-SQLite'
         run: |-
-          gcloud run services add-iam-policy-binding wydot-admin-pg \
+          gcloud run services add-iam-policy-binding wydot-chatbot \
             --region="${{ env.REGION }}" \
             --project="${{ env.PROJECT_ID }}" \
             --member="allUsers" \

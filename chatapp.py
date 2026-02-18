@@ -523,7 +523,7 @@ class WydotDataLayer(BaseDataLayer):
                 else:
                     step_created = created_at
                 
-                step_id = f"step_{actual_session_id}_{i}"
+                step_id = msg.get("id") or f"step_{actual_session_id}_{i}"
                 step_elements = [] 
                 
                 # Check for sources to restore elements
@@ -1047,9 +1047,9 @@ def get_embeddings_model(use_gemini: bool = False):
     if key in _EMBEDDINGS_CACHE:
         return _EMBEDDINGS_CACHE[key]
 
-    print("🔄 Loading sentence-transformer model (all-MiniLM-L6-v2)...")
+    print("🔄 Loading sentence-transformer model (sentence-transformers/all-MiniLM-L6-v2)...")
     from langchain_huggingface import HuggingFaceEmbeddings
-    _EMBEDDINGS_CACHE[key] = HuggingFaceEmbeddings(model_name="all-MiniLM-L6-v2")
+    _EMBEDDINGS_CACHE[key] = HuggingFaceEmbeddings(model_name="sentence-transformers/all-MiniLM-L6-v2")
     print("✅ Embeddings model cached.")
     return _EMBEDDINGS_CACHE[key]
     return _EMBEDDINGS_CACHE[key]
@@ -1356,7 +1356,7 @@ async def search_graph_multihop_async(query: str, index_name: str, use_gemini: b
     unique_sources = []
     seen_sources = set()
     for s in all_sources:
-        s_key = (s.get("title"), s.get("source"), s.get("preview", "")[:100])
+        s_key = (s.get("title"), s.get("source"), s.get("preview", "")[:500])
         if s_key not in seen_sources:
             seen_sources.add(s_key)
             unique_sources.append(s)
@@ -1823,8 +1823,8 @@ async def main(message: cl.Message):
         uid = user.metadata["db_id"]
         conv_mem.append(uid, session_id, "user", message.content)
         conv_mem.append(uid, session_id, "assistant", enhanced_answer)
-        CHAT_DB.add_message(uid, session_id, "user", message.content)
-        CHAT_DB.add_message(uid, session_id, "assistant", enhanced_answer, sources=sources)
+        CHAT_DB.add_message(uid, session_id, "user", message.content, cl_msg_id=message.id)
+        CHAT_DB.add_message(uid, session_id, "assistant", enhanced_answer, sources=sources, cl_msg_id=msg.id)
     else:
         history_msgs.append({"role": "user", "content": message.content})
         history_msgs.append({"role": "assistant", "content": enhanced_answer})

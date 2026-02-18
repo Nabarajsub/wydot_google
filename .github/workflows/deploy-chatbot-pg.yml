@@ -1,11 +1,18 @@
-name: Deploy PostgreSQL Services to Cloud Run (DISABLED - Use dedicated workflows)
+name: Deploy Chatbot PostgreSQL Service to Cloud Run
 
-# DISABLED: Use deploy-admin-pg.yml or deploy-chatbot-pg.yml
 on:
-  workflow_dispatch:
-    paths-ignore:
-      - 'README.md'
-      - 'docs/**'
+  push:
+    branches:
+      - main
+    paths:
+      - 'chatapp.py'
+      - '.chainlit/**'
+      - 'public/**'
+      - 'utils/**'
+      - 'cloudrun/chatbot-pg.yaml'
+      - '.github/workflows/deploy-chatbot-pg.yml'
+      - 'Dockerfile.chatbot'
+      - 'requirements.txt'
 
 env:
   PROJECT_ID: ${{ secrets.GCP_PROJECT }}
@@ -13,7 +20,7 @@ env:
   GAR_LOCATION: us-docker.pkg.dev/${{ secrets.GCP_PROJECT }}/apps
 
 jobs:
-  deploy-pg:
+  deploy-chatbot-pg:
     runs-on: ubuntu-latest
     permissions:
       contents: 'read'
@@ -23,7 +30,6 @@ jobs:
       - name: Checkout
         uses: actions/checkout@v4
 
-      # Authenticate using Workload Identity
       - id: 'auth'
         name: 'Authenticate to Google Cloud'
         uses: 'google-github-actions/auth@v2'
@@ -31,46 +37,33 @@ jobs:
           workload_identity_provider: ${{ secrets.WIF_PROVIDER }}
           service_account: github-deployer@${{ secrets.GCP_PROJECT }}.iam.gserviceaccount.com
 
-      # Set up gcloud CLI
       - name: 'Set up Cloud SDK'
         uses: 'google-github-actions/setup-gcloud@v2'
         with:
           project_id: ${{ secrets.GCP_PROJECT }}
 
-      # Authenticate Docker to Artifact Registry
       - name: 'Docker Auth'
         run: gcloud auth configure-docker us-docker.pkg.dev --quiet
 
-      # Grant Cloud SQL Client role to Cloud Run service account (idempotent)
       - name: 'Ensure Cloud SQL Client role for Cloud Run SA'
         run: |-
           gcloud projects add-iam-policy-binding "${{ env.PROJECT_ID }}" \
             --member="serviceAccount:cloud-run-sa@${{ env.PROJECT_ID }}.iam.gserviceaccount.com" \
             --role="roles/cloudsql.client" \
             --condition=None \
-            --quiet || echo "⚠️ Could not grant cloudsql.client (may already exist or insufficient permissions)"
+            --quiet || echo "⚠️ Could not grant cloudsql.client"
 
-      # 1. Build and Push Chatbot
       - name: 'Build and Push Chatbot'
         run: |-
           docker build -f Dockerfile.chatbot -t "${{ env.GAR_LOCATION }}/wydot-chatbot:${{ github.sha }}" .
           docker push "${{ env.GAR_LOCATION }}/wydot-chatbot:${{ github.sha }}"
 
-      # 2. Build and Push Admin
-      - name: 'Build and Push Admin'
-        run: |-
-          docker build -f Dockerfile.admin -t "${{ env.GAR_LOCATION }}/wydot-admin:${{ github.sha }}" .
-          docker push "${{ env.GAR_LOCATION }}/wydot-admin:${{ github.sha }}"
-
-      # 3. Deploy Chatbot-PG via Knative YAML (PostgreSQL via Cloud SQL proxy)
       - name: 'Prepare Chatbot-PG YAML'
         run: |-
           IMAGE="${{ env.GAR_LOCATION }}/wydot-chatbot:${{ github.sha }}"
           sed -e "s|\${PROJECT_ID}|${{ env.PROJECT_ID }}|g" \
               -e "s|\${IMAGE}|${IMAGE}|g" \
               cloudrun/chatbot-pg.yaml > /tmp/chatbot-pg-deploy.yaml
-          echo "=== Rendered Chatbot-PG YAML ==="
-          cat /tmp/chatbot-pg-deploy.yaml
 
       - name: 'Deploy Chatbot-PG'
         run: |-
@@ -81,32 +74,6 @@ jobs:
       - name: 'Allow Unauthenticated Access to Chatbot-PG'
         run: |-
           gcloud run services add-iam-policy-binding wydot-chatbot-pg \
-            --region="${{ env.REGION }}" \
-            --project="${{ env.PROJECT_ID }}" \
-            --member="allUsers" \
-            --role="roles/run.invoker"
-
-      # 4. Deploy Admin-PG via Knative YAML (PostgreSQL via Cloud SQL proxy)
-      - name: 'Prepare Admin-PG YAML'
-        run: |-
-          IMAGE="${{ env.GAR_LOCATION }}/wydot-admin:${{ github.sha }}"
-          sed -e "s|\${PROJECT_ID}|${{ env.PROJECT_ID }}|g" \
-              -e "s|\${IMAGE}|${IMAGE}|g" \
-              cloudrun/admin-pg.yaml > /tmp/admin-pg-deploy.yaml
-          echo "=== Rendered Admin-PG YAML ==="
-          cat /tmp/admin-pg-deploy.yaml
-
-      - name: 'Deploy Admin-PG'
-        continue-on-error: true
-        run: |-
-          gcloud run services replace /tmp/admin-pg-deploy.yaml \
-            --region="${{ env.REGION }}" \
-            --project="${{ env.PROJECT_ID }}"
-
-      - name: 'Allow Unauthenticated Access to Admin-PG'
-        continue-on-error: true
-        run: |-
-          gcloud run services add-iam-policy-binding wydot-admin-pg \
             --region="${{ env.REGION }}" \
             --project="${{ env.PROJECT_ID }}" \
             --member="allUsers" \

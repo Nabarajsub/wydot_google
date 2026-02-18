@@ -1,12 +1,12 @@
 // Force light theme on load — override any saved dark mode preference
-(function() {
+(function () {
     try {
         // Chainlit stores theme in localStorage as "chainlit-theme"
         localStorage.setItem("chainlit-theme", '"light"');
         // Also set the HTML attribute Chainlit uses
         document.documentElement.setAttribute("data-theme", "light");
         document.documentElement.style.colorScheme = "light";
-    } catch(e) {}
+    } catch (e) { }
 })();
 
 (function () {

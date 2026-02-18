@@ -180,11 +180,13 @@ class SQLiteChatHistoryStore(BaseChatHistoryStore):
                         role TEXT CHECK(role IN ('user','assistant')) NOT NULL,
                         content TEXT NOT NULL,
                         sources TEXT,
+                        cl_msg_id TEXT,
                         ts REAL NOT NULL DEFAULT (strftime('%s','now')),
                         FOREIGN KEY (user_id) REFERENCES users(id)
                     )
                 """)
                 self._conn.execute("CREATE INDEX IF NOT EXISTS idx_messages_user_session ON messages(user_id, session_id);")
+                self._conn.execute("CREATE INDEX IF NOT EXISTS idx_messages_cl_id ON messages(cl_msg_id);")
                 self._conn.commit()
             else:
                 raise
@@ -328,13 +330,13 @@ class SQLiteChatHistoryStore(BaseChatHistoryStore):
         _send_verification_email(email, code)
         return uid, None
 
-    def add_message(self, user_id: int, session_id: str, role: str, content: str, sources: List[Dict] = None) -> None:
+    def add_message(self, user_id: int, session_id: str, role: str, content: str, sources: List[Dict] = None, cl_msg_id: str = None) -> None:
         import json
         sources_json = json.dumps(sources) if sources else None
         with self._lock:
             self._conn.execute(
-                "INSERT INTO messages (user_id, session_id, role, content, sources) VALUES (?, ?, ?, ?, ?)",
-                (user_id, session_id, role, content, sources_json),
+                "INSERT INTO messages (user_id, session_id, role, content, sources, cl_msg_id) VALUES (?, ?, ?, ?, ?, ?)",
+                (user_id, session_id, role, content, sources_json, cl_msg_id),
             )
             self._conn.commit()
 
@@ -342,14 +344,14 @@ class SQLiteChatHistoryStore(BaseChatHistoryStore):
         import json
         with self._lock:
             cur = self._conn.execute(
-                "SELECT role, content, sources, ts FROM messages WHERE user_id=? AND session_id=? ORDER BY id DESC LIMIT ?",
+                "SELECT role, content, sources, ts, cl_msg_id FROM messages WHERE user_id=? AND session_id=? ORDER BY id DESC LIMIT ?",
                 (user_id, session_id, limit),
             )
             rows = cur.fetchall()
         rows.reverse()
         result = []
         for r in rows:
-            msg = {"role": r[0], "content": r[1], "ts": r[3]}
+            msg = {"role": r[0], "content": r[1], "ts": r[3], "id": r[4]}
             if r[2]:
                 try:
                     msg["sources"] = json.loads(r[2])
@@ -484,9 +486,10 @@ class SQLiteChatHistoryStore(BaseChatHistoryStore):
                        (SELECT content FROM messages m2 
                         WHERE m2.session_id = f.thread_id AND m2.role = 'user' AND m2.ts <= m_asst.ts 
                         ORDER BY m2.ts DESC LIMIT 1) as question,
-                       m_asst.sources as sources
+                       m_asst.sources as sources,
+                       m_asst.cl_msg_id as cl_id
                 FROM feedback f
-                LEFT JOIN messages m_asst ON (f.for_id = CAST(m_asst.id AS TEXT) OR f.for_id = m_asst.id)
+                LEFT JOIN messages m_asst ON f.for_id = m_asst.cl_msg_id
                 LEFT JOIN users u ON m_asst.user_id = u.id
                 ORDER BY f.ts DESC LIMIT ?
             """, (limit,))
@@ -677,10 +680,12 @@ class CloudSQLChatHistoryStore(BaseChatHistoryStore):
                         role TEXT NOT NULL CHECK(role IN ('user', 'assistant')),
                         content TEXT NOT NULL,
                         sources TEXT,
+                        cl_msg_id TEXT,
                         ts TIMESTAMP DEFAULT CURRENT_TIMESTAMP
                     )
                 """)
                 cur.execute("CREATE INDEX IF NOT EXISTS idx_messages_user_session ON messages(user_id, session_id);")
+                cur.execute("CREATE INDEX IF NOT EXISTS idx_messages_cl_id ON messages(cl_msg_id);")
                 # Feedback
                 cur.execute("""
                     CREATE TABLE IF NOT EXISTS feedback (
@@ -796,7 +801,7 @@ class CloudSQLChatHistoryStore(BaseChatHistoryStore):
         try:
             with conn.cursor() as cur:
                 cur.execute(
-                    "SELECT role, content, sources, extract(epoch from ts) as ts FROM messages WHERE user_id=%s AND session_id=%s ORDER BY id DESC LIMIT %s",
+                    "SELECT role, content, sources, extract(epoch from ts) as ts, cl_msg_id FROM messages WHERE user_id=%s AND session_id=%s ORDER BY id DESC LIMIT %s",
                     (user_id, session_id, limit)
                 )
                 rows = cur.fetchall()
@@ -806,7 +811,7 @@ class CloudSQLChatHistoryStore(BaseChatHistoryStore):
             rows.reverse()
             result = []
             for r in rows:
-                msg = {"role": r[0], "content": r[1], "ts": r[3]}
+                msg = {"role": r[0], "content": r[1], "ts": r[3], "id": r[4]}
                 if r[2]:
                     try:
                         msg["sources"] = json.loads(r[2])
@@ -817,7 +822,7 @@ class CloudSQLChatHistoryStore(BaseChatHistoryStore):
         finally:
             conn.close()
 
-    def add_message(self, user_id: int, session_id: str, role: str, content: str, sources: str = None) -> None:
+    def add_message(self, user_id: int, session_id: str, role: str, content: str, sources: str = None, cl_msg_id: str = None) -> None:
         conn = self._get_conn()
         # Ensure sources is a valid JSON string or None
         if sources is not None and not isinstance(sources, str):
@@ -827,8 +832,8 @@ class CloudSQLChatHistoryStore(BaseChatHistoryStore):
         try:
             with conn.cursor() as cur:
                 cur.execute(
-                    "INSERT INTO messages (user_id, session_id, role, content, sources) VALUES (%s, %s, %s, %s, %s)",
-                    (user_id, session_id, role, content, sources)
+                    "INSERT INTO messages (user_id, session_id, role, content, sources, cl_msg_id) VALUES (%s, %s, %s, %s, %s, %s)",
+                    (user_id, session_id, role, content, sources, cl_msg_id)
                 )
             conn.commit()
         finally:
@@ -944,9 +949,10 @@ class CloudSQLChatHistoryStore(BaseChatHistoryStore):
                            (SELECT content FROM messages m2 
                             WHERE m2.session_id = f.thread_id AND m2.role = 'user' AND m2.ts <= m_asst.ts 
                             ORDER BY m2.ts DESC LIMIT 1) as question,
-                           m_asst.sources as sources
+                           m_asst.sources as sources,
+                           m_asst.cl_msg_id as cl_id
                     FROM feedback f
-                    LEFT JOIN messages m_asst ON (f.for_id = CAST(m_asst.id AS TEXT) OR f.for_id = m_asst.id)
+                    LEFT JOIN messages m_asst ON f.for_id = m_asst.cl_msg_id
                     LEFT JOIN users u ON m_asst.user_id = u.id
                     ORDER BY f.ts DESC LIMIT %s
                 """, (limit,))
@@ -959,7 +965,8 @@ class CloudSQLChatHistoryStore(BaseChatHistoryStore):
                         "ts": r[3],
                         "user": r[4],
                         "question": r[5],
-                        "sources": r[6]
+                        "sources": r[6],
+                        "cl_id": r[7]
                     }
                     for r in rows
                 ]
