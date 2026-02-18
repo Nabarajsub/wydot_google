@@ -1,11 +1,23 @@
-/* Gemini-like Clean UI */
+/* Gemini-like Clean UI — Force Light Theme */
 
-:root {
+/* Override browser dark mode preference — always use light */
+:root,
+html,
+html[data-theme="dark"],
+html[data-theme] {
+    color-scheme: light !important;
     --background-primary: #ffffff;
     --text-primary: #1f1f1f;
     --input-bg: #f0f4f9;
     --accent-color: #1d72b8;
     /* WYDOT Blueish */
+}
+
+/* Force Chainlit to use light mode colors even if system is dark */
+body,
+html {
+    background-color: #ffffff !important;
+    color: #1f1f1f !important;
 }
 
 
