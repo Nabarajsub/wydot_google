@@ -96,13 +96,22 @@ GCS_BUCKET = os.getenv("GCS_BUCKET")
 _raw_hf = os.getenv("HF_HOME", "").strip()
 HF_HOME = None
 if _raw_hf and os.path.isabs(_raw_hf):
-    try:
-        os.makedirs(_raw_hf, exist_ok=True)
-        with tempfile.NamedTemporaryFile(dir=_raw_hf, delete=True):
-            pass
+    # If the directory already has model files (baked at Docker build time),
+    # use it directly — don't require write access (Cloud Run read-only /app)
+    if os.path.isdir(_raw_hf) and any(
+        f for f in os.listdir(_raw_hf) if not f.startswith(".")
+    ):
         HF_HOME = _raw_hf
-    except (OSError, PermissionError, FileNotFoundError):
-        pass
+        print(f"✅ Using pre-baked model cache at: {HF_HOME}")
+    else:
+        # No baked models — try to write (local dev or writable path)
+        try:
+            os.makedirs(_raw_hf, exist_ok=True)
+            with tempfile.NamedTemporaryFile(dir=_raw_hf, delete=True):
+                pass
+            HF_HOME = _raw_hf
+        except (OSError, PermissionError, FileNotFoundError):
+            pass
 if HF_HOME is None:
     if os.getenv("K_SERVICE"):
         HF_HOME = "/tmp/model_cache"
