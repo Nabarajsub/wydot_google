@@ -133,13 +133,18 @@ if GEMINI_API_KEY and genai:
 app = Flask(__name__, template_folder="templates", static_folder="static")
 app.config["MAX_CONTENT_LENGTH"] = 200 * 1024 * 1024  # 200 MB
 
-# Embeddings (use local model_cache when HF_HOME not set or not writable)
-logger.info("Loading embeddings model...")
-embeddings = HuggingFaceEmbeddings(
-    model_name="all-MiniLM-L6-v2",
-    cache_folder=HF_HOME,
-)
-logger.info("Embeddings model loaded.")
+# Embeddings (lazy loaded to prevent startup timeouts)
+_embeddings = None
+def get_embeddings():
+    global _embeddings
+    if _embeddings is None:
+        logger.info("🔄 Loading sentence-transformer model (all-MiniLM-L6-v2)...")
+        _embeddings = HuggingFaceEmbeddings(
+            model_name="all-MiniLM-L6-v2",
+            cache_folder=HF_HOME,
+        )
+        logger.info("✅ Embeddings model loaded.")
+    return _embeddings
 
 TEXT_EXTENSIONS = {".pdf", ".docx", ".doc"}
 AUDIO_EXTENSIONS = {".mp3", ".wav", ".m4a", ".webm", ".ogg"}
@@ -349,7 +354,7 @@ def ingest_documents(docs):
     chunks = text_splitter.split_documents(docs)
     Neo4jVector.from_documents(
         chunks,
-        embeddings,
+        get_embeddings(),
         url=NEO4J_URI,
         username=NEO4J_USERNAME,
         password=NEO4J_PASSWORD,
@@ -374,6 +379,12 @@ def _get_driver():
 @app.route("/")
 def index():
     return render_template("upload.html")
+
+
+@app.route("/health")
+def health():
+    """Simple health check for Cloud Run startup probes."""
+    return jsonify({"status": "healthy", "timestamp": time.time()})
 
 
 @app.route("/upload", methods=["POST"])
@@ -543,7 +554,7 @@ def kg_search():
         return jsonify({"status": "error", "message": "query is required"}), 400
     try:
         vs = Neo4jVector.from_existing_index(
-            embeddings, url=NEO4J_URI, username=NEO4J_USERNAME, password=NEO4J_PASSWORD,
+            get_embeddings(), url=NEO4J_URI, username=NEO4J_USERNAME, password=NEO4J_PASSWORD,
             index_name=NEO4J_INDEX, node_label="Chunk", text_node_property="text", embedding_node_property="embedding",
         )
         results = vs.similarity_search_with_score(query, k=top_k)
@@ -569,7 +580,7 @@ def kg_update():
         driver.close()
         if reembed_rows:
             texts = [r["text"] for r in reembed_rows]
-            vecs = embeddings.embed_documents(texts)
+            vecs = get_embeddings().embed_documents(texts)
             driver2 = _get_driver()
             with driver2.session() as session2:
                 for (r, vec) in zip(reembed_rows, vecs):
@@ -629,7 +640,7 @@ def ingest_event():
             text_splitter = RecursiveCharacterTextSplitter(chunk_size=1000, chunk_overlap=100)
             chunks = text_splitter.split_documents(docs)
             Neo4jVector.from_documents(
-                chunks, embeddings, url=NEO4J_URI, username=NEO4J_USERNAME, password=NEO4J_PASSWORD,
+                chunks, get_embeddings(), url=NEO4J_URI, username=NEO4J_USERNAME, password=NEO4J_PASSWORD,
                 index_name=NEO4J_INDEX, node_label="Chunk", text_node_property="text", embedding_node_property="embedding",
             )
             bucket.rename_blob(blob, file_path.replace("incoming/", "processed/"))
@@ -691,7 +702,7 @@ def api_monitoring_models():
 def eval_search_func(query, index_name="All Documents"):
     try:
         vs = Neo4jVector.from_existing_index(
-            embeddings, url=NEO4J_URI, username=NEO4J_USERNAME, password=NEO4J_PASSWORD,
+            get_embeddings(), url=NEO4J_URI, username=NEO4J_USERNAME, password=NEO4J_PASSWORD,
             index_name=NEO4J_INDEX, node_label="Chunk", text_node_property="text", embedding_node_property="embedding",
         )
         docs = vs.similarity_search(query, k=3)
