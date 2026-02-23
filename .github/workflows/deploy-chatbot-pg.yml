@@ -53,6 +53,9 @@ jobs:
             --condition=None \
             --quiet || echo "⚠️ Could not grant cloudsql.client"
 
+      - name: 'Debug GAR_LOCATION'
+        run: echo "Pushing to: ${{ env.GAR_LOCATION }}"
+
       - name: 'Build and Push Chatbot'
         run: |-
           docker build -f Dockerfile.chatbot -t "${{ env.GAR_LOCATION }}/wydot-chatbot:${{ github.sha }}" .
