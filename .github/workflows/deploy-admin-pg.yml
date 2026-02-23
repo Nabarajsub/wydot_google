@@ -53,7 +53,7 @@ jobs:
             --quiet || echo "⚠️ Could not grant cloudsql.client"
 
       - name: 'Debug GAR_LOCATION'
-        run: echo "Pushing to: ${{ env.GAR_LOCATION }}"
+        run: echo "Pushing to ${{ env.GAR_LOCATION }}"
 
       - name: 'Build and Push Admin'
         run: |-
