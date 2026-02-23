@@ -219,6 +219,25 @@ def generate_public_url(gcs_uri: str) -> str:
         print(f"Error generating public URL: {e}")
         return ""
 
+# Google Cloud Storage - Public URLs
+def generate_public_url(gcs_uri: str) -> str:
+    """Generate a public URL for a GCS object."""
+    try:
+        import urllib.parse
+        if not gcs_uri or not gcs_uri.startswith("gs://"):
+            return ""
+        # Parse gs://bucket/blob_name
+        parts = gcs_uri.replace("gs://", "").split("/", 1)
+        if len(parts) != 2:
+            return ""
+        bucket_name, blob_name = parts
+        # Encode the blob path (e.g. spaces to %20)
+        encoded_blob = urllib.parse.quote(blob_name)
+        return f"https://storage.googleapis.com/{bucket_name}/{encoded_blob}"
+    except Exception as e:
+        print(f"Error generating public URL: {e}")
+        return ""
+
 # Load environment variables from DOTENV_PATH or .env
 dotenv_path = os.getenv("DOTENV_PATH", ".env")
 if os.path.exists(dotenv_path):
@@ -1313,111 +1332,337 @@ def get_all_document_titles() -> List[str]:
         print(f"Error fetching document titles: {e}")
         return []
 
-async def decompose_query(query: str, model_type: str = "mistral") -> List[str]:
-    titles = get_all_document_titles()
-    titles_context = "\n".join([f"- {t}" for t in titles]) if titles else "No specific documents listed."
+from typing import Optional
+from langchain_core.tools import tool
+
+# Global variable to collect sources during an agent run
+_CURRENT_TOOL_SOURCES = []
+
+@tool
+def search_wydot_documents(search_term: str, year: Optional[str] = None, specific_source: Optional[str] = None) -> str:
+    """
+    Search WYDOT documents for specific information.
     
-    decomposition_prompt = f"""You are an agentic query analyzer for the WYDOT Knowledge Graph.
-Your goal is to break down the user's question into 2-3 specific sub-queries.
-
-KNOWLEDGE GRAPH DOCUMENTS:
-{titles_context}
-
-INSTRUCTIONS:
-1. Identify if the user is referring to a specific document (e.g., "2021 specs", "construction manual").
-2. Map their short-hand to the FULL document title from the list above.
-3. If multiple years are mentioned, create separate sub-queries for each year and its specific document.
-4. If no specific document is mentioned, keep the query general.
-
-Main Question: {query}
-
-Provide the sub-queries as a numbered list, one per line. Be concise. Do NOT add any preamble.
-"""
-    try:
-        if model_type == "gemini":
-            model = get_gemini_llm()
-            response = await model.generate_content_async(decomposition_prompt)
-            result = response.text
-        else:
-            from langchain_core.prompts import ChatPromptTemplate
-            from langchain_core.output_parsers import StrOutputParser
-            llm = get_mistral_llm()
-            template = ChatPromptTemplate.from_template("{input_prompt}")
-            chain = template | llm | StrOutputParser()
-            result = await chain.ainvoke({"input_prompt": decomposition_prompt})
-        
-        lines = result.strip().split('\n')
-        sub_queries = []
-        for line in lines:
-            line = line.strip()
-            line = re.sub(r'^\d+[\.\)]\s*', '', line)
-            if line and len(line) > 10:
-                sub_queries.append(line)
-        
-        return sub_queries[:3] if sub_queries else [query]
-    except Exception as e:
-        print(f"Query decomposition failed: {e}")
-        return [query]
-
-async def search_graph_multihop_async(query: str, index_name: str, use_gemini: bool = False) -> Tuple[str, List[Dict]]:
-    model_type = "gemini" if use_gemini else "mistral"
-    sub_queries = await decompose_query(query, model_type)
-    
-    if len(sub_queries) == 1 and sub_queries[0] == query:
-        return await search_graph_async(query, index_name, use_gemini)
-    
-    print(f"🧠 Multi-hop: Decomposed into {sub_queries}")
+    Args:
+        search_term: The concept or phrase to search for (e.g., "concrete strength", "asphalt mix").
+        year: (Optional) Limit search to a specific document year (e.g., "2021", "2010").
+        specific_source: (Optional) Limit search to a specific document title if known.
+    """
+    global _CURRENT_TOOL_SOURCES
     
     import asyncio
-    tasks = [search_graph_async(sq, index_name, use_gemini) for sq in sub_queries]
-    results = await asyncio.gather(*tasks)
-    
-    all_chunks = []
-    all_sources = []
-    seen_content = set()
-    
-    # Merge results
-    for ctx, sources in results:
-        # ctx is a string of [SOURCE_X] blocs
-        # We need to parse them back or just append them and let ranker handle it
-        # However, search_graph_async already reranks. 
-        # For multihop, we should ideally retrieve from ALL subqueries and then do one FINAL rerank.
-        # But to keep it simple and reuse existing logic, we'll collect the reranked results from each.
-        if ctx:
-            all_chunks.append(ctx)
-        all_sources.extend(sources)
+    try:
+        # Re-use the existing async search but we need to inject filters
+        # Since search_graph_async doesn't natively take filters yet, we'll run it
+        # and filter the results post-retrieval for now, or preferably build a sync filtered search here.
+        
+        # Sync retrieval for tool ease
+        ret = get_retriever(NEO4J_INDEX_DEFAULT)
+        if not ret: return "Error: Could not initialize database connection."
+        
+        # Apply metadata filtering to the vector store kwargs if possible (LangChain Neo4j allows this)
+        filter_dict = {}
+        if year:
+            filter_dict["year"] = year
+        if specific_source:
+            filter_dict["source"] = specific_source
+            
+        if filter_dict:
+             ret.search_kwargs["filter"] = filter_dict
+             
+        ret.search_kwargs["k"] = 10 # Get top 10 targeted results
+        
+        docs = ret.invoke(search_term)
+        
+        if not docs:
+            return f"No results found for '{search_term}' with filters year={year}, source={specific_source}."
+            
+        chunks = []
+        for i, doc in enumerate(docs):
+            meta = doc.metadata
+            title = meta.get("source", "Unknown Document")
+            # The 'source' meta sometimes has the full path, let's just get the basename if so
+            import os
+            title = os.path.basename(title)
+            
+            doc_year = meta.get("year", "N/A")
+            
+            # Build Cloud Storage URL
+            gcs_path = meta.get("gcs_uri", "")
+            if not gcs_path:
+                project_id = os.getenv("GCP_PROJECT") or os.getenv("GOOGLE_CLOUD_PROJECT")
+                if project_id:
+                    bucket_name = f"wydot-documents-{project_id}"
+                    source_file = meta.get("source", "")
+                    if source_file:
+                        gcs_path = f"gs://{bucket_name}/wydot documents/{source_file}"
+                        
+            public_url = generate_public_url(gcs_path)
+            # Append page number hash if available
+            page = meta.get("page", "")
+            if public_url and page:
+                public_url += f"#page={page}"
+                
+            if not public_url:
+                public_url = "#"
 
-    # De-duplicate sources by title/source/preview
-    unique_sources = []
-    seen_sources = set()
-    for s in all_sources:
-        s_key = (s.get("title"), s.get("source"), s.get("preview", "")[:500])
-        if s_key not in seen_sources:
-            seen_sources.add(s_key)
-            unique_sources.append(s)
-    
-    # Re-index sources for the LLM
-    final_chunks = []
-    for i, s in enumerate(unique_sources[:RETRIEVAL_K]):
-        s["index"] = i + 1
-        s["id"] = f"source_{i+1}"
-        # We don't have the clean page_content easily here without repeating search_graph_async's work
-        # but the search_graph_async returns the top chunks.
-        # Let's just combine the contexts and inform the LLM
-        pass
+            # Record source for the final UI display
+            source_info = {
+                "id": f"source_{len(_CURRENT_TOOL_SOURCES)+1}",
+                "index": len(_CURRENT_TOOL_SOURCES) + 1,
+                "title": title,
+                "source": title,
+                "year": doc_year,
+                "section": meta.get("section", ""),
+                "page": page,
+                "preview": doc.page_content[:300],
+                "url": public_url
+            }
+            _CURRENT_TOOL_SOURCES.append(source_info)
+            
+            chunks.append(f"--- [Source {source_info['index']}]: {title} ({doc_year}) ---\n{doc.page_content}")
+            
+        return "\n\n".join(chunks)
+        
+    except Exception as e:
+        return f"Search encountered an error: {str(e)}"
 
-    # Simplified merge: join all contexts and deduplicate sources
-    combined_context = "\n\n".join(all_chunks)
+from typing import TypedDict, List, Dict, Any, Literal, Annotated
+from langchain_core.messages import SystemMessage, HumanMessage, AIMessage, BaseMessage
+from pydantic import BaseModel, Field
+import operator
+
+class GraphState(TypedDict):
+    """Represents the state of our multi-agent system."""
+    question: str
+    chat_history: List[BaseMessage]
+    plan: str
+    search_queries: List[Dict[str, str]] # [{'term': '', 'year': ''}]
+    documents: List[dict] # The retrieved document chunks
+    grading_results: str # "relevant" or "irrelevant"
+    generation: str # final answer
+    loop_count: int
+
+# --- Pydantic Models for Structured Output ---
+class SearchQuery(BaseModel):
+    search_term: str = Field(description="The core concept or phrase to search for (e.g. 'concrete strength')")
+    year: str = Field(description="The specific year to filter by, if mentioned. Extremely important if comparing years. Empty string if no year.", default="")
+    specific_source: str = Field(description="Specific document code or source if known. Empty string if unknown.", default="")
+
+class PlannerOutput(BaseModel):
+    plan: str = Field(description="A brief explanation of your strategy to answer the question.")
+    queries: List[SearchQuery] = Field(description="A list of specific search queries to execute against the knowledge graph.")
+
+class GradeDocuments(BaseModel):
+    grade: str = Field(description="Decision on whether the documents are relevant to the question. 'yes' or 'no'.")
+    rationale: str = Field(description="Explanation for why the documents are relevant or not.")
+
+# --- Node Implementations ---
+
+def planner_node(state: GraphState):
+    """Analyzes the request and generates specific search queries."""
+    question = state["question"]
     
-    return combined_context, unique_sources[:RETRIEVAL_K]
+    llm = get_gemini_llm() # Using gemini for planning
+    
+    system = """You are an expert WYDOT research planner.
+Your job is to analyze the user's question and formulate a search strategy.
+If the user asks to compare years (e.g., 2010 vs 2021), you MUST generate separate search queries for EACH year to ensure distinct retrieval.
+Output your strategy and the precise search queries to execute."""
+    
+    planner_llm = llm.with_structured_output(PlannerOutput)
+    
+    messages = [SystemMessage(content=system)]
+    if state.get("chat_history"):
+        messages.extend(state["chat_history"])
+    messages.append(HumanMessage(content=question))
+    
+    try:
+         result = planner_llm.invoke(messages)
+    except Exception as e:
+         print(f"Planner failed: {e}")
+         # Fallback to a basic single query if structured output fails
+         result = PlannerOutput(
+             plan="Basic fallback search", 
+             queries=[SearchQuery(search_term=question)]
+        )
+         
+    # Convert Pydantic queries to dictionary for state
+    query_dicts = [{"search_term": q.search_term, "year": q.year, "specific_source": q.specific_source} for q in result.queries]
+    
+    loop_c = int(state.get("loop_count") or 0)
+    return {"plan": result.plan, "search_queries": query_dicts, "loop_count": loop_c + 1}
+
+def retriever_node(state: GraphState):
+    """Executes the generated search queries against the WYDOT database."""
+    queries = state["search_queries"]
+    
+    all_docs = []
+    
+    # We call our existing search_wydot_documents tool logic directly
+    for q in queries:
+        term = q["search_term"]
+        year = q.get("year", None)
+        # Handle empty strings from Pydantic as None
+        if not year: year = None
+        
+        try:
+             # Using the existing tool logic synhronously
+             docs_string = search_wydot_documents.invoke({"search_term": term, "year": year})
+             all_docs.append({"query": q, "content": docs_string})
+        except Exception as e:
+             all_docs.append({"query": q, "content": f"Search Error: {e}"})
+             
+    return {"documents": all_docs}
+
+def grader_node(state: GraphState):
+    """Evaluates if the retrieved documents actually answer the question."""
+    question = state["question"]
+    documents = state["documents"]
+    
+    llm = get_gemini_llm() # Gemini Flash is fast and cheap for grading
+    
+    system = """You are a grader assessing relevance of retrieved WYDOT documents to a user question.
+If the documents contain keyword(s) or semantic meaning related to the user question, grade it as relevant.
+It does not need to be a stringent test. The goal is to filter out completely erroneous retrievals.
+Give a binary score 'yes' or 'no' to indicate relevance."""
+    
+    grader_llm = llm.with_structured_output(GradeDocuments)
+    
+    doc_text = "\n\n".join([f"Results for '{d['query']}':\n{d['content']}" for d in documents])
+    
+    user_msg = f"Retrieved documents: \n\n {doc_text} \n\n User question: {question}"
+    
+    try:
+        result = grader_llm.invoke([SystemMessage(content=system), HumanMessage(content=user_msg)])
+        grade = "relevant" if result.grade.lower() == "yes" else "irrelevant"
+    except Exception as e:
+        print(f"Grader failed: {e}")
+        grade = "relevant" # Fail open
+        
+    return {"grading_results": grade}
+
+def rewrite_node(state: GraphState):
+    """Rewrites the queries if the retrieved documents were irrelevant."""
+    question = state["question"]
+    prev_plan = state["plan"]
+    
+    llm = get_gemini_llm()
+    
+    system = f"""You are a query optimizer. The previous search strategy failed to find relevant WYDOT documents.
+Previous Plan: {prev_plan}
+
+Analyze the user's question and generate completely NEW, broader, or alternative search queries.
+Do NOT repeat the exact same queries. Try different terminology."""
+    
+    rewriter_llm = llm.with_structured_output(PlannerOutput)
+    
+    messages = [SystemMessage(content=system)]
+    if state.get("chat_history"):
+        messages.extend(state["chat_history"])
+    messages.append(HumanMessage(content=question))
+    
+    try:
+         result = rewriter_llm.invoke(messages)
+    except Exception as e:
+         print(f"Rewriter failed: {e}")
+         result = PlannerOutput(plan="Fallback rewrite", queries=[SearchQuery(search_term="general wyoming dot specifications")])
+         
+    query_dicts = [{"search_term": q.search_term, "year": q.year, "specific_source": q.specific_source} for q in result.queries]
+    
+    loop_c = int(state.get("loop_count") or 0)
+    return {"plan": result.plan, "search_queries": query_dicts, "loop_count": loop_c + 1}
+
+def synthesizer_node(state: GraphState):
+    """Generates the final response based on the relevant documents."""
+    question = state["question"]
+    documents = state["documents"]
+    
+    llm = get_mistral_llm() # Use Mistral Large for optimal synthesis and reasoning
+    
+    system = """You are a high-level WYDOT expert assistant.
+Your goal is to provide a comprehensive, accurate answer based strictly on the provided retrieved documents.
+If comparing concepts or years, analyze the documents carefully and highlight similarities and differences clearly.
+If the documents do not fully answer the question, state what is missing based on the context.
+
+CITATION FORMAT:
+When referencing information from sources, use this format:
+"[Source X]" at the end of the sentence or clause.
+
+Example: "The concrete strength must be 4000 psi [Source 1]. However, other specifications mention 5000 psi [Source 2]."
+
+Do NOT include specific source titles or descriptions in the text. Just use the bracketed identifier."""
+    
+    doc_text = "\n\n".join([f"--- Context Segment ---\n{d['content']}" for d in documents])
+    
+    user_msg = f"Context Documents: \n\n {doc_text} \n\n Question: {question}"
+    
+    messages = [SystemMessage(content=system)]
+    if state.get("chat_history"):
+        messages.extend(state["chat_history"])
+    messages.append(HumanMessage(content=user_msg))
+    
+    response = llm.invoke(messages)
+    
+    return {"generation": response.content}
+
+def crag_router(state: GraphState):
+    """Routes based on the grading result."""
+    grade = state["grading_results"]
+    if grade == "relevant":
+        return "synthesizer"
+    else:
+        # Prevent infinite loops
+        if state["loop_count"] >= 2:
+            return "synthesizer" # Proceed to synthesis anyway with what we have (or an apology)
+        return "rewrite"
+
+def get_agent_executor(use_gemini: bool = False):
+    from langgraph.graph import StateGraph, END
+    
+    workflow = StateGraph(GraphState)
+    
+    # Add nodes
+    workflow.add_node("planner", planner_node)
+    workflow.add_node("vector_search", retriever_node)
+    workflow.add_node("crag_grader", grader_node)
+    workflow.add_node("query_rewriter", rewrite_node)
+    workflow.add_node("synthesizer", synthesizer_node)
+    
+    # Build graph edges
+    workflow.set_entry_point("planner")
+    workflow.add_edge("planner", "vector_search")
+    workflow.add_edge("vector_search", "crag_grader")
+    
+    # Conditional edge post-grading
+    workflow.add_conditional_edges(
+        "crag_grader",
+        crag_router,
+        {
+            "synthesizer": "synthesizer",
+            "rewrite": "query_rewriter"
+        }
+    )
+    
+    workflow.add_edge("query_rewriter", "vector_search")
+    workflow.add_edge("synthesizer", END)
+    
+    # Compile
+    app = workflow.compile()
+    return app
 
 
 def get_gemini_llm():
     if not GEMINI_API_KEY:
         raise ValueError("GEMINI_API_KEY is not set")
-    import google.generativeai as genai
-    genai.configure(api_key=GEMINI_API_KEY)
-    return genai.GenerativeModel('gemini-2.5-flash')
+    from langchain_google_genai import ChatGoogleGenerativeAI
+    llm = ChatGoogleGenerativeAI(
+        model="gemini-2.5-flash",
+        temperature=0.0,
+        google_api_key=GEMINI_API_KEY,
+        convert_system_message_to_human=False
+    )
+    return llm
 
 def get_mistral_llm():
     if not MISTRAL_API_KEY:
@@ -1425,7 +1670,7 @@ def get_mistral_llm():
     from langchain_mistralai import ChatMistralAI
     return ChatMistralAI(
         model=LLM_MODEL,
-        temperature=LLM_TEMPERATURE,
+        temperature=0.0,
         mistral_api_key=MISTRAL_API_KEY
     )
 
@@ -1442,12 +1687,13 @@ def build_prompt_with_history(question: str, context: str, history_msgs: List[Di
     citation_instruction = ""
     if enhanced_citations:
         citation_instruction = """
-CITATION FORMAT & RELEVANCE RULES:
-1. When referencing information from sources, use this format: "[SOURCE_X]" at the end of the sentence or clause.
-2. ONLY cite a source if the information you are providing comes DIRECTLY from that specific source document.
-3. DO NOT add unnecessary or generic citations. If a source is not relevant to the user's specific question, IGNORE it completely and do not cite it.
-4. Example: "The concrete strength must be 4000 psi [SOURCE_1]. However, other specifications mention 5000 psi [SOURCE_2]."
-5. Do NOT include specific source titles or descriptions in the text. Just use the bracketed identifier.
+CITATION FORMAT:
+When referencing information from sources, use this format:
+"[SOURCE_X]" at the end of the sentence or clause.
+
+Example: "The concrete strength must be 4000 psi [SOURCE_1]. However, other specifications mention 5000 psi [SOURCE_2]."
+
+Do NOT include specific source titles or descriptions in the text. Just use the bracketed identifier.
 """
    
     prompt = f"""You are a high-level WYDOT expert assistant. 
@@ -1477,9 +1723,9 @@ CONTEXT:
 QUESTION: {question}
 
 Instructions:
-- Provide accurate, helpful answers based **strictly** on the relevant context.
-- Cite specific sections when relevant using the [SOURCE_X] format. Never invent or hallucinate citations.
-- If none of the provided documents contain the answer, state "I do not have enough information to answer this based on the provided documents" and DO NOT cite any sources.
+- Provide accurate, helpful answers based on the context.
+- Cite specific sections when relevant using the [SOURCE_X] format.
+- If the answer isn't in the context, say so clearly.
 - Keep answers concise but comprehensive.
 - Structure your answer with clear headings and bullet points where appropriate.
 """
@@ -1738,37 +1984,86 @@ async def main(message: cl.Message):
             
         return
 
-    # 2. Text Retrieval Route (with timing for telemetry)
+    # 2. Text Retrieval Route (Agentic)
     t0 = time.perf_counter()
-    await msg.stream_token("🔍 **Searching documents...**\n")
     
     use_gemini = "Gemini" in model_choice
-    if thinking_mode:
-        # SYNC (Blocking) Search
-        context, sources = search_graph(message.content, index_name)
-    elif multihop:
-        # MULTI-HOP Search
-        await msg.stream_token("🧠 **Analyzing multi-part question...**\n")
-        context, sources = await search_graph_multihop_async(message.content, index_name, use_gemini)
-    else:
-        # ASYNC Search
-        context, sources = await search_graph_async(message.content, index_name, use_gemini)
+    agent_executor = get_agent_executor(use_gemini)
+    
+    # We use a trick to run the agent async and stream events to Chainlit
+    history = cl.user_session.get("memory", [])
+    formatted_history = []
+    from langchain_core.messages import HumanMessage, AIMessage
+    for idx, h_msg in enumerate(history[-MAX_HISTORY_MSGS:]):
+        if h_msg["role"] == "user":
+            formatted_history.append(HumanMessage(content=h_msg["content"]))
+        else:
+            formatted_history.append(AIMessage(content=h_msg["content"]))
+
+    import asyncio
+    global _CURRENT_TOOL_SOURCES
+    _CURRENT_TOOL_SOURCES = [] # Reset sources for this turn
+    
+    await msg.stream_token("🧠 **Thinking and searching the knowledge base...**\n")
+    
+    final_response = ""
+    try:
+        # Use astream_events to catch tool calls and stream tokens
+        # Requires langchain-core >= 0.2.0 for best astream_events experience, 
+        # but we can also just use ainvoke and standard streaming callbacks if preferred.
+        # Let's use ainvoke for reliability and capture the final answer, since streaming Agent traces to Chainlit 
+        # requires a specific callback handler.
+        
+        # The chainlit callback handler automatically renders tool calls in the UI!
+        cb = cl.AsyncLangchainCallbackHandler(
+            stream_final_answer=True,
+        )
+        cb.answer_reached = True # Stream everything
+        
+        res = await agent_executor.ainvoke(
+            {
+                "question": message.content,
+                "chat_history": formatted_history,
+                "loop_count": 0
+            },
+            callbacks=[cb]
+        )
+        final_response = res.get("generation", "Agent did not return a response.")
+        
+    except Exception as e:
+        final_response = f"Agent encountered an error: {str(e)}"
+        import traceback
+        traceback.print_exc()
         
     retrieval_ms = (time.perf_counter() - t0) * 1000
 
-    if not context:
-        await msg.stream_token("No relevant documents found.")
-        await msg.send()
-        telemetry.record_request(
-            retrieval_latency_ms=retrieval_ms,
-            generation_latency_ms=0,
-            total_latency_ms=retrieval_ms,
-            num_sources=0,
-            model_used=model_choice,
-            index_used=index_name,
-            has_error=False,
-        )
-        return
+    # Attach the accumulated sources to the final message
+    msg.content = final_response
+    
+    sources = _CURRENT_TOOL_SOURCES
+    if sources:
+        clean_elements = []
+        for i, s in enumerate(sources):
+            # Same logic as before to create text elements for citations
+            element_name = f"Source {s['index']}"
+            content = f"**{element_name}: {s['title']}**\n\n**File:** [{s['source']}]({s.get('url', '#')})\n**Page:** {s.get('page', 'N/A')}\n**Section:** {s.get('section', 'N/A')}\n**Year:** {s.get('year', 'N/A')}\n\n**Preview:**\n{s.get('preview', '')}"
+            el = cl.Text(name=element_name, content=content, display="side")
+            clean_elements.append(el)
+        
+        msg.elements = clean_elements
+
+    await msg.update()
+    
+    telemetry.record_request(
+        retrieval_latency_ms=retrieval_ms,
+        generation_latency_ms=0,
+        total_latency_ms=retrieval_ms,
+        num_sources=len(sources),
+        model_used=model_choice,
+        index_used=index_name,
+        has_error=False,
+    )
+    return
 
     # 3. Generate Answer (Streaming)
     if model_choice == "Gemini 2.5 Flash":
@@ -1839,16 +2134,16 @@ async def main(message: cl.Message):
     # 5. Create source elements for side panel
     clean_elements = []
     for src in sources:
+        # Reconstruct the source ID for the element name to match the citation format
+        # This ensures that [Source X] in the response links to the correct sidebar element
         element_name = f"Source {src['index']}"
-        # ONLY add the source to the UI if the LLM actually found it relevant and cited it
-        if element_name in enhanced_answer:
-            clean_elements.append(
-                cl.Text(
-                    name=element_name,
-                    content=f"**Source {src['index']}: {src['title']}**\n\n**File:** [{src['source']}]({src.get('url', '#')})\n**Page:** {src.get('page', 'N/A')}\n**Section:** {src.get('section', 'N/A')}\n**Year:** {src.get('year', 'N/A')}\n\n**Preview:**\n{src['preview']}",
-                    display="side"
-                )
+        clean_elements.append(
+            cl.Text(
+                name=element_name,
+                content=f"**Source {src['index']}: {src['title']}**\n\n**File:** [{src['source']}]({src.get('url', '#')})\n**Page:** {src.get('page', 'N/A')}\n**Section:** {src.get('section', 'N/A')}\n**Year:** {src.get('year', 'N/A')}\n\n**Preview:**\n{src['preview']}",
+                display="side"
             )
+        )
     # Final update with sources
     msg.elements = clean_elements
     await msg.update()

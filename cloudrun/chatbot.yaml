@@ -11,28 +11,28 @@ spec:
     spec:
       serviceAccountName: cloud-run-sa@${PROJECT_ID}.iam.gserviceaccount.com
       containerConcurrency: 80
-      timeoutSeconds: 900
+      timeoutSeconds: 300
       containers:
       - image: ${IMAGE}
         env:
         - name: DOTENV_PATH
           value: /etc/secrets/.env
-        - name: DATABASE_URL
-          value: ""
+        - name: HF_HOME
+          value: /app/model_cache
+        - name: HF_HUB_OFFLINE
+          value: "1"
+        - name: TRANSFORMERS_OFFLINE
+          value: "1"
         - name: CHAINLIT_FILES_DIRECTORY
           value: /tmp/.files
         - name: CHAINLIT_DB_FILE
           value: /tmp/chainlit.db
-        - name: HF_HOME
-          value: /app/model_cache
-        - name: HOME
-          value: /tmp
         - name: TELEMETRY_DB_PATH
           value: /tmp/telemetry.sqlite3
         - name: EVAL_DB_PATH
           value: /tmp/evaluation.sqlite3
-        - name: CHAT_DB_PATH
-          value: /tmp/chat_history.sqlite3
+        - name: HOME
+          value: /tmp
         ports:
         - containerPort: 8080
         resources:
@@ -43,10 +43,9 @@ spec:
           httpGet:
             path: /
             port: 8080
-          initialDelaySeconds: 15
-          periodSeconds: 10
-          failureThreshold: 30
-          timeoutSeconds: 5
+          initialDelaySeconds: 10
+          periodSeconds: 5
+          failureThreshold: 20
         volumeMounts:
         - name: dotenv
           mountPath: /etc/secrets
