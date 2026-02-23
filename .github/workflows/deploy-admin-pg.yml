@@ -47,7 +47,7 @@ jobs:
       - name: 'Ensure Cloud SQL Client role for Cloud Run SA'
         run: |-
           gcloud projects add-iam-policy-binding "${{ env.PROJECT_ID }}" \
-            --member="serviceAccount:cloud-run-sa@${{ env.PROJECT_ID.iam.gserviceaccount.com }}" \
+            --member="serviceAccount:cloud-run-sa@${{ env.PROJECT_ID }}.iam.gserviceaccount.com" \
             --role="roles/cloudsql.client" \
             --condition=None \
             --quiet || echo "⚠️ Could not grant cloudsql.client"
