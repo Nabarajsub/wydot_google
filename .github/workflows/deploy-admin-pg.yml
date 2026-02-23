@@ -52,9 +52,6 @@ jobs:
             --condition=None \
             --quiet || echo "⚠️ Could not grant cloudsql.client"
 
-      - name: 'Debug GAR_LOCATION'
-        run: echo "Pushing to ${{ env.GAR_LOCATION }}"
-
       - name: 'Build and Push Admin'
         run: |-
           docker build -f Dockerfile.admin -t "${{ env.GAR_LOCATION }}/wydot-admin:${{ github.sha }}" .
