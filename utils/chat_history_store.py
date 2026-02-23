@@ -167,6 +167,15 @@ class SQLiteChatHistoryStore(BaseChatHistoryStore):
                 pass 
 
         try:
+            # Check if cl_msg_id column exists
+            self._conn.execute("SELECT cl_msg_id FROM messages LIMIT 1;")
+        except sqlite3.OperationalError:
+            try:
+                self._conn.execute("ALTER TABLE messages ADD COLUMN cl_msg_id TEXT;")
+                self._conn.commit()
+            except sqlite3.OperationalError:
+                pass
+        try:
             self._conn.execute("CREATE INDEX IF NOT EXISTS idx_messages_user_session ON messages(user_id, session_id);")
             self._conn.commit()
         except sqlite3.OperationalError as e:

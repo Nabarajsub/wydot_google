@@ -44,11 +44,11 @@ logo_light = "./public/logo.png"
 logo_dark = "./public/logo.png"
 
 # Favicon for browser address bar
-favicon = "/public/logo.png"
+favicon = "assets/images/logo.svg"
 
 # Custom chatbot avatar icon
 [UI.icons]
-chatbot = "/public/logo.png"
+chatbot = "assets/images/logo.svg"
 
 [UI.theme]
 default = "light"
