@@ -245,11 +245,11 @@ if not os.getenv("CHAINLIT_AUTH_SECRET"):
 # CONFIGURATION
 # =========================================================
 
-NEO4J_URI = os.getenv("NEO4J_URI", "neo4j+s://52e5090e.databases.neo4j.io")
-NEO4J_USERNAME = os.getenv("NEO4J_USERNAME", "neo4j")
-NEO4J_PASSWORD = os.getenv("NEO4J_PASSWORD", "")
+NEO4J_URI = "neo4j+s://1c9edfe6.databases.neo4j.io"
+NEO4J_USERNAME = "1c9edfe6"
+NEO4J_PASSWORD = "IlZpB7BG3sM34FQ5d_Juv5CidvCHvsMnoLkXHW18CSA"
 print(f"🔗 Neo4j Config: {NEO4J_URI} (User: {NEO4J_USERNAME})")
-NEO4J_DATABASE = os.getenv("NEO4J_DATABASE", "neo4j")
+NEO4J_DATABASE = "1c9edfe6"
 NEO4J_INDEX_DEFAULT = os.getenv("NEO4J_INDEX_DEFAULT", "wydot_gemini_index")
 NEO4J_INDEX_2021 = os.getenv("NEO4J_INDEX_2021", "wydot_gemini_index")
 
