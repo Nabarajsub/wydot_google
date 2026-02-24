@@ -245,13 +245,13 @@ if not os.getenv("CHAINLIT_AUTH_SECRET"):
 # CONFIGURATION
 # =========================================================
 
-NEO4J_URI = os.getenv("NEO4J_URI", "neo4j+s://1c9edfe6.databases.neo4j.io")
-NEO4J_USERNAME = os.getenv("NEO4J_USERNAME", "1c9edfe6")
-NEO4J_PASSWORD = os.getenv("NEO4J_PASSWORD", "IlZpB7BG3sM34FQ5d_Juv5CidvCHvsMnoLkXHW18CSA")
+NEO4J_URI = os.getenv("NEO4J_URI", "neo4j+s://52e5090e.databases.neo4j.io")
+NEO4J_USERNAME = os.getenv("NEO4J_USERNAME", "neo4j")
+NEO4J_PASSWORD = os.getenv("NEO4J_PASSWORD", "")
 print(f"🔗 Neo4j Config: {NEO4J_URI} (User: {NEO4J_USERNAME})")
-NEO4J_DATABASE = os.getenv("NEO4J_DATABASE", "1c9edfe6")
+NEO4J_DATABASE = os.getenv("NEO4J_DATABASE", "neo4j")
 NEO4J_INDEX_DEFAULT = os.getenv("NEO4J_INDEX_DEFAULT", "wydot_gemini_index")
-NEO4J_INDEX_2021 = os.getenv("NEO4J_INDEX_2021", "wydot_vector_index_2021")
+NEO4J_INDEX_2021 = os.getenv("NEO4J_INDEX_2021", "wydot_gemini_index")
 
 print("💬 Initializing API Keys...")
 MISTRAL_API_KEY = os.getenv("MISTRAL_API_KEY")
@@ -1041,7 +1041,9 @@ def get_retriever(index_name: str, use_gemini: bool = False):
         _VECTOR_STORE_CACHE[cache_key] = retriever
         return retriever
     except Exception as e:
-        print(f"Retriever error: {e}. Falling back to standard vector search.")
+        print(f"⚠️ Retriever error for index '{index_name}': {e}")
+        import traceback
+        traceback.print_exc()
         try:
             from langchain_neo4j import Neo4jVector
             embeds = get_embeddings_model(use_gemini)
@@ -1058,7 +1060,10 @@ def get_retriever(index_name: str, use_gemini: bool = False):
             ).as_retriever(search_kwargs={"k": FETCH_K})
             _VECTOR_STORE_CACHE[cache_key] = retriever
             return retriever
-        except:
+        except Exception as fallback_err:
+            print(f"❌ Retriever fallback also failed for index '{index_name}': {fallback_err}")
+            import traceback
+            traceback.print_exc()
             return None
 
 def get_neighbors(source_file: str, section: str, count: int = 1) -> str:
@@ -1069,15 +1074,25 @@ def get_neighbors(source_file: str, section: str, count: int = 1) -> str:
         from neo4j import GraphDatabase
         driver = GraphDatabase.driver(NEO4J_URI, auth=(NEO4J_USERNAME, NEO4J_PASSWORD))
         with driver.session(database=NEO4J_DATABASE) as session:
-            # Simple query to get chunks from same source and section
-            # assuming 'source' and 'section' are properties on Chunk nodes
+            # Get adjacent chunks from same document section
+            # In ingestneo4j_updated.py, source/section are on Document/Section nodes, not Chunk
+            # Try linked nodes first, fall back to Chunk properties
             query = """
-            MATCH (c:Chunk {source: $source, section: $section})
+            MATCH (s:Section {name: $section, doc_source: $source})-[:HAS_CHUNK]->(c:Chunk)
             RETURN c.text as text
             LIMIT $limit
             """
             result = session.run(query, source=source_file, section=section, limit=count)
             texts = [record["text"] for record in result]
+            if not texts:
+                # Fallback: try direct Chunk properties (for data ingested via local_ingest.py)
+                query2 = """
+                MATCH (c:Chunk) WHERE c.source = $source AND c.section = $section
+                RETURN c.text as text
+                LIMIT $limit
+                """
+                result2 = session.run(query2, source=source_file, section=section, limit=count)
+                texts = [record["text"] for record in result2]
             return "\n".join(texts)
     except Exception as e:
         print(f"Error fetching neighbors: {e}")
@@ -1086,7 +1101,9 @@ def get_neighbors(source_file: str, section: str, count: int = 1) -> str:
 
 async def search_graph_async(query: str, index_name: str, use_gemini: bool = False) -> Tuple[str, List[Dict]]:
     ret = get_retriever(index_name, use_gemini)
-    if not ret: return "", []
+    if not ret:
+        print(f"❌ [search_graph_async] Retriever is None for index='{index_name}', use_gemini={use_gemini}. Cannot search.")
+        return "", []
     
     # Use session setting for FETCH_K if available
     settings = cl.user_session.get("settings") or {}
@@ -1208,13 +1225,17 @@ async def search_graph_async(query: str, index_name: str, use_gemini: bool = Fal
 
         return "\n\n".join(chunks), sources
     except Exception as e:
-        print(f"Search error: {e}")
+        print(f"❌ [search_graph_async] Search error: {e}")
+        import traceback
+        traceback.print_exc()
         return "", []
 
 def search_graph(query: str, index_name: str, use_gemini: bool = False) -> Tuple[str, List[Dict]]:
     # Sync version
     ret = get_retriever(index_name, use_gemini)
-    if not ret: return "", []
+    if not ret:
+        print(f"❌ [search_graph] Retriever is None for index='{index_name}', use_gemini={use_gemini}. Cannot search.")
+        return "", []
     try:
         ret.search_kwargs["k"] = FETCH_K
         docs = ret.invoke(query)

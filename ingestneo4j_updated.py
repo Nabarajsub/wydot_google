@@ -68,10 +68,11 @@ GEMINI_API_KEY = os.getenv("GEMINI_API_KEY")
 if not GEMINI_API_KEY:
     raise ValueError("GEMINI_API_KEY not found in .env")
 
-# Hardcoded Neo4j Credentials as requested
-NEO4J_URI = "neo4j+s://1c9edfe6.databases.neo4j.io"
-NEO4J_USERNAME = "1c9edfe6"
-NEO4J_PASSWORD = "IlZpB7BG3sM34FQ5d_Juv5CidvCHvsMnoLkXHW18CSA"
+# Neo4j Credentials from .env (fallback to defaults matching .env)
+NEO4J_URI = os.getenv("NEO4J_URI", "neo4j+s://52e5090e.databases.neo4j.io")
+NEO4J_USERNAME = os.getenv("NEO4J_USERNAME", "neo4j")
+NEO4J_PASSWORD = os.getenv("NEO4J_PASSWORD", "")
+NEO4J_DATABASE = os.getenv("NEO4J_DATABASE", "neo4j")
 
 DATA_FOLDER = "/Users/uw-user/Desktop/WYDOT/Data/Final folder with pdfs only"
 TRACKER_FILE = "ingest_updated_tracker.txt"
@@ -247,6 +248,7 @@ def llm_graph_extraction(chunk_text: str, existing_entities: List[str]) -> Graph
 class Neo4jWriter:
     def __init__(self):
         self.driver = GraphDatabase.driver(NEO4J_URI, auth=(NEO4J_USERNAME, NEO4J_PASSWORD))
+        self.database = NEO4J_DATABASE
         self.existing_entities = set()
         if os.path.exists(MEMORY_FILE):
             try:
@@ -261,7 +263,7 @@ class Neo4jWriter:
             json.dump(list(self.existing_entities), f)
 
     def _setup_constraints(self):
-        with self.driver.session() as session:
+        with self.driver.session(database=self.database) as session:
             # Create constraints for deduplication
             session.run("CREATE CONSTRAINT IF NOT EXISTS FOR (d:Document) REQUIRE d.source IS UNIQUE")
             session.run("CREATE CONSTRAINT IF NOT EXISTS FOR (c:Chunk) REQUIRE c.id IS UNIQUE")
@@ -280,7 +282,7 @@ class Neo4jWriter:
 
     def check_capacity(self) -> bool:
         """Returns True if the database is near the Aura Free limit (200k nodes / 400k rels)"""
-        with self.driver.session() as session:
+        with self.driver.session(database=self.database) as session:
             try:
                 # Approximate counts are fast
                 node_count = session.run("MATCH (n) RETURN COUNT(n) AS count").single()["count"]
@@ -309,7 +311,7 @@ class Neo4jWriter:
             # Fallback to sequential if batching fails for some anomalous length reason
             chunk_embeddings = [embeddings.embed_query(t) for t in chunk_texts]
             
-        with self.driver.session() as session:
+        with self.driver.session(database=self.database) as session:
             for i, chunk in enumerate(chunks):
                 chunk_id = f"{chunk.metadata['source']}_chk_{chunk.metadata['chunk_seq']}"
                 
@@ -351,7 +353,7 @@ class Neo4jWriter:
         """Writes entities and links them to the source chunk, returning (nodes_created, rels_created)."""
         nodes_created = 0
         rels_created = 0
-        with self.driver.session() as session:
+        with self.driver.session(database=self.database) as session:
             for ent in extraction.entities:
                 # Track in memory for inline ER
                 self.existing_entities.add(ent.name)
@@ -389,7 +391,7 @@ class Neo4jWriter:
     def link_document_versions(self):
         """Phase 4.4: Finds documents of the same series and links them chronologically."""
         print("   > Building Cross-Document Version Chains ([:SUPERSEDES])...")
-        with self.driver.session() as session:
+        with self.driver.session(database=self.database) as session:
             query = """
             MATCH (d:Document)
             WHERE d.year > 0 AND d.document_series IS NOT NULL AND d.document_series <> 'General'

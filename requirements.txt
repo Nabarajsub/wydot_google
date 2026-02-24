@@ -36,6 +36,7 @@ pymilvus>=2.4.0
 flashrank>=0.2.0
 
 # Google / Gemini
+langchain-google-genai>=1.0.0
 google-generativeai>=0.8.3
 google-genai>=0.3.0
 google-auth>=2.29

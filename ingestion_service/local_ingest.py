@@ -29,7 +29,7 @@ logging.getLogger("pypdf").setLevel(logging.ERROR)
 # Loaders
 from langchain_community.document_loaders import PyPDFLoader, Docx2txtLoader
 from langchain_text_splitters import RecursiveCharacterTextSplitter
-from langchain_huggingface import HuggingFaceEmbeddings
+from langchain_google_genai import GoogleGenerativeAIEmbeddings
 from langchain_neo4j import Neo4jVector
 from langchain_core.documents import Document
 
@@ -57,7 +57,7 @@ NEO4J_URI = os.getenv("NEO4J_URI")
 NEO4J_USERNAME = os.getenv("NEO4J_USERNAME")
 NEO4J_PASSWORD = os.getenv("NEO4J_PASSWORD")
 GEMINI_API_KEY = os.getenv("GEMINI_API_KEY")
-NEO4J_INDEX = os.getenv("NEO4J_INDEX_DEFAULT", "wydot_vector_index")
+NEO4J_INDEX = os.getenv("NEO4J_INDEX_DEFAULT", "wydot_gemini_index")
 
 # Ingested data storage
 INGESTED_DIR = os.path.join(os.path.dirname(__file__), "ingested_data")
@@ -69,10 +69,14 @@ os.makedirs(INGESTED_DIR, exist_ok=True)
 if GEMINI_API_KEY:
     genai.configure(api_key=GEMINI_API_KEY)
 
-# Setup Embeddings
-print("🔄 Loading embeddings model...")
-embeddings = HuggingFaceEmbeddings(model_name="all-MiniLM-L6-v2")
-print("✅ Embeddings model loaded.")
+# Setup Embeddings (Gemini gemini-embedding-001, 768 dims — must match chatapp_gemini.py retrieval)
+print("🔄 Loading Gemini embeddings model...")
+embeddings = GoogleGenerativeAIEmbeddings(
+    model="models/gemini-embedding-001",
+    google_api_key=GEMINI_API_KEY,
+    task_type="retrieval_document"
+)
+print("✅ Gemini Embeddings model loaded.")
 
 # Supported file types
 TEXT_EXTENSIONS = {'.pdf', '.docx', '.doc'}
