@@ -212,8 +212,8 @@ def generate_public_url(gcs_uri: str) -> str:
         if len(parts) != 2:
             return ""
         bucket_name, blob_name = parts
-        # Encode the blob path (e.g. spaces to %20)
-        encoded_blob = urllib.parse.quote(blob_name)
+        # Encode the blob path but keep commas and slashes safe since GCS URLs often need raw commas
+        encoded_blob = urllib.parse.quote(blob_name, safe="/,")
         return f"https://storage.googleapis.com/{bucket_name}/{encoded_blob}"
     except Exception as e:
         print(f"Error generating public URL: {e}")
@@ -245,12 +245,12 @@ if not os.getenv("CHAINLIT_AUTH_SECRET"):
 # CONFIGURATION
 # =========================================================
 
-NEO4J_URI = os.getenv("NEO4J_URI", "neo4j+s://1c9edfe6.databases.neo4j.io")
-NEO4J_USERNAME = os.getenv("NEO4J_USERNAME", "1c9edfe6")
-NEO4J_PASSWORD = os.getenv("NEO4J_PASSWORD", "IlZpB7BG3sM34FQ5d_Juv5CidvCHvsMnoLkXHW18CSA")
+NEO4J_URI = os.getenv("NEO4J_URI_GEMINI", "neo4j+s://1c9edfe6.databases.neo4j.io")
+NEO4J_USERNAME = os.getenv("NEO4J_USERNAME_GEMINI", "1c9edfe6")
+NEO4J_PASSWORD = os.getenv("NEO4J_PASSWORD_GEMINI", "IlZpB7BG3sM34FQ5d_Juv5CidvCHvsMnoLkXHW18CSA")
 print(f"🔗 Neo4j Config: {NEO4J_URI} (User: {NEO4J_USERNAME})")
-NEO4J_DATABASE = os.getenv("NEO4J_DATABASE", "1c9edfe6")
-NEO4J_INDEX_DEFAULT = os.getenv("NEO4J_INDEX_DEFAULT", "wydot_gemini_index")
+NEO4J_DATABASE = os.getenv("NEO4J_DATABASE_GEMINI", "1c9edfe6")
+NEO4J_INDEX_DEFAULT = os.getenv("NEO4J_INDEX_DEFAULT_GEMINI", "wydot_gemini_index")
 NEO4J_INDEX_2021 = os.getenv("NEO4J_INDEX_2021", "wydot_vector_index_2021")
 
 print("💬 Initializing API Keys...")
@@ -805,6 +805,8 @@ async def on_chat_resume(thread: Dict):
                 ),
                 Switch(id="thinking_mode", label="Thinking Mode (Slower, Detailed)", initial=False),
                 Switch(id="multihop", label="Multi-hop Reasoning", initial=False),
+                Switch(id="reranking", label="Reranking (FlashRank)", initial=False),
+                Switch(id="hyde", label="HyDE (Query Expansion)", initial=False),
                 Slider(id="fetch_k", label="Initial Candidates (FETCH_K)", min=10, max=100, step=5, initial=25),
             ]
         ).send()
@@ -1061,26 +1063,59 @@ def get_retriever(index_name: str, use_gemini: bool = False):
         except:
             return None
 
-def get_neighbors(source_file: str, section: str, count: int = 1) -> str:
-    """Fetch adjacent chunks from the same document section for more context."""
-    if not source_file or not section:
-        return ""
+def get_batch_neighbors(source_section_pairs: List[Tuple[str, str]], count: int = 1) -> Dict[Tuple[str, str], str]:
+    """Fetch adjacent chunks for a batch of source/section pairs to provide more context."""
+    if not source_section_pairs:
+        return {}
+    
+    # Filter out invalid pairs
+    valid_pairs = [[src, sec] for src, sec in source_section_pairs if src and sec]
+    if not valid_pairs:
+        return {}
+
+    neighbor_map = {}
     try:
         from neo4j import GraphDatabase
         driver = GraphDatabase.driver(NEO4J_URI, auth=(NEO4J_USERNAME, NEO4J_PASSWORD))
         with driver.session(database=NEO4J_DATABASE) as session:
-            # Simple query to get chunks from same source and section
-            # assuming 'source' and 'section' are properties on Chunk nodes
             query = """
-            MATCH (c:Chunk {source: $source, section: $section})
-            RETURN c.text as text
-            LIMIT $limit
+            UNWIND $pairs AS pair
+            MATCH (c:Chunk {source: pair[0], section: pair[1]})
+            WITH pair, c
+            ORDER BY c.id
+            WITH pair, collect(c.text)[..$limit] AS texts
+            RETURN pair[0] AS src, pair[1] AS sec, texts
             """
-            result = session.run(query, source=source_file, section=section, limit=count)
-            texts = [record["text"] for record in result]
-            return "\n".join(texts)
+            result = session.run(query, pairs=valid_pairs, limit=count)
+            for record in result:
+                src = record["src"]
+                sec = record["sec"]
+                texts = record["texts"]
+                if texts:
+                    neighbor_map[(src, sec)] = "\n".join(texts)
     except Exception as e:
-        print(f"Error fetching neighbors: {e}")
+        print(f"Error fetching batch neighbors: {e}")
+        
+    return neighbor_map
+
+
+async def generate_hyde_snippet(query: str) -> str:
+    """Generate a hypothetical technical snippet for the query (HyDE)."""
+    hyde_prompt = f"""
+    You are a technical document writer. Given the user query, write a single paragraph (maximum 150 words) 
+    that looks like it was extracted directly from a technical specification or engineering manual. 
+    Use technical language, refer to sections or standards if appropriate.
+    
+    User Query: {query}
+    
+    Hypothetical Snippet:
+    """
+    try:
+        model = get_gemini_llm()
+        response = await model.generate_content_async(hyde_prompt)
+        return response.text.strip()
+    except Exception as e:
+        print(f"HyDE generation failed: {e}")
         return ""
 
 
@@ -1093,16 +1128,26 @@ async def search_graph_async(query: str, index_name: str, use_gemini: bool = Fal
     k_val = int(settings.get("fetch_k", FETCH_K))
     
     try:
+        # HyDE expansion if enabled
+        hyde_enabled = settings.get("hyde", False)
+        search_query = query
+        if hyde_enabled:
+            print("🧪 HyDE enabled: generating hypothetical snippet...")
+            hyde_snippet = await generate_hyde_snippet(query)
+            if hyde_snippet:
+                search_query = f"{query} {hyde_snippet}"
+                print(f"   HyDE expanded query length: {len(search_query)} chars")
+
         # Use ainvoke if available, otherwise run in thread
         if hasattr(ret, "ainvoke"):
             # Set k to k_val for initial retrieval
             ret.search_kwargs["k"] = k_val
-            docs = await ret.ainvoke(query)
+            docs = await ret.ainvoke(search_query)
         else:
             # Fallback for older LangChain versions or synchronous retrievers
             import asyncio
             ret.search_kwargs["k"] = k_val
-            docs = await asyncio.to_thread(ret.invoke, query)
+            docs = await asyncio.to_thread(ret.invoke, search_query)
             
         # --- Metadata Enrichment ---
         # Since our index might not have source/title on the Chunk node directly,
@@ -1112,48 +1157,131 @@ async def search_graph_async(query: str, index_name: str, use_gemini: bool = Fal
         from neo4j import GraphDatabase
         driver = GraphDatabase.driver(NEO4J_URI, auth=(NEO4J_USERNAME, NEO4J_PASSWORD))
         
+        # 1. Collect all chunk IDs to batch request metadata
+        chunk_ids = [doc.metadata.get("id") for doc in docs if doc.metadata.get("id")]
+        
+        # 2. Run a single batched query to get metadata and Graph facts
+        enrichment_map = {}
+        if chunk_ids:
+            try:
+                with driver.session(database=NEO4J_DATABASE) as session:
+                    cypher = """
+                    MATCH (d:Document)-[:HAS_SECTION]->(s:Section)-[:HAS_CHUNK]->(c:Chunk)
+                    WHERE c.id IN $cids
+                    OPTIONAL MATCH (newer_d:Document)-[:SUPERSEDES]->(d)
+                    OPTIONAL MATCH (newer_d)-[:HAS_SECTION]->(newer_s:Section {name: s.name})-[:HAS_CHUNK]->(newer_c:Chunk)
+                    OPTIONAL MATCH (c)-[:MENTIONS]->(e:Entity)-[r]-(neighbor:Entity)
+                    RETURN c.id as cid, d.source as source, d.display_title as title, d.year as year, 
+                           d.document_series as series, s.name as section,
+                           newer_d.year as newer_year, newer_c.text as newer_text, newer_d.source as newer_source,
+                           collect(DISTINCT e.name + " " + type(r) + " " + neighbor.name) as graph_facts
+                    """
+                    result = session.run(cypher, cids=chunk_ids)
+                    for record in result:
+                        enrichment_map[record["cid"]] = record
+            except Exception as e:
+                print(f"⚠️ Batch Metadata enrichment failed: {e}")
+        
         for i, doc in enumerate(docs):
             meta = doc.metadata
             chunk_id = meta.get("id")
             
             source_file = meta.get("source")
             title = meta.get("title")
+            section_name = meta.get("section", "")
             
-            if not source_file or not title:
-                with driver.session(database=NEO4J_DATABASE) as session:
-                    cypher = """
-                    MATCH (c:Chunk {id: $cid})-[:PART_OF|HAS_CHUNK*1..2]-(s)-[:PART_OF|HAS_SECTION*1..2]-(d:Document)
-                    RETURN d.source as source, d.display_title as title, d.year as year, d.document_series as series
-                    LIMIT 1
-                    """
-                    link_res = session.run(cypher, cid=chunk_id).single()
-                    if link_res:
-                        source_file = link_res["source"]
-                        title = link_res["title"]
-                        meta["source"] = source_file
-                        meta["title"] = title
-                        meta["year"] = link_res["year"]
-                        meta["series"] = link_res["series"]
+            if chunk_id in enrichment_map:
+                link_res = enrichment_map[chunk_id]
+                source_file = link_res["source"] or source_file
+                title = link_res["title"] or title
+                meta["source"] = source_file
+                meta["title"] = title
+                meta["year"] = link_res["year"]
+                meta["series"] = link_res["series"]
+                if link_res["section"]:
+                    section_name = link_res["section"]
+                    meta["section"] = section_name
+                    
+                # INJECT SUPERSEDED CONTENT
+                if link_res["newer_text"] and link_res["newer_year"]:
+                    append_str = (
+                        f"\n\n[WARNING: This section from {meta['year']} is SUPERSEDED by {link_res['newer_year']} "
+                        f"document: {link_res['newer_source']}]\n"
+                        f"--- NEWER VERSION CONTENT ---\n{link_res['newer_text']}\n"
+                    )
+                    # Only append if not already appended (in case of chunk overlap)
+                    if "[WARNING: This section" not in doc.page_content:
+                        doc.page_content += append_str
+                        
+                # INJECT GRAPH FACTS
+                facts = link_res.get("graph_facts", [])
+                valid_facts = [f for f in facts if f and not f.isspace() and "None" not in f]
+                if valid_facts:
+                    facts_str = "\n".join([f"* {f}" for f in valid_facts])
+                    if "--- KNOWLEDGE GRAPH FACTS ---" not in doc.page_content:
+                        doc.page_content += f"\n\n--- KNOWLEDGE GRAPH FACTS ---\n{facts_str}\n"
+
+            else:
+                # Fallback: Find matching chunk by text snippet if ID wasn't in Graph
+                try:
+                    with driver.session(database=NEO4J_DATABASE) as session:
+                        cypher = """
+                        MATCH (d:Document)-[:HAS_SECTION]->(s:Section)-[:HAS_CHUNK]->(c:Chunk)
+                        WHERE c.text CONTAINS $text_snippet
+                        OPTIONAL MATCH (newer_d:Document)-[:SUPERSEDES]->(d)
+                        OPTIONAL MATCH (newer_d)-[:HAS_SECTION]->(newer_s:Section {name: s.name})-[:HAS_CHUNK]->(newer_c:Chunk)
+                        RETURN d.source as source, d.display_title as title, d.year as year,
+                               d.document_series as series, s.name as section,
+                               newer_d.year as newer_year, newer_c.text as newer_text, newer_d.source as newer_source
+                        LIMIT 1
+                        """
+                        link_res = session.run(cypher, text_snippet=doc.page_content[:100]).single()
+                        if link_res:
+                            source_file = link_res["source"] or source_file
+                            title = link_res["title"] or title
+                            meta["source"] = source_file
+                            meta["title"] = title
+                            meta["year"] = link_res["year"]
+                            meta["series"] = link_res["series"]
+                            if link_res["section"]:
+                                section_name = link_res["section"]
+                                meta["section"] = section_name
+                                
+                            if link_res["newer_text"] and link_res["newer_year"]:
+                                append_str = (
+                                    f"\n\n[WARNING: This section from {meta['year']} is SUPERSEDED by {link_res['newer_year']} "
+                                    f"document: {link_res['newer_source']}]\n"
+                                    f"--- NEWER VERSION CONTENT ---\n{link_res['newer_text']}\n"
+                                )
+                                if "[WARNING: This section" not in doc.page_content:
+                                    doc.page_content += append_str
+                except Exception as e:
+                    pass
 
             if not title or title in ["Unknown", "Untitled", "None", ""]:
                 title = source_file or "Untitled"
+
+            # Extract just the filename for display (strip path if present)
+            display_source = source_file or "File"
+            if "/" in display_source:
+                display_source = display_source.split("/")[-1]
 
             chunks.append(f"[SOURCE_{i+1}]\n{doc.page_content}")
             sources.append({
                 "id": f"source_{i+1}",
                 "index": i + 1,
                 "title": title,
-                "source": source_file or "File",
+                "source": display_source,
                 "year": meta.get("year", ""),
-                "section": meta.get("section", ""),
-                "page": meta.get("page", ""),
+                "section": section_name or meta.get("section", ""),
+                "page": "" if meta.get("page", 0) == 0 else meta.get("page", ""),
                 "preview": doc.page_content[:300]
             })
             
             # --- URL Generation ---
             gcs_path = meta.get("gcs_path", "")
             if not gcs_path:
-                project_id = os.getenv("GCP_PROJECT") or os.getenv("GOOGLE_CLOUD_PROJECT")
+                project_id = os.getenv("GOOGLE_CLOUD_PROJECT") or os.getenv("GCP_PROJECT")
                 if project_id:
                     bucket_name = f"wydot-documents-{project_id}"
                     if source_file:
@@ -1165,8 +1293,9 @@ async def search_graph_async(query: str, index_name: str, use_gemini: bool = Fal
 
         driver.close()
 
-        # --- FlashRank Reranking ---
-        if chunks:
+        # --- FlashRank Reranking (only if enabled in settings) ---
+        reranking_enabled = settings.get("reranking", False)
+        if chunks and reranking_enabled:
             ranker = get_reranker()
             if ranker:
                 try:
@@ -1186,6 +1315,19 @@ async def search_graph_async(query: str, index_name: str, use_gemini: bool = Fal
                     reranked_chunks = []
                     reranked_sources = []
                     
+                    # 1. Collect required neighbors
+                    pairs_to_fetch = []
+                    for res in top_results:
+                        idx = res['id']
+                        s_info = sources[idx]
+                        src = str(s_info.get("source", ""))
+                        sec = str(s_info.get("section", ""))
+                        if src and sec:
+                            pairs_to_fetch.append((src, sec))
+                    
+                    # 2. Batch fetch neighbors
+                    neighbor_map = get_batch_neighbors(list(set(pairs_to_fetch)), count=1)
+                    
                     for i, res in enumerate(top_results):
                         idx = res['id']
                         s_info = sources[idx]
@@ -1196,7 +1338,10 @@ async def search_graph_async(query: str, index_name: str, use_gemini: bool = Fal
                         content = str(passages[idx]['text'])
                         
                         # Enhancement: Graph-aware context expansion (Pulling in neighbors)
-                        neighbors = get_neighbors(s_info.get("source"), s_info.get("section"), count=1)
+                        src = str(s_info.get("source", ""))
+                        sec = str(s_info.get("section", ""))
+                        neighbors = neighbor_map.get((src, sec), "")
+                        
                         if neighbors and neighbors.strip() not in content:
                              content += "\n--- Additional Context from same Section ---\n" + neighbors
                         
@@ -1219,27 +1364,184 @@ def search_graph(query: str, index_name: str, use_gemini: bool = False) -> Tuple
         ret.search_kwargs["k"] = FETCH_K
         docs = ret.invoke(query)
         chunks, sources = [], []
+        
+        from neo4j import GraphDatabase
+        driver = GraphDatabase.driver(NEO4J_URI, auth=(NEO4J_USERNAME, NEO4J_PASSWORD))
+        
+        # 1. Collect all chunk IDs to batch request metadata
+        chunk_ids = [doc.metadata.get("id") for doc in docs if doc.metadata.get("id")]
+        
+        # 2. Run a single batched query to get metadata and Graph facts
+        enrichment_map = {}
+        if chunk_ids:
+            try:
+                with driver.session(database=NEO4J_DATABASE) as session:
+                    cypher = """
+                    MATCH (d:Document)-[:HAS_SECTION]->(s:Section)-[:HAS_CHUNK]->(c:Chunk)
+                    WHERE c.id IN $cids
+                    OPTIONAL MATCH (newer_d:Document)-[:SUPERSEDES]->(d)
+                    OPTIONAL MATCH (newer_d)-[:HAS_SECTION]->(newer_s:Section {name: s.name})-[:HAS_CHUNK]->(newer_c:Chunk)
+                    OPTIONAL MATCH (c)-[:MENTIONS]->(e:Entity)-[r]-(neighbor:Entity)
+                    RETURN c.id as cid, d.source as source, d.display_title as title, d.year as year,
+                           d.document_series as series, s.name as section,
+                           newer_d.year as newer_year, newer_c.text as newer_text, newer_d.source as newer_source,
+                           collect(DISTINCT e.name + " " + type(r) + " " + neighbor.name) as graph_facts
+                    """
+                    result = session.run(cypher, cids=chunk_ids)
+                    for record in result:
+                        enrichment_map[record["cid"]] = record
+            except Exception as e:
+                print(f"⚠️ Batch Metadata enrichment failed: {e}")
+        
         for i, doc in enumerate(docs):
-            chunks.append(f"[SOURCE_{i+1}]\n{doc.page_content}")
             meta = doc.metadata
-            title = meta.get("title", "Untitled")
-            source_file = meta.get("source", "File")
-            if title in ["Unknown", "Untitled", "None", ""]:
-                title = source_file
+            chunk_id = meta.get("id")
+            source_file = meta.get("source")
+            title = meta.get("title")
+            section_name = meta.get("section", "")
+            
+            if chunk_id in enrichment_map:
+                link_res = enrichment_map[chunk_id]
+                source_file = link_res["source"] or source_file
+                title = link_res["title"] or title
+                meta["source"] = source_file
+                meta["title"] = title
+                meta["year"] = link_res["year"]
+                meta["series"] = link_res["series"]
+                if link_res["section"]:
+                    section_name = link_res["section"]
+                    meta["section"] = section_name
+                    
+                # INJECT SUPERSEDED CONTENT
+                if link_res["newer_text"] and link_res["newer_year"]:
+                    append_str = (
+                        f"\n\n[WARNING: This section from {meta['year']} is SUPERSEDED by {link_res['newer_year']} "
+                        f"document: {link_res['newer_source']}]\n"
+                        f"--- NEWER VERSION CONTENT ---\n{link_res['newer_text']}\n"
+                    )
+                    # Only append if not already appended
+                    if "[WARNING: This section" not in doc.page_content:
+                        doc.page_content += append_str
+                        
+                # INJECT GRAPH FACTS
+                facts = link_res.get("graph_facts", [])
+                valid_facts = [f for f in facts if f and not f.isspace() and "None" not in f]
+                if valid_facts:
+                    facts_str = "\n".join([f"* {f}" for f in valid_facts])
+                    if "--- KNOWLEDGE GRAPH FACTS ---" not in doc.page_content:
+                        doc.page_content += f"\n\n--- KNOWLEDGE GRAPH FACTS ---\n{facts_str}\n"
+
+            else:
+                # Fallback: Find matching chunk by text snippet if ID wasn't in Graph
+                try:
+                    with driver.session(database=NEO4J_DATABASE) as session:
+                        cypher = """
+                        MATCH (d:Document)-[:HAS_SECTION]->(s:Section)-[:HAS_CHUNK]->(c:Chunk)
+                        WHERE c.text CONTAINS $text_snippet
+                        OPTIONAL MATCH (newer_d:Document)-[:SUPERSEDES]->(d)
+                        OPTIONAL MATCH (newer_d)-[:HAS_SECTION]->(newer_s:Section {name: s.name})-[:HAS_CHUNK]->(newer_c:Chunk)
+                        RETURN d.source as source, d.display_title as title, d.year as year,
+                               d.document_series as series, s.name as section,
+                               newer_d.year as newer_year, newer_c.text as newer_text, newer_d.source as newer_source
+                        LIMIT 1
+                        """
+                        # Get a small snippet that Neo4j can QUICKLY find via CONTAINS
+                        snippet = doc.page_content[:100]
+                        link_res = session.run(cypher, text_snippet=snippet).single()
+                        if link_res:
+                            source_file = link_res["source"] or source_file
+                            title = link_res["title"] or title
+                            meta["source"] = source_file
+                            meta["title"] = title
+                            meta["year"] = link_res["year"]
+                            meta["series"] = link_res["series"]
+                            if link_res["section"]:
+                                section_name = link_res["section"]
+                                meta["section"] = section_name
+                            
+                            if link_res["newer_text"] and link_res["newer_year"]:
+                                append_str = (
+                                    f"\n\n[WARNING: This section from {meta['year']} is SUPERSEDED by {link_res['newer_year']} "
+                                    f"document: {link_res['newer_source']}]\n"
+                                    f"--- NEWER VERSION CONTENT ---\n{link_res['newer_text']}\n"
+                                )
+                                if "[WARNING: This section" not in doc.page_content:
+                                    doc.page_content += append_str
+                except Exception as e:
+                    pass
+                # Fallback: Find matching chunk by text snippet if ID wasn't in Graph
+                try:
+                    with driver.session(database=NEO4J_DATABASE) as session:
+                        cypher = """
+                        MATCH (d:Document)-[:HAS_SECTION]->(s:Section)-[:HAS_CHUNK]->(c:Chunk)
+                        WHERE c.text CONTAINS $text_snippet
+                        OPTIONAL MATCH (newer_d:Document)-[:SUPERSEDES]->(d)
+                        OPTIONAL MATCH (newer_d)-[:HAS_SECTION]->(newer_s:Section {name: s.name})-[:HAS_CHUNK]->(newer_c:Chunk)
+                        RETURN d.source as source, d.display_title as title, d.year as year,
+                               d.document_series as series, s.name as section,
+                               newer_d.year as newer_year, newer_c.text as newer_text, newer_d.source as newer_source
+                        LIMIT 1
+                        """
+                        link_res = session.run(cypher, text_snippet=doc.page_content[:100]).single()
+                        if link_res:
+                            source_file = link_res["source"] or source_file
+                            title = link_res["title"] or title
+                            meta["source"] = source_file
+                            meta["title"] = title
+                            meta["year"] = link_res["year"]
+                            meta["series"] = link_res["series"]
+                            if link_res["section"]:
+                                section_name = link_res["section"]
+                                meta["section"] = section_name
+                                
+                            if link_res["newer_text"] and link_res["newer_year"]:
+                                append_str = (
+                                    f"\n\n[WARNING: This section from {meta['year']} is SUPERSEDED by {link_res['newer_year']} "
+                                    f"document: {link_res['newer_source']}]\n"
+                                    f"--- NEWER VERSION CONTENT ---\n{link_res['newer_text']}\n"
+                                )
+                                if "[WARNING: This section" not in doc.page_content:
+                                    doc.page_content += append_str
+                except Exception as e:
+                    pass
+
+            if title in ["Unknown", "Untitled", "None", "", None]:
+                title = source_file or "Untitled"
+            
+            display_source = source_file or "File"
+            if "/" in display_source:
+                display_source = display_source.split("/")[-1]
+            
+            chunks.append(f"[SOURCE_{i+1}]\n{doc.page_content}")
             sources.append({
                 "id": f"source_{i+1}",
                 "index": i + 1,
                 "title": title,
-                "source": meta.get("source", "File"),
+                "source": display_source,
                 "year": meta.get("year", ""),
-                "section": meta.get("section", ""),
-                "page": meta.get("page", ""),
+                "section": section_name or meta.get("section", ""),
+                "page": "" if meta.get("page", 0) == 0 else meta.get("page", ""),
                 "preview": doc.page_content[:300]
             })
-            sources[-1]["url"] = "#"
+            
+            # URL Generation
+            gcs_path = meta.get("gcs_path", "")
+            if not gcs_path:
+                project_id = os.getenv("GOOGLE_CLOUD_PROJECT") or os.getenv("GCP_PROJECT")
+                if project_id:
+                    bucket_name = f"wydot-documents-{project_id}"
+                    if source_file:
+                        gcs_path = f"gs://{bucket_name}/wydot documents/{source_file}"
+            public_url = generate_public_url(gcs_path)
+            page = meta.get("page", "")
+            if public_url and page: public_url += f"#page={page}"
+            sources[-1]["url"] = public_url
+        
+        driver.close()
 
-        # --- FlashRank Reranking ---
-        if chunks:
+        # --- FlashRank Reranking (only if enabled in settings) ---
+        reranking_enabled = settings.get("reranking", False) if 'settings' in dir() else False
+        if chunks and reranking_enabled:
             ranker = get_reranker()
             if ranker:
                 try:
@@ -1249,6 +1551,20 @@ def search_graph(query: str, index_name: str, use_gemini: bool = False) -> Tuple
                     top_results = results[:RETRIEVAL_K]
                     
                     reranked_chunks, reranked_sources = [], []
+                    
+                    # 1. Collect required neighbors
+                    pairs_to_fetch = []
+                    for res in top_results:
+                        idx = res['id']
+                        s_info = sources[idx]
+                        src = str(s_info.get("source", ""))
+                        sec = str(s_info.get("section", ""))
+                        if src and sec:
+                            pairs_to_fetch.append((src, sec))
+                    
+                    # 2. Batch fetch neighbors
+                    neighbor_map = get_batch_neighbors(list(set(pairs_to_fetch)), count=1)
+                    
                     for i, res in enumerate(top_results):
                         idx = res['id']
                         s_info = sources[idx]
@@ -1258,7 +1574,10 @@ def search_graph(query: str, index_name: str, use_gemini: bool = False) -> Tuple
                         content = str(passages[idx]['text'])
                         
                         # Enhancement: Graph-aware context expansion
-                        neighbors = get_neighbors(str(s_info.get("source")), str(s_info.get("section")), count=1)
+                        src = str(s_info.get("source", ""))
+                        sec = str(s_info.get("section", ""))
+                        neighbors = neighbor_map.get((src, sec), "")
+                        
                         if neighbors and neighbors.strip() not in content:
                              content += "\n--- Additional Context from same Section ---\n" + neighbors
                              
@@ -1292,6 +1611,127 @@ def get_all_document_titles() -> List[str]:
     except Exception as e:
         print(f"Error fetching document titles: {e}")
         return []
+
+async def route_query_intent(query: str, use_gemini: bool = False) -> str:
+    """Classifies the user query to determine if it needs Graph Analytics or Standard Search."""
+    prompt = f"""You are a query intent classifier for a civil engineering Knowledge Graph.
+Classify the following user query into exactly one of these categories:
+1. STANDARD_SEARCH: General questions about specifications, requirements, facts, or instructions.
+2. GLOBAL_ANALYTICS: Questions asking for counts, top N lists, or aggregations (e.g. "most cited testing standards", "how many materials").
+3. IMPACT_ANALYSIS: Questions asking about dependencies or what is affected by a change (e.g. "what relies on Portland cement").
+4. GRAPH_TRAVERSAL: Questions requiring multi-hop reasoning across explicitly different entities.
+
+Query: {query}
+
+Respond ONLY with the category name (e.g. STANDARD_SEARCH). No other text.
+"""
+    try:
+        if use_gemini:
+            model = get_gemini_llm()
+            res = await model.generate_content_async(prompt)
+            intent = res.text.strip()
+        else:
+            from langchain_core.prompts import ChatPromptTemplate
+            from langchain_core.output_parsers import StrOutputParser
+            llm = get_mistral_llm()
+            template = ChatPromptTemplate.from_template("{input_prompt}")
+            chain = template | llm | StrOutputParser()
+            intent = await chain.ainvoke({"input_prompt": prompt})
+            intent = intent.strip()
+            
+        for valid in ["STANDARD_SEARCH", "GLOBAL_ANALYTICS", "IMPACT_ANALYSIS", "GRAPH_TRAVERSAL"]:
+            if valid in intent:
+                return valid
+    except Exception as e:
+        print(f"Intent routing failed: {e}")
+        
+    return "STANDARD_SEARCH"
+
+async def search_graph_cypher_async(query: str, intent: str, use_gemini: bool = False) -> Tuple[str, List[Dict]]:
+    """Generates and executes a Cypher query for analytical/traversal intents. Falls back to standard search."""
+    schema_info = """
+    Node Labels:
+    - Document (source, display_title, year, document_series)
+    - Section (name)
+    - Chunk (id, text, chunk_seq, page)
+    - Entity (name) - Canonical engineering entities (materials, standards, concepts).
+    
+    Relationships:
+    - (Document)-[:HAS_SECTION]->(Section)
+    - (Section)-[:HAS_CHUNK]->(Chunk)
+    - (Document)-[:SUPERSEDES]->(Document)
+    - (Chunk)-[:MENTIONS]->(Entity)
+    - (Entity)-[r]->(Entity) - Various extracted relationships (e.g., REQUIRES, USES_MATERIAL, TESTED_BY).
+    """
+    
+    prompt = f"""You are a Neo4j Cypher expert.
+Given the schema and the user query (Intent: {intent}), generate a read-only Cypher query to answer the question.
+SCHEMA:
+{schema_info}
+
+RULES:
+1. Never use write clauses (CREATE, MERGE, SET, DELETE, REMOVE).
+2. Limit the results to a reasonable number (LIMIT 25).
+3. Return elements that are descriptive (e.g., node properties rather than the node objects themselves).
+4. Do not output markdown code blocks. Output ONLY the raw Cypher string.
+5. Entity names should be matched case text CONTAINS or similar if exact name not known.
+
+Query: {query}
+"""
+    try:
+        if use_gemini:
+            model = get_gemini_llm()
+            res = await model.generate_content_async(prompt)
+            cypher = res.text.strip()
+        else:
+            from langchain_core.prompts import ChatPromptTemplate
+            from langchain_core.output_parsers import StrOutputParser
+            llm = get_mistral_llm()
+            template = ChatPromptTemplate.from_template("{input_prompt}")
+            chain = template | llm | StrOutputParser()
+            cypher = await chain.ainvoke({"input_prompt": prompt})
+            cypher = cypher.strip()
+            
+        cypher = cypher.replace("```cypher", "").replace("```", "").strip()
+        print(f"🧠 Generated Cypher:\n{cypher}")
+        
+        disallowed = ["CREATE", "MERGE", "SET", "DELETE", "REMOVE", "DROP"]
+        if any(bad in cypher.upper() for bad in disallowed):
+            print("⚠️ Cypher generation rejected for safety.")
+            return "", []
+
+        from neo4j import GraphDatabase
+        driver = GraphDatabase.driver(NEO4J_URI, auth=(NEO4J_USERNAME, NEO4J_PASSWORD))
+        with driver.session(database=NEO4J_DATABASE) as session:
+            result = session.run(cypher)
+            records = [record.data() for record in result]
+            
+        if not records:
+            print("🧠 Cypher returned no records. Falling back to structured vector search.")
+            return "", []
+            
+        import json
+        context = "### Neo4j Graph Analytics Results\n"
+        for i, rec in enumerate(records):
+            context += f"{i+1}. {json.dumps(rec)}\n"
+            
+        dummy_source = [{
+            "id": "source_1",
+            "index": 1,
+            "title": "Knowledge Graph Analytics",
+            "source": "Graph Database Query",
+            "year": "N/A",
+            "section": "Analytics",
+            "page": "",
+            "preview": "Results generated directly via Cypher Traversal.",
+            "url": ""
+        }]
+        return context, dummy_source
+        
+    except Exception as e:
+        print(f"Cypher pipeline failed: {e}. Falling back...")
+        return "", []
+
 
 async def decompose_query(query: str, model_type: str = "mistral") -> List[str]:
     titles = get_all_document_titles()
@@ -1439,7 +1879,8 @@ PRECISION & FORMATTING:
 1. **Tables**: If the answer involves values from multiple sections, years, or categories, use a Markdown table for comparison.
 2. **Exhaustive**: If a question asks for requirements, list ALL relevant requirements found in the context.
 3. **Accuracy**: If information is missing or contradictory, state it clearly citing the specific sources.
-4. **Version Comparison**: If the context contains multiple versions of the same document (e.g., different years), explicitly compare them. Highlight what has remained the same (similarity) and provide a detailed breakdown of technical changes, additions, or deletions (differences).
+4. **Version Comparison**: ONLY IF the context contains multiple versions of the EXACT SAME document marked with `[WARNING: ... SUPERSEDED]`, you must explicitly compare them. Highlight what has remained the same and provide a detailed breakdown of changes.
+5. **Chronological Order**: ONLY IF you are performing a Version Comparison across superseded documents, present the most recent year first. DO NOT artificially group or sort standard documents by year (e.g., driver licenses, biographies) unless explicitly comparing versions of the same specification.
 
 METADATA GUIDE:
 - SOURCE: Filename
@@ -1458,9 +1899,8 @@ QUESTION: {question}
 
 Instructions:
 - Provide accurate, helpful answers based **strictly** on the relevant context.
-- Cite specific sections when relevant using the [SOURCE_X] format. Never invent or hallucinate citations.
-- If none of the provided documents contain the answer, state "I do not have enough information to answer this based on the provided documents" and DO NOT cite any sources.
-- Keep answers concise but comprehensive.
+- If the user is just saying hello or asking a conversational question (e.g., "hi", "how are you"), reply normally and politely without citing sources.
+- For technical questions, if none of the provided documents contain the answer, state "I do not have enough information to answer this based on the provided documents" and DO NOT cite any sources.
 - Structure your answer with clear headings and bullet points where appropriate.
 """
     return prompt
@@ -1490,10 +1930,15 @@ async def generate_answer_gemini_stream(question: str, context: str, history: Li
        
         response_stream = await model.generate_content_async(full_prompt_str, stream=True)
         async for chunk in response_stream:
-             yield chunk.text
+            try:
+                if chunk.text:
+                    yield chunk.text
+            except ValueError:
+                # Handle finish_reason=1 or cases where text part is missing
+                continue
        
     except Exception as e:
-        yield f"Error generating response: {e}"
+        yield f"\n\n⚠️ Error generating response: {e}"
 
 def generate_answer_mistral(question: str, context: str, history: List[Dict[str, Any]], enhanced_citations: bool = True) -> str:
     # Keep sync version for compatibility/fallback
@@ -1649,6 +2094,8 @@ async def start():
             ),
             Switch(id="thinking_mode", label="Thinking Mode (Slower, Detailed)", initial=False),
             Switch(id="multihop", label="Multi-hop Reasoning", initial=False),
+            Switch(id="reranking", label="Reranking (FlashRank)", initial=False),
+            Switch(id="hyde", label="HyDE (Query Expansion)", initial=False),
             Slider(id="fetch_k", label="Initial Candidates (FETCH_K)", min=10, max=100, step=5, initial=25),
         ]
     ).send()
@@ -1720,16 +2167,26 @@ async def main(message: cl.Message):
 
     # 2. Text Retrieval Route (with timing for telemetry)
     t0 = time.perf_counter()
-    await msg.stream_token("🔍 **Searching documents...**\n")
+    await msg.stream_token(" **Thinking...**\n")
     
     use_gemini = "Gemini" in model_choice
     if thinking_mode:
         # SYNC (Blocking) Search
         context, sources = search_graph(message.content, index_name)
     elif multihop:
-        # MULTI-HOP Search
-        await msg.stream_token("🧠 **Analyzing multi-part question...**\n")
-        context, sources = await search_graph_multihop_async(message.content, index_name, use_gemini)
+        # INTENT ROUTING & ADVANCED GRAPH SEARCH
+        await msg.stream_token(" **Analyzing query intent...**\n")
+        intent = await route_query_intent(message.content, use_gemini)
+        
+        if intent in ["GLOBAL_ANALYTICS", "IMPACT_ANALYSIS", "GRAPH_TRAVERSAL"]:
+            await msg.stream_token(f" **Graph Intent Detected ({intent}). Generating Cypher...**\n")
+            context, sources = await search_graph_cypher_async(message.content, intent, use_gemini)
+            if not context:
+                await msg.stream_token(" **Cypher returned no results. Falling back to multi-hop vector RAG...**\n")
+                context, sources = await search_graph_multihop_async(message.content, index_name, use_gemini)
+        else:
+            await msg.stream_token(" **Standard Search Intent. Retrieving documents...**\n")
+            context, sources = await search_graph_multihop_async(message.content, index_name, use_gemini)
     else:
         # ASYNC Search
         context, sources = await search_graph_async(message.content, index_name, use_gemini)
