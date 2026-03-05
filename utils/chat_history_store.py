@@ -570,16 +570,51 @@ class CloudSQLChatHistoryStore(BaseChatHistoryStore):
     @staticmethod
     def _parse_db_url(url: str) -> dict:
         """Parse DATABASE_URL into explicit psycopg2 connection params.
-        This avoids issues with URL-encoding (%23 for #) that psycopg2's
-        URI parser may not handle correctly."""
-        from urllib.parse import urlparse, unquote, parse_qs
+        This manually handles the user:password@ part before using urlparse
+        to avoid issues with special characters (like #) in passwords."""
+        from urllib.parse import unquote, parse_qs, urlparse
+        
+        # 1. Normalize scheme for urlparse
         clean = url.replace("postgresql+psycopg2://", "postgresql://")
-        parsed = urlparse(clean)
+        
+        # 2. Extract authority (user:pass@host:port) to handle password special chars
+        # We manually split out the authority part before passing to urlparse
+        # because urlparse stops at '#' (fragment start).
+        scheme_split = clean.split("://", 1)
+        if len(scheme_split) < 2:
+            return {"user": "postgres", "password": "", "dbname": "postgres"}
+        
+        scheme = scheme_split[0]
+        remainder = scheme_split[1]
+        
+        # Split at first '/' to separate authority and path/query
+        parts = remainder.split("/", 1)
+        authority = parts[0]
+        path_query = "/" + parts[1] if len(parts) > 1 else "/"
+        
         params = {}
-        params["user"] = unquote(parsed.username) if parsed.username else "postgres"
-        params["password"] = unquote(parsed.password) if parsed.password else ""
-        params["dbname"] = parsed.path.lstrip("/") or "postgres"
-        # Check for Unix socket host in query params (Cloud SQL proxy)
+        
+        # Extract user:pass from authority
+        if "@" in authority:
+            user_pass, host_port = authority.rsplit("@", 1)
+            if ":" in user_pass:
+                params["user"], params["password"] = user_pass.split(":", 1)
+            else:
+                params["user"] = user_pass
+                params["password"] = ""
+            # Reconstruct for urlparse to handle host/port/path/query
+            login_free_url = f"{scheme}://{host_port}{path_query}"
+        else:
+            params["user"] = "postgres"
+            params["password"] = ""
+            login_free_url = f"{scheme}://{authority}{path_query}"
+            
+        # 3. Use urlparse on the login-free URL to handle host/port/path/query
+        parsed = urlparse(login_free_url)
+        params["user"] = unquote(params["user"])
+        params["password"] = unquote(params["password"])
+        params["dbname"] = unquote(parsed.path.lstrip("/")) or "postgres"
+        
         qs = parse_qs(parsed.query)
         if "host" in qs:
             params["host"] = qs["host"][0]
