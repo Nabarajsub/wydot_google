@@ -32,7 +32,7 @@ ENV HOME=/tmp
 RUN mkdir -p /app/model_cache && python -c "from sentence_transformers import SentenceTransformer; SentenceTransformer('sentence-transformers/all-MiniLM-L6-v2')"
 
 # Copy application code
-COPY chatapp.py .
+COPY chatapp_gemini.py .
 COPY utils/ utils/
 
 # Copy configuration and static assets (CRITICAL for design)
@@ -49,4 +49,4 @@ RUN mkdir -p /app/.files /tmp/.files /tmp/.chainlit
 EXPOSE 8080
 
 # Run the application
-CMD ["chainlit", "run", "chatapp.py", "--host", "0.0.0.0", "--port", "8080", "--headless"]
+CMD ["chainlit", "run", "chatapp_gemini.py", "--host", "0.0.0.0", "--port", "8080", "--headless"]
