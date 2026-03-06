@@ -64,7 +64,7 @@ spec:
         secret:
           secretName: shared-dotenv
           items:
-          - key: "2"
+          - key: "4"
             path: .env
   traffic:
   - percent: 100
