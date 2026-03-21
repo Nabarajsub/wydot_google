@@ -1,0 +1,112 @@
+{
+  "table1_categories": {
+    "Standard Specs": {
+      "docs": 2,
+      "chunks": 2519,
+      "pct": 2.8,
+      "chk_per_doc": 1260.0
+    },
+    "Construction Manual": {
+      "docs": 21,
+      "chunks": 6641,
+      "pct": 7.5,
+      "chk_per_doc": 316.0
+    },
+    "Materials Testing": {
+      "docs": 6,
+      "chunks": 2180,
+      "pct": 2.5,
+      "chk_per_doc": 363.0
+    },
+    "Design Manual": {
+      "docs": 23,
+      "chunks": 1405,
+      "pct": 1.6,
+      "chk_per_doc": 61.0
+    },
+    "Traffic & Crashes": {
+      "docs": 22,
+      "chunks": 30922,
+      "pct": 34.8,
+      "chk_per_doc": 1406.0
+    },
+    "STIP": {
+      "docs": 59,
+      "chunks": 13634,
+      "pct": 15.3,
+      "chk_per_doc": 231.0
+    },
+    "Annual Reports": {
+      "docs": 46,
+      "chunks": 2341,
+      "pct": 2.6,
+      "chk_per_doc": 51.0
+    },
+    "Bridge Program": {
+      "docs": 28,
+      "chunks": 5399,
+      "pct": 6.1,
+      "chk_per_doc": 193.0
+    },
+    "Highway Safety": {
+      "docs": 0,
+      "chunks": 0,
+      "pct": 0.0,
+      "chk_per_doc": 0
+    },
+    "Other": {
+      "docs": 921,
+      "chunks": 23866,
+      "pct": 26.8,
+      "chk_per_doc": 26.0
+    }
+  },
+  "node_counts": {
+    "nodes": 152231,
+    "relationships": 338569
+  },
+  "agent_scopes": {
+    "specs_agent": {
+      "chunks": 3140,
+      "docs": 22,
+      "reduction_pct": 96.5
+    },
+    "construction_agent": {
+      "chunks": 6641,
+      "docs": 21,
+      "reduction_pct": 92.5
+    },
+    "materials_agent": {
+      "chunks": 2184,
+      "docs": 7,
+      "reduction_pct": 97.5
+    },
+    "design_agent": {
+      "chunks": 1366,
+      "docs": 21,
+      "reduction_pct": 98.5
+    },
+    "safety_agent": {
+      "chunks": 30922,
+      "docs": 22,
+      "reduction_pct": 65.2
+    },
+    "bridge_agent": {
+      "chunks": 8076,
+      "docs": 45,
+      "reduction_pct": 90.9
+    },
+    "planning_agent": {
+      "chunks": 13607,
+      "docs": 58,
+      "reduction_pct": 84.7
+    },
+    "admin_agent": {
+      "chunks": 2439,
+      "docs": 47,
+      "reduction_pct": 97.3
+    }
+  },
+  "total_docs": 1128,
+  "total_chunks": 88907
+}

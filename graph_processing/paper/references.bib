@@ -1,0 +1,718 @@
+% ============================================================
+% 1. RAG FOUNDATIONS & SURVEYS (10 papers)
+% ============================================================
+
+@inproceedings{lewis2020rag,
+  title={Retrieval-Augmented Generation for Knowledge-Intensive {NLP} Tasks},
+  author={Lewis, Patrick and Perez, Ethan and Piktus, Aleksandra and Petroni, Fabio and Karpukhin, Vladimir and Goyal, Naman and K{\"u}ttler, Heinrich and Lewis, Mike and Yih, Wen-tau and Rockt{\"a}schel, Tim and Riedel, Sebastian and Kiela, Douwe},
+  booktitle={Advances in Neural Information Processing Systems},
+  volume={33},
+  pages={9459--9474},
+  year={2020}
+}
+
+@inproceedings{guu2020realm,
+  title={{REALM}: Retrieval-Augmented Language Model Pre-Training},
+  author={Guu, Kelvin and Lee, Kenton and Tung, Zora and Pasupat, Panupong and Chang, Mingwei},
+  booktitle={International Conference on Machine Learning},
+  pages={3929--3938},
+  year={2020}
+}
+
+@inproceedings{izacard2021fid,
+  title={Leveraging Passage Retrieval with Generative Models for Open Domain Question Answering},
+  author={Izacard, Gautier and Grave, Edouard},
+  booktitle={Proceedings of the 16th Conference of the European Chapter of the Association for Computational Linguistics},
+  pages={874--880},
+  year={2021}
+}
+
+@article{izacard2023atlas,
+  title={Atlas: Few-shot Learning with Retrieval Augmented Language Models},
+  author={Izacard, Gautier and Lewis, Patrick and Lomeli, Maria and Hosseini, Lucas and Petroni, Fabio and Schick, Timo and Dwivedi-Yu, Jane and Joulin, Armand and Riedel, Sebastian and Grave, Edouard},
+  journal={Journal of Machine Learning Research},
+  volume={24},
+  number={251},
+  pages={1--43},
+  year={2023}
+}
+
+@inproceedings{borgeaud2022retro,
+  title={Improving Language Models by Retrieving from Trillions of Tokens},
+  author={Borgeaud, Sebastian and Mensch, Arthur and Hoffmann, Jordan and Cai, Trevor and Rutherford, Eliza and Millican, Katie and van den Driessche, George Bm and Lespiau, Jean-Baptiste and Damoc, Bogdan and Clark, Aidan and others},
+  booktitle={International Conference on Machine Learning},
+  pages={2206--2240},
+  year={2022}
+}
+
+@article{gao2024ragsurvey,
+  title={Retrieval-Augmented Generation for Large Language Models: A Survey},
+  author={Gao, Yunfan and Xiong, Yun and Gao, Xinyu and Jia, Kangxiang and Pan, Jinliu and Bi, Yuxi and Dai, Yi and Sun, Jiawei and Wang, Haofen},
+  journal={arXiv preprint arXiv:2312.10997},
+  year={2024}
+}
+
+@article{zhao2024ragsurvey2,
+  title={Retrieval-Augmented Generation for {AI}-Generated Content: A Survey},
+  author={Zhao, Penghao and Zhang, Hailin and Yu, Qinhan and Wang, Zhengren and Geng, Yuntian and Fu, Fangcheng and Yang, Ling and Zhang, Wentao and Cui, Bin},
+  journal={arXiv preprint arXiv:2402.19473},
+  year={2024}
+}
+
+@inproceedings{chen2017drqa,
+  title={Reading {Wikipedia} to Answer Open-Domain Questions},
+  author={Chen, Danqi and Fajardo, Adam and Bolton, Jason and Zettlemoyer, Luke},
+  booktitle={Proceedings of the 55th Annual Meeting of the Association for Computational Linguistics},
+  pages={1870--1879},
+  year={2017}
+}
+
+@article{shuster2021retrieval,
+  title={Retrieval Augmentation Reduces Hallucination in Conversation},
+  author={Shuster, Kurt and Poff, Spencer and Chen, Moya and Kiela, Douwe and Weston, Jason},
+  journal={arXiv preprint arXiv:2104.07567},
+  year={2021}
+}
+
+@article{huang2023hallucination,
+  title={A Survey on Hallucination in Large Language Models: Principles, Taxonomy, Challenges, and Open Questions},
+  author={Huang, Lei and Yu, Weijiang and Ma, Weitao and Zhong, Weihong and Feng, Zhangyin and Wang, Haotian and Chen, Qianglong and Peng, Weihua and Feng, Xiaocheng and Qin, Bing and Liu, Ting},
+  journal={arXiv preprint arXiv:2311.05232},
+  year={2023}
+}
+
+% ============================================================
+% 2. DENSE RETRIEVAL & EMBEDDINGS (12 papers)
+% ============================================================
+
+@inproceedings{karpukhin2020dpr,
+  title={Dense Passage Retrieval for Open-Domain Question Answering},
+  author={Karpukhin, Vladimir and O{\u{g}}uz, Barlas and Min, Sewon and Lewis, Patrick and Wu, Ledell and Edunov, Sergey and Chen, Danqi and Yih, Wen-tau},
+  booktitle={Proceedings of the 2020 Conference on Empirical Methods in Natural Language Processing},
+  pages={6769--6781},
+  year={2020}
+}
+
+@inproceedings{xiong2021ance,
+  title={Approximate Nearest Neighbor Negative Contrastive Learning for Dense Text Retrieval},
+  author={Xiong, Lee and Xiong, Chenyan and Li, Ye and Tang, Kwok-Fung and Liu, Jialin and Bennett, Paul and Ahmed, Junaid and Overwijk, Arnold},
+  booktitle={International Conference on Learning Representations},
+  year={2021}
+}
+
+@article{reimers2019sentencebert,
+  title={Sentence-{BERT}: Sentence Embeddings using {S}iamese {BERT}-Networks},
+  author={Reimers, Nils and Gurevych, Iryna},
+  journal={arXiv preprint arXiv:1908.10084},
+  year={2019}
+}
+
+@inproceedings{khattab2020colbert,
+  title={{ColBERT}: Efficient and Effective Passage Search via Contextualized Late Interaction over {BERT}},
+  author={Khattab, Omar and Zaharia, Matei},
+  booktitle={Proceedings of the 43rd International ACM SIGIR Conference on Research and Development in Information Retrieval},
+  pages={39--48},
+  year={2020}
+}
+
+@article{santhanam2022colbertv2,
+  title={{ColBERTv2}: Effective and Efficient Retrieval via Lightweight Late Interaction},
+  author={Santhanam, Keshav and Khattab, Omar and Saad-Falcon, Jon and Potts, Christopher and Zaharia, Matei},
+  journal={arXiv preprint arXiv:2112.01488},
+  year={2022}
+}
+
+@article{su2023instructor,
+  title={One Embedder, Any Task: Instruction-Finetuned Text Embeddings},
+  author={Su, Hongjin and Shi, Weijia and Kasai, Jungo and Wang, Yizhong and Hu, Yushi and Ostendorf, Mari and Yih, Wen-tau and Smith, Noah A and Zettlemoyer, Luke and Yu, Tao},
+  journal={arXiv preprint arXiv:2212.09741},
+  year={2023}
+}
+
+@article{wang2024e5mistral,
+  title={{E5-Mistral}: Multilingual {E5} Text Embeddings with Weakly-Supervised Contrastive Pre-training},
+  author={Wang, Liang and Yang, Nan and Huang, Xiaolong and Yang, Linjun and Majumder, Rangan and Wei, Furu},
+  journal={arXiv preprint arXiv:2401.00368},
+  year={2024}
+}
+
+@article{li2024bge,
+  title={Making Large Language Models A Better Foundation For Dense Retrieval},
+  author={Li, Chaofan and Shao, Zheng and Liu, Shitao and Xiao, Shuo and Zhao, Zheng and Bai, Yingxia},
+  journal={arXiv preprint arXiv:2312.15503},
+  year={2024}
+}
+
+@article{robertson2009bm25,
+  title={The Probabilistic Relevance Framework: {BM25} and Beyond},
+  author={Robertson, Stephen and Zaragoza, Hugo},
+  journal={Foundations and Trends in Information Retrieval},
+  volume={3},
+  number={4},
+  pages={333--389},
+  year={2009}
+}
+
+@article{formal2021splade,
+  title={{SPLADE}: Sparse Lexical and Expansion Model for First Stage Ranking},
+  author={Formal, Thibault and Piwowarski, Benjamin and Clinchant, St{\'e}phane},
+  journal={arXiv preprint arXiv:2107.05720},
+  year={2021}
+}
+
+@article{malkov2020hnsw,
+  title={Efficient and Robust Approximate Nearest Neighbor Search Using Hierarchical Navigable Small World Graphs},
+  author={Malkov, Yu A and Yashunin, D A},
+  journal={IEEE Transactions on Pattern Analysis and Machine Intelligence},
+  volume={42},
+  number={4},
+  pages={824--836},
+  year={2020}
+}
+
+@article{johnson2021faiss,
+  title={Billion-Scale Similarity Search with {GPUs}},
+  author={Johnson, Jeff and Douze, Matthijs and J{\'e}gou, Herv{\'e}},
+  journal={IEEE Transactions on Big Data},
+  volume={7},
+  number={3},
+  pages={535--547},
+  year={2021}
+}
+
+% ============================================================
+% 3. QUERY ROUTING & TRANSFORMATION (10 papers)
+% ============================================================
+
+@article{jeong2024adaptiverag,
+  title={Adaptive-{RAG}: Learning to Adapt Retrieval-Augmented Large Language Models through Question Complexity},
+  author={Jeong, Soyeong and Baek, Jinheon and Cho, Sukmin and Hwang, Sung Ju and Park, Jong C.},
+  journal={arXiv preprint arXiv:2403.14403},
+  year={2024}
+}
+
+@article{ragrouter2025,
+  title={{RAGRouter}: Adaptive {RAG} Query Routing},
+  author={},
+  journal={arXiv preprint arXiv:2505.23052},
+  year={2025},
+  note={Authors to be confirmed}
+}
+
+@article{zohar2024multimetarag,
+  title={Multi-Meta-{RAG}: Improving {RAG} for Multi-Hop Queries Using Database Filtering on Metadata},
+  author={Zohar, Matan and Wang, Elan},
+  journal={arXiv preprint arXiv:2406.13213},
+  year={2024}
+}
+
+@article{routerag2025,
+  title={{RouteRAG}: Router-based Retrieval-Augmented Generation},
+  author={},
+  journal={arXiv preprint arXiv:2512.09487},
+  year={2025},
+  note={Authors to be confirmed}
+}
+
+@article{aurelio2024semanticrouter,
+  title={Semantic Router: Superfast Decision Layer for {LLMs} and {AI} Agents},
+  author={Aurelio, James and others},
+  journal={GitHub: aurelio-labs/semantic-router},
+  year={2024}
+}
+
+@article{gao2023hyde,
+  title={Precise Zero-Shot Dense Retrieval without Relevance Labels},
+  author={Gao, Luyu and Ma, Xueguang and Lin, Jimmy and Callan, Jamie},
+  journal={arXiv preprint arXiv:2212.10496},
+  year={2023}
+}
+
+@article{zheng2024stepback,
+  title={Take a Step Back: Evoking Reasoning via Abstraction in Large Language Models},
+  author={Zheng, Huaixiu Steven and Mishra, Swaroop and Chen, Xinyun and Cheng, Heng-Tze and Chi, Ed H and Le, Quoc V and Zhou, Denny},
+  journal={arXiv preprint arXiv:2310.06117},
+  year={2024}
+}
+
+@article{wang2023query2doc,
+  title={Query2doc: Query Expansion with Large Language Models},
+  author={Wang, Liang and Yang, Nan and Wei, Furu},
+  journal={arXiv preprint arXiv:2303.07678},
+  year={2023}
+}
+
+@article{press2023measuring,
+  title={Measuring and Narrowing the Compositionality Gap in Language Models},
+  author={Press, Ofir and Zhang, Muru and Min, Sewon and Schmidt, Ludwig and Smith, Noah A and Lewis, Mike},
+  journal={arXiv preprint arXiv:2210.03350},
+  year={2023}
+}
+
+@article{zhou2023leasttomost,
+  title={Least-to-Most Prompting Enables Complex Reasoning in Large Language Models},
+  author={Zhou, Denny and Sch{\"a}rli, Nathanael and Hou, Le and Wei, Jason and Scales, Nathan and Wang, Xuezhi and Schuurmans, Dale and Cui, Claire and Bousquet, Olivier and Le, Quoc and Chi, Ed},
+  journal={arXiv preprint arXiv:2205.10625},
+  year={2023}
+}
+
+% ============================================================
+% 4. MULTI-AGENT & TOOL-USE LLM SYSTEMS (12 papers)
+% ============================================================
+
+@article{yao2023react,
+  title={{ReAct}: Synergizing Reasoning and Acting in Language Models},
+  author={Yao, Shunyu and Zhao, Jeffrey and Yu, Dian and Du, Nan and Shafran, Izhak and Narasimhan, Karthik and Cao, Yuan},
+  journal={arXiv preprint arXiv:2210.03629},
+  year={2023}
+}
+
+@inproceedings{schick2023toolformer,
+  title={Toolformer: Language Models Can Teach Themselves to Use Tools},
+  author={Schick, Timo and Dwivedi-Yu, Jane and Dess{\`\i}, Roberto and Raileanu, Roberta and Lomeli, Maria and Zettlemoyer, Luke and Cancedda, Nicola and Scialom, Thomas},
+  booktitle={Advances in Neural Information Processing Systems},
+  volume={36},
+  year={2023}
+}
+
+@article{patil2023gorilla,
+  title={Gorilla: Large Language Model Connected with Massive {APIs}},
+  author={Patil, Shishir G and Zhang, Tianjun and Wang, Xin and Gonzalez, Joseph E},
+  journal={arXiv preprint arXiv:2305.15334},
+  year={2023}
+}
+
+@article{qin2024toolllm,
+  title={{ToolLLM}: Facilitating Large Language Models to Master 16000+ Real-world {APIs}},
+  author={Qin, Yujia and Liang, Shihao and Ye, Yining and Zhu, Kunlun and Yan, Lan and Lu, Yaxi and Lin, Yankai and Cong, Xin and Tang, Xiangru and Qian, Bill and others},
+  journal={arXiv preprint arXiv:2307.16789},
+  year={2024}
+}
+
+@article{wei2022chainofthought,
+  title={Chain-of-Thought Prompting Elicits Reasoning in Large Language Models},
+  author={Wei, Jason and Wang, Xuezhi and Schuurmans, Dale and Bosma, Maarten and Ichter, Brian and Xia, Fei and Chi, Ed and Le, Quoc and Zhou, Denny},
+  journal={Advances in Neural Information Processing Systems},
+  volume={35},
+  pages={24824--24837},
+  year={2022}
+}
+
+@article{yao2024treeofthoughts,
+  title={Tree of Thoughts: Deliberate Problem Solving with Large Language Models},
+  author={Yao, Shunyu and Yu, Dian and Zhao, Jeffrey and Shafran, Izhak and Griffiths, Thomas L and Cao, Yuan and Narasimhan, Karthik},
+  journal={Advances in Neural Information Processing Systems},
+  volume={36},
+  year={2024}
+}
+
+@article{singh2025agenticrag,
+  title={Agentic Retrieval-Augmented Generation: A Survey on Agentic {RAG}},
+  author={Singh, Aditi and Ayush, Abul Ehtesham and Saini, Saket and Tewari, Gaurav},
+  journal={arXiv preprint arXiv:2501.09136},
+  year={2025}
+}
+
+@article{marag2025,
+  title={{MA-RAG}: Multi-Agent Retrieval-Augmented Generation},
+  author={},
+  journal={arXiv preprint arXiv:2505.20096},
+  year={2025},
+  note={Authors to be confirmed}
+}
+
+@article{multiagentrag2024,
+  title={Multi-Agent {RAG} System for Complex Research Tasks},
+  author={},
+  journal={arXiv preprint arXiv:2412.05838},
+  year={2024},
+  note={Authors to be confirmed}
+}
+
+@article{arag2026,
+  title={{A-RAG}: Agentic Retrieval-Augmented Generation},
+  author={},
+  journal={arXiv preprint arXiv:2602.03442},
+  year={2026},
+  note={Authors to be confirmed}
+}
+
+@article{wu2023autogen,
+  title={{AutoGen}: Enabling Next-Gen {LLM} Applications via Multi-Agent Conversation},
+  author={Wu, Qingyun and Bansal, Gagan and Zhang, Jieyu and Wu, Yiran and Li, Beibin and Zhu, Erkang and Jiang, Li and Zhang, Xiaoyun and Zhang, Shaokun and Liu, Jiale and others},
+  journal={arXiv preprint arXiv:2308.08155},
+  year={2023}
+}
+
+@article{huang2022planning,
+  title={Language Models as Zero-Shot Planners: Extracting Actionable Knowledge for Embodied Agents},
+  author={Huang, Wenlong and Abbeel, Pieter and Pathak, Deepak and Mordatch, Igor},
+  journal={arXiv preprint arXiv:2201.07207},
+  year={2022}
+}
+
+% ============================================================
+% 5. SELF-CORRECTING & ADAPTIVE RAG (5 papers)
+% ============================================================
+
+@article{asai2023selfrag,
+  title={Self-{RAG}: Learning to Retrieve, Generate, and Critique through Self-Reflection},
+  author={Asai, Akari and Wu, Zeqiu and Wang, Yizhong and Sil, Avirup and Hajishirzi, Hannaneh},
+  journal={arXiv preprint arXiv:2310.11511},
+  year={2023}
+}
+
+@article{yan2024crag,
+  title={Corrective Retrieval Augmented Generation},
+  author={Yan, Shi-Qi and Gu, Jia-Chen and Zhu, Yun and Ling, Zhen-Hua},
+  journal={arXiv preprint arXiv:2401.15884},
+  year={2024}
+}
+
+@article{sarthi2024raptor,
+  title={{RAPTOR}: Recursive Abstractive Processing for Tree-Organized Retrieval},
+  author={Sarthi, Parth and Abdullah, Salman and Tuli, Aditi and Khanna, Shubh and Goldie, Anna and Manning, Christopher D.},
+  journal={arXiv preprint arXiv:2401.18059},
+  year={2024}
+}
+
+@article{nogueira2020reranking,
+  title={Document Ranking with a Pretrained Sequence-to-Sequence Model},
+  author={Nogueira, Rodrigo and Jiang, Zhiying and Lin, Jimmy},
+  journal={arXiv preprint arXiv:2003.06713},
+  year={2020}
+}
+
+@article{glass2022reranking,
+  title={Re2{G}: Retrieve, Rerank, Generate},
+  author={Glass, Michael and Rossiello, Gaetano and Chowdhury, Md Faisal Mahbub and Naber, Ankita and Nandwani, Pengshan and Mihindukulasooriya, Nandana and Gliozzo, Alfio},
+  journal={arXiv preprint arXiv:2207.06300},
+  year={2022}
+}
+
+% ============================================================
+% 6. GRAPH RAG & KNOWLEDGE GRAPHS (10 papers)
+% ============================================================
+
+@article{edge2024graphrag,
+  title={From Local to Global: A Graph {RAG} Approach to Query-Focused Summarization},
+  author={Edge, Darren and Trinh, Ha and Cheng, Newman and Bradley, Joshua and Chao, Alex and Mody, Apurva and Truitt, Steven and Larson, Jonathan},
+  journal={arXiv preprint arXiv:2404.16130},
+  year={2024}
+}
+
+@article{hybridrag2024,
+  title={{HybridRAG}: Integrating Knowledge Graphs and Vector Retrieval for Efficient Information Extraction},
+  author={Basu, Bhaskarjit and Barui, Sawan},
+  journal={arXiv preprint arXiv:2408.04948},
+  year={2024}
+}
+
+@article{peng2024graphragsurvey,
+  title={Graph Retrieval-Augmented Generation: A Survey},
+  author={Peng, Boci and Galkin, Mikhail and Zhu, Yijun and Dong, Yuxia and Mitra, Bhaskar and Ren, Xiang and Dwivedi-Yu, Jane and others},
+  journal={arXiv preprint arXiv:2408.08921},
+  year={2024}
+}
+
+@article{soman2024kgrag,
+  title={{KG-RAG}: Bridging the Gap Between Knowledge and Creativity},
+  author={Soman, Karthik and Rose, Peter W and Morris, John H and Akbas, Rabia E and Smith, Brett and Peetoom, Braian and Villoutreix, Bruno and Baranzini, Sergio},
+  journal={arXiv preprint arXiv:2311.17330},
+  year={2024}
+}
+
+@article{grag2024,
+  title={{GRAG}: Graph Retrieval-Augmented Generation},
+  author={},
+  journal={arXiv preprint},
+  year={2024},
+  note={Authors to be confirmed}
+}
+
+@article{guo2024lightrag,
+  title={{LightRAG}: Simple and Fast Retrieval-Augmented Generation},
+  author={Guo, Zirui and Hao, Lianghao and Li, Yuxiang and others},
+  journal={arXiv preprint arXiv:2410.05779},
+  year={2024}
+}
+
+@article{pan2024kgllm,
+  title={Unifying Large Language Models and Knowledge Graphs: A Roadmap},
+  author={Pan, Shirui and Luo, Linhao and Wang, Yufei and Chen, Chen and Wang, Jiapu and Wu, Xindong},
+  journal={IEEE Transactions on Knowledge and Data Engineering},
+  volume={36},
+  number={7},
+  pages={3580--3599},
+  year={2024}
+}
+
+@article{trajanoska2023kgconstruction,
+  title={Enhancing Knowledge Graph Construction Using Large Language Models},
+  author={Trajanoska, Milena and Stojanov, Riste and Trajanov, Dimitar},
+  journal={arXiv preprint arXiv:2305.04676},
+  year={2023}
+}
+
+@misc{langchain2024neo4jvector,
+  title={Neo4j Vector Index Integration},
+  author={{LangChain}},
+  howpublished={\url{https://python.langchain.com/docs/integrations/vectorstores/neo4jvector}},
+  year={2024}
+}
+
+@article{li2024graphreader,
+  title={{GraphReader}: Building Graph-based Agent to Enhance Long-Context Abilities of Large Language Models},
+  author={Li, Shilong and Li, Yancheng and Liu, Zhiyuan},
+  journal={arXiv preprint arXiv:2406.14550},
+  year={2024}
+}
+
+% ============================================================
+% 7. DOMAIN-SPECIFIC RAG (6 papers)
+% ============================================================
+
+@article{rag4cm2025,
+  title={Retrieval-Augmented Generation for Construction Management},
+  author={},
+  journal={Advanced Engineering Informatics},
+  doi={10.1016/j.aei.2025.103158},
+  year={2025},
+  note={Authors to be confirmed}
+}
+
+@article{graphragcompliance2024,
+  title={Graph-{RAG} for Engineering Compliance Checking},
+  author={},
+  journal={arXiv preprint arXiv:2412.08593},
+  year={2024},
+  note={Authors to be confirmed}
+}
+
+@article{louis2024interpretable,
+  title={Interpretable Long-Form Legal Question Answering with Retrieval-Augmented Large Language Models},
+  author={Louis, Antoine and van Dijck, Gijs and Spanakis, Gerasimos},
+  journal={arXiv preprint arXiv:2309.17050},
+  year={2024}
+}
+
+@article{pipitone2024legalrag,
+  title={LegalRAG: A Retrieval-Augmented Generation Framework for Legal Question Answering},
+  author={Pipitone, Arianna and others},
+  journal={arXiv preprint},
+  year={2024}
+}
+
+@article{xiong2024benchmarking,
+  title={Benchmarking Retrieval-Augmented Generation for Medicine},
+  author={Xiong, Guangzhi and Jin, Qiao and Lu, Zhiyong and Zhang, Aidong},
+  journal={arXiv preprint arXiv:2402.13178},
+  year={2024}
+}
+
+@article{zakka2024almanac,
+  title={Almanac: Retrieval-Augmented Language Models for Clinical Medicine},
+  author={Zakka, Cyril and Shad, Rohan and Chaurasia, Akash and Dalber, Alex R and Kim, Alexander and Moor, Michael and Fong, Robyn and Phillips, Christy and Alexander, Katherine and Ashley, Euan and others},
+  journal={NEJM AI},
+  volume={1},
+  number={2},
+  year={2024}
+}
+
+% ============================================================
+% 8. HYBRID SEARCH & RETRIEVAL METHODS (5 papers)
+% ============================================================
+
+@article{chen2024blendedrag,
+  title={Blended {RAG}: Improving {RAG} Accuracy with Semantic Search and Hybrid Query-Based Retrievers},
+  author={Chen, Kuicai and Wang, Yujia and Liu, Yimeng and others},
+  journal={arXiv preprint arXiv:2404.07220},
+  year={2024}
+}
+
+@article{ma2024hybridretrieval,
+  title={Fine-Tuning {LLaMA} for Multi-Stage Text Retrieval},
+  author={Ma, Xueguang and Liang, Xinyu and Wang, Liang and Yang, Nan and Wei, Furu and Lin, Jimmy},
+  journal={arXiv preprint arXiv:2310.08319},
+  year={2024}
+}
+
+@article{guo2020scann,
+  title={Accelerating Large-Scale Inference with Anisotropic Vector Quantization},
+  author={Guo, Ruiqi and Sun, Philip and Lindgren, Erik and Geng, Quan and Simcha, David and Chern, Felix and Kumar, Sanjiv},
+  journal={arXiv preprint arXiv:1908.10396},
+  year={2020}
+}
+
+@article{li2024finrag,
+  title={{FinRAG}: Financial Retrieval-Augmented Generation},
+  author={Li, Yinheng and others},
+  journal={arXiv preprint},
+  year={2024}
+}
+
+@article{zhong2023constructionir,
+  title={Information Retrieval for Building Code Compliance Checking},
+  author={Zhong, Botao and others},
+  journal={Automation in Construction},
+  year={2023}
+}
+
+% ============================================================
+% 9. RAG EVALUATION & BENCHMARKS (7 papers)
+% ============================================================
+
+@article{es2024ragas,
+  title={{RAGAS}: Automated Evaluation of Retrieval Augmented Generation},
+  author={Es, Shahul and James, Jithin and Espinosa-Anke, Luis and Schockaert, Steven},
+  journal={arXiv preprint arXiv:2309.15217},
+  year={2024}
+}
+
+@article{saadfalcon2024ares,
+  title={{ARES}: An Automated Evaluation Framework for Retrieval-Augmented Generation Systems},
+  author={Saad-Falcon, Jon and Khattab, Omar and Potts, Christopher and Zaharia, Matei},
+  journal={arXiv preprint arXiv:2311.09476},
+  year={2024}
+}
+
+@article{chen2024rgb,
+  title={Benchmarking Large Language Models in Retrieval-Augmented Generation},
+  author={Chen, Jiawei and Lin, Hongyu and Han, Xianpei and Sun, Le},
+  journal={arXiv preprint arXiv:2309.01431},
+  year={2024}
+}
+
+@article{liu2024rageval,
+  title={{RAGEval}: Scenario Specific {RAG} Evaluation Dataset Generation Framework},
+  author={Liu, Kunlun and Peng, Yanbo and Chen, Jiawei},
+  journal={arXiv preprint},
+  year={2024}
+}
+
+@article{yang2024crag,
+  title={{CRAG}: Comprehensive {RAG} Benchmark},
+  author={Yang, Xiao and Sun, Kai and Xin, Hao and Sun, Yushi and Bhalla, Nikita and Chen, Xiangsen and Cai, Sajal and Dang, Dalton and others},
+  journal={arXiv preprint arXiv:2406.04744},
+  year={2024}
+}
+
+@inproceedings{kwiatkowski2019naturalquestions,
+  title={Natural Questions: A Benchmark for Question Answering Research},
+  author={Kwiatkowski, Tom and Palomaki, Jennimaria and Redfield, Olivia and Collins, Michael and Parikh, Ankur and Alberti, Chris and Epstein, Danielle and Polosukhin, Illia and Devlin, Jacob and Lee, Kenton and others},
+  booktitle={Transactions of the Association for Computational Linguistics},
+  volume={7},
+  pages={453--466},
+  year={2019}
+}
+
+@inproceedings{joshi2017triviaqa,
+  title={{TriviaQA}: A Large Scale Distantly Supervised Challenge Dataset for Reading Comprehension},
+  author={Joshi, Mandar and Choi, Eunsol and Weld, Daniel S and Zettlemoyer, Luke},
+  booktitle={Proceedings of the 55th Annual Meeting of the Association for Computational Linguistics},
+  pages={1601--1611},
+  year={2017}
+}
+
+% ============================================================
+% 10. CHUNKING & DOCUMENT PROCESSING (5 papers)
+% ============================================================
+
+@misc{langchain2024textsplitters,
+  title={Text Splitters},
+  author={{LangChain}},
+  howpublished={\url{https://python.langchain.com/docs/modules/data_connection/document_transformers/}},
+  year={2024}
+}
+
+@misc{langchain2024recursive,
+  title={Recursive Character Text Splitter},
+  author={{LangChain}},
+  howpublished={\url{https://python.langchain.com/docs/modules/data_connection/document_transformers/recursive_text_splitter}},
+  year={2024}
+}
+
+@article{kamradt2024semantic,
+  title={Semantic Chunking for {RAG}},
+  author={Kamradt, Greg},
+  howpublished={\url{https://github.com/FullStackRetrieval-com/RetrievalTutorials}},
+  year={2024}
+}
+
+@article{gunther2024latechunking,
+  title={Late Chunking: Contextual Chunk Embeddings Using Long-Context Embedding Models},
+  author={G{\"u}nther, Michael and Mohr, Isabelle and Williams, Daniel J and Wang, Bo and Xiao, Han},
+  journal={arXiv preprint arXiv:2409.04701},
+  year={2024}
+}
+
+@misc{langchain2024parentdoc,
+  title={Parent Document Retriever},
+  author={{LangChain}},
+  howpublished={\url{https://python.langchain.com/docs/modules/data_connection/retrievers/parent_document_retriever}},
+  year={2024}
+}
+
+% ============================================================
+% 11. PRODUCTION RAG & SCALING (3 papers)
+% ============================================================
+
+@article{barnett2024observations,
+  title={Seven Failure Points When Engineering a Retrieval Augmented Generation System},
+  author={Barnett, Scott and Kurniawan, Stefanus and Thudumu, Srikanth and Brber, Zach and Horawalavithana, Sameera},
+  journal={arXiv preprint arXiv:2401.05856},
+  year={2024}
+}
+
+@misc{crewai2024,
+  title={{CrewAI}: Framework for Multi-Agent Systems},
+  author={{CrewAI}},
+  howpublished={\url{https://github.com/joaomdmoura/crewAI}},
+  year={2024}
+}
+
+@misc{trulens2024,
+  title={{TruLens}: Evaluation and Tracking for {LLM} Applications},
+  author={{TruEra}},
+  howpublished={\url{https://github.com/truera/trulens}},
+  year={2024}
+}
+
+% ============================================================
+% 12. ADDITIONAL (5 papers)
+% ============================================================
+
+@article{nguyen2016msmarco,
+  title={{MS MARCO}: A Human Generated {MA}chine Reading {CO}mprehension Dataset},
+  author={Nguyen, Tri and Rosenberg, Mir and Song, Xia and Gao, Jianfeng and Tiwary, Saurabh and Majumder, Rangan and Deng, Li},
+  journal={arXiv preprint arXiv:1611.09268},
+  year={2016}
+}
+
+@article{allan1998topicdetection,
+  title={Topic Detection and Tracking: Event-based Information Organization},
+  author={Allan, James and Carbonell, Jaime and Doddington, George and Yamron, Jonathan and Yang, Yiming},
+  journal={Kluwer Academic Publishers},
+  year={1998}
+}
+
+@article{google2024gemini,
+  title={Gemini: A Family of Highly Capable Multimodal Models},
+  author={{Google DeepMind}},
+  journal={arXiv preprint arXiv:2312.11805},
+  year={2024}
+}
+
+@article{ma2023queryrewrite,
+  title={Query Rewriting for Retrieval-Augmented Large Language Models},
+  author={Ma, Xinbei and Gong, Yeyun and He, Pengcheng and Zhao, Hai and Duan, Nan},
+  journal={arXiv preprint arXiv:2305.14283},
+  year={2023}
+}
+
+@misc{ltrr2025,
+  title={{LTRR}: {LLM}-Based Text Rewriting for Retrieval},
+  journal={arXiv preprint arXiv:2506.13743},
+  year={2025},
+  note={Authors to be confirmed}
+}

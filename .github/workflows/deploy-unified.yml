@@ -1,0 +1,84 @@
+# Deploy unified service (chatbot + admin) to Cloud Run
+name: Deploy Unified Service to Cloud Run
+
+on:
+  push:
+    branches:
+      - main
+    paths:
+      - 'graph_processing/chatapp_full.py'
+      - 'graph_processing/agentic_solution/**'
+      - 'admin_routes.py'
+      - 'ingestion_service/**'
+      - '.chainlit/**'
+      - 'public/**'
+      - 'utils/**'
+      - 'cloudrun/unified-pg.yaml'
+      - '.github/workflows/deploy-unified.yml'
+      - 'Dockerfile.unified'
+      - 'requirements.unified.txt'
+
+env:
+  PROJECT_ID: ${{ secrets.GCP_PROJECT }}
+  REGION: ${{ secrets.GCP_LOCATION || 'us-central1' }}
+  GAR_LOCATION: us-docker.pkg.dev/${{ secrets.GCP_PROJECT }}/apps
+
+jobs:
+  deploy-unified:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: 'read'
+      id-token: 'write'
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - id: 'auth'
+        name: 'Authenticate to Google Cloud'
+        uses: 'google-github-actions/auth@v2'
+        with:
+          workload_identity_provider: ${{ secrets.WIF_PROVIDER }}
+          service_account: github-deployer@${{ secrets.GCP_PROJECT }}.iam.gserviceaccount.com
+
+      - name: 'Set up Cloud SDK'
+        uses: 'google-github-actions/setup-gcloud@v2'
+        with:
+          project_id: ${{ secrets.GCP_PROJECT }}
+
+      - name: 'Docker Auth'
+        run: gcloud auth configure-docker us-docker.pkg.dev --quiet
+
+      - name: 'Ensure Cloud SQL Client role for Cloud Run SA'
+        run: |-
+          gcloud projects add-iam-policy-binding "${{ env.PROJECT_ID }}" \
+            --member="serviceAccount:cloud-run-sa@${{ env.PROJECT_ID }}.iam.gserviceaccount.com" \
+            --role="roles/cloudsql.client" \
+            --condition=None \
+            --quiet || echo "⚠️ Could not grant cloudsql.client"
+
+      - name: 'Build and Push Unified Image'
+        run: |-
+          docker build -f Dockerfile.unified -t "${{ env.GAR_LOCATION }}/wydot-unified:${{ github.sha }}" .
+          docker push "${{ env.GAR_LOCATION }}/wydot-unified:${{ github.sha }}"
+
+      - name: 'Prepare Unified YAML'
+        run: |-
+          IMAGE="${{ env.GAR_LOCATION }}/wydot-unified:${{ github.sha }}"
+          sed -e "s|\${PROJECT_ID}|${{ env.PROJECT_ID }}|g" \
+              -e "s|\${IMAGE}|${IMAGE}|g" \
+              cloudrun/unified-pg.yaml > /tmp/unified-pg-deploy.yaml
+
+      - name: 'Deploy Unified Service'
+        run: |-
+          gcloud run services replace /tmp/unified-pg-deploy.yaml \
+            --region="${{ env.REGION }}" \
+            --project="${{ env.PROJECT_ID }}"
+
+      - name: 'Allow Unauthenticated Access'
+        run: |-
+          gcloud run services add-iam-policy-binding wydot-unified-pg \
+            --region="${{ env.REGION }}" \
+            --project="${{ env.PROJECT_ID }}" \
+            --member="allUsers" \
+            --role="roles/run.invoker"

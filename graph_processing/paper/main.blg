@@ -1,0 +1,74 @@
+This is BibTeX, Version 0.99e (TeX Live 2026)
+Capacity: max_strings=200000, hash_size=200000, hash_prime=170003
+The top-level auxiliary file: main.aux
+The style file: acl_natbib.bst
+Illegal, another \bibstyle command---line 178 of file main.aux
+ : \bibstyle
+ :          {acl_natbib}
+I'm skipping whatever remains of this command
+Reallocated glb_str_ptr (elt_size=4) to 20 items from 10.
+Reallocated global_strs (elt_size=200001) to 20 items from 10.
+Reallocated glb_str_end (elt_size=4) to 20 items from 10.
+Reallocated singl_function (elt_size=4) to 100 items from 50.
+Reallocated singl_function (elt_size=4) to 100 items from 50.
+Reallocated wiz_functions (elt_size=4) to 6000 items from 3000.
+Database file #1: references.bib
+Warning--to sort, need author or key in rag4cm2025
+Warning--to sort, need author or key in ragrouter2025
+Warning--to sort, need author or key in routerag2025
+Warning--to sort, need author or key in marag2025
+Warning--to sort, need author or key in multiagentrag2024
+Warning--to sort, need author or key in arag2026
+Warning--to sort, need author or key in grag2024
+Warning--to sort, need author or key in graphragcompliance2024
+Warning--empty author in grag2024
+Warning--empty author in graphragcompliance2024
+Warning--empty author in multiagentrag2024
+Warning--empty author in marag2025
+Warning--empty author in ragrouter2025
+Warning--empty author in rag4cm2025
+Warning--empty author in routerag2025
+Warning--empty author in arag2026
+Warning--empty journal in kamradt2024semantic
+You've used 81 entries,
+            3764 wiz_defined-function locations,
+            1078 strings with 22285 characters,
+and the built_in function-call counts, 62163 in all, are:
+= -- 5059
+> -- 3947
+< -- 38
++ -- 1626
+- -- 1210
+* -- 4227
+:= -- 9290
+add.period$ -- 331
+call.type$ -- 81
+change.case$ -- 834
+chr.to.int$ -- 93
+cite$ -- 114
+duplicate$ -- 3624
+empty$ -- 3911
+format.name$ -- 1423
+if$ -- 13188
+int.to.chr$ -- 7
+int.to.str$ -- 13
+missing$ -- 855
+newline$ -- 416
+num.names$ -- 292
+pop$ -- 2299
+preamble$ -- 1
+purify$ -- 723
+quote$ -- 0
+skip$ -- 3306
+stack$ -- 0
+substring$ -- 1426
+swap$ -- 1811
+text.length$ -- 13
+text.prefix$ -- 0
+top$ -- 0
+type$ -- 729
+warning$ -- 17
+while$ -- 258
+width$ -- 0
+write$ -- 1001
+(There was 1 error message)
