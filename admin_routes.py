@@ -881,3 +881,51 @@ async def admin_eval_feedback(limit: int = 50):
         return {"stats": stats, "recent": recent}
     except Exception as e:
         return {"error": str(e)}
+
+@admin_app.get("/api/debug/feedback-context")
+async def debug_feedback_context():
+    """Debug endpoint: show feedback_context table contents and feedback table for_ids."""
+    try:
+        from utils.chat_history_store import get_chat_history_store
+        store = get_chat_history_store()
+        result = {"store_type": type(store).__name__}
+
+        # Check if feedback_context table exists and has data
+        if hasattr(store, '_get_conn'):
+            # PostgreSQL
+            conn = store._get_conn()
+            try:
+                with conn.cursor() as cur:
+                    # Check table exists
+                    cur.execute("SELECT EXISTS(SELECT 1 FROM information_schema.tables WHERE table_name='feedback_context')")
+                    result["feedback_context_table_exists"] = cur.fetchone()[0]
+
+                    if result["feedback_context_table_exists"]:
+                        cur.execute("SELECT cl_msg_id, LEFT(question, 50), LEFT(answer, 50), user_email, ts FROM feedback_context ORDER BY ts DESC LIMIT 10")
+                        result["feedback_context_rows"] = [{"cl_msg_id": r[0], "question_preview": r[1], "answer_preview": r[2], "user_email": r[3], "ts": str(r[4])} for r in cur.fetchall()]
+                    else:
+                        result["feedback_context_rows"] = []
+
+                    # Show feedback for_ids for comparison
+                    cur.execute("SELECT for_id, LEFT(question, 50), LEFT(answer, 50), user_email, LEFT(comment, 50) FROM feedback ORDER BY ts DESC LIMIT 10")
+                    result["feedback_rows"] = [{"for_id": r[0], "question": r[1], "answer": r[2], "user_email": r[3], "comment": r[4]} for r in cur.fetchall()]
+            finally:
+                conn.close()
+        else:
+            # SQLite
+            cur = store._conn.execute("SELECT name FROM sqlite_master WHERE type='table' AND name='feedback_context'")
+            result["feedback_context_table_exists"] = cur.fetchone() is not None
+
+            if result["feedback_context_table_exists"]:
+                cur2 = store._conn.execute("SELECT cl_msg_id, substr(question,1,50), substr(answer,1,50), user_email, ts FROM feedback_context ORDER BY ts DESC LIMIT 10")
+                result["feedback_context_rows"] = [{"cl_msg_id": r[0], "question_preview": r[1], "answer_preview": r[2], "user_email": r[3], "ts": r[4]} for r in cur2.fetchall()]
+            else:
+                result["feedback_context_rows"] = []
+
+            cur3 = store._conn.execute("SELECT for_id, substr(question,1,50), substr(answer,1,50), user_email, substr(comment,1,50) FROM feedback ORDER BY ts DESC LIMIT 10")
+            result["feedback_rows"] = [{"for_id": r[0], "question": r[1], "answer": r[2], "user_email": r[3], "comment": r[4]} for r in cur3.fetchall()]
+
+        return result
+    except Exception as e:
+        import traceback
+        return {"error": str(e), "traceback": traceback.format_exc()}
