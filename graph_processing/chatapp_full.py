@@ -697,10 +697,89 @@ class WydotDataLayer(BaseDataLayer):
         pass
     
     async def create_step(self, step_dict):
-        pass
-        
+        # Chainlit creates "steps" for messages. feedback.forId uses the STEP id,
+        # not msg.id. We must copy feedback context from parent (msg.id) to step id.
+        try:
+            step_id = step_dict.get("id") if isinstance(step_dict, dict) else getattr(step_dict, "id", None)
+            parent_id = step_dict.get("parentId") if isinstance(step_dict, dict) else getattr(step_dict, "parentId", None)
+            print(f"[CREATE_STEP] step_id={step_id}, parentId={parent_id}", flush=True)
+
+            if step_id and parent_id and parent_id in _feedback_context:
+                _feedback_context[step_id] = _feedback_context[parent_id]
+                print(f"[CREATE_STEP] Mapped step {step_id} -> parent {parent_id} context", flush=True)
+                try:
+                    ctx = _feedback_context[parent_id]
+                    CHAT_DB.save_feedback_context(
+                        cl_msg_id=step_id,
+                        question=ctx.get("question"),
+                        answer=ctx.get("answer"),
+                        user_email=ctx.get("user_email"),
+                        sources=ctx.get("sources"),
+                    )
+                except Exception:
+                    pass
+            elif step_id and not parent_id:
+                output = step_dict.get("output") if isinstance(step_dict, dict) else getattr(step_dict, "output", None)
+                if output and _feedback_context:
+                    for mid, ctx in reversed(list(_feedback_context.items())):
+                        if ctx.get("answer") and output[:100] in ctx["answer"][:200]:
+                            _feedback_context[step_id] = ctx
+                            print(f"[CREATE_STEP] Matched step {step_id} to msg {mid} via output", flush=True)
+                            try:
+                                CHAT_DB.save_feedback_context(
+                                    cl_msg_id=step_id,
+                                    question=ctx.get("question"),
+                                    answer=ctx.get("answer"),
+                                    user_email=ctx.get("user_email"),
+                                    sources=ctx.get("sources"),
+                                )
+                            except Exception:
+                                pass
+                            break
+        except Exception as e:
+            print(f"[CREATE_STEP] Error: {e}", flush=True)
+
     async def update_step(self, step_dict):
-        pass
+        # Also try to map on update (Chainlit may update step with final output)
+        try:
+            step_id = step_dict.get("id") if isinstance(step_dict, dict) else getattr(step_dict, "id", None)
+            parent_id = step_dict.get("parentId") if isinstance(step_dict, dict) else getattr(step_dict, "parentId", None)
+
+            if step_id and step_id not in _feedback_context:
+                if parent_id and parent_id in _feedback_context:
+                    _feedback_context[step_id] = _feedback_context[parent_id]
+                    print(f"[UPDATE_STEP] Mapped step {step_id} -> parent {parent_id}", flush=True)
+                    try:
+                        ctx = _feedback_context[parent_id]
+                        CHAT_DB.save_feedback_context(
+                            cl_msg_id=step_id,
+                            question=ctx.get("question"),
+                            answer=ctx.get("answer"),
+                            user_email=ctx.get("user_email"),
+                            sources=ctx.get("sources"),
+                        )
+                    except Exception:
+                        pass
+                else:
+                    output = step_dict.get("output") if isinstance(step_dict, dict) else getattr(step_dict, "output", None)
+                    if output and _feedback_context:
+                        for mid, ctx in reversed(list(_feedback_context.items())):
+                            if ctx.get("answer") and output[:100] in ctx["answer"][:200]:
+                                _feedback_context[step_id] = ctx
+                                print(f"[UPDATE_STEP] Matched step {step_id} to msg {mid} via output", flush=True)
+                                try:
+                                    CHAT_DB.save_feedback_context(
+                                        cl_msg_id=step_id,
+                                        question=ctx.get("question"),
+                                        answer=ctx.get("answer"),
+                                        user_email=ctx.get("user_email"),
+                                        sources=ctx.get("sources"),
+                                    )
+                                except Exception:
+                                    pass
+                                break
+        except Exception as e:
+            print(f"[UPDATE_STEP] Error: {e}", flush=True)
         
     async def delete_step(self, step_id):
         pass
@@ -822,6 +901,15 @@ class WydotDataLayer(BaseDataLayer):
                         logger.info(f"[FEEDBACK] forId={for_id}, source=db_lookup, question={question[:50] if question else None}")
                 except Exception as db_err:
                     logger.warning(f"[FEEDBACK] DB lookup failed: {db_err}")
+
+            # Strategy 3: Fallback — use most recent feedback context entry
+            if not question and _feedback_context:
+                last_key = list(_feedback_context.keys())[-1]
+                ctx = _feedback_context[last_key]
+                question = ctx.get("question")
+                answer = ctx.get("answer")
+                user_email = ctx.get("user_email")
+                print(f"[FEEDBACK_UPSERT] Strategy 3: used most recent context (key={last_key})", flush=True)
 
             print(f"[FEEDBACK_UPSERT] FINAL: question={'YES' if question else 'NO'}, answer={'YES' if answer else 'NO'}, user={user_email}", flush=True)
             CHAT_DB.upsert_feedback(feedback, question=question, answer=answer, user_email=user_email)
