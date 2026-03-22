@@ -567,6 +567,7 @@ async def admin_delete(request: Request):
 @admin_app.get("/kg/stats")
 async def admin_kg_stats():
     try:
+        print(f"[KG_STATS] Connecting to {NEO4J_URI}, database={NEO4J_DATABASE}", flush=True)
         driver = _get_driver()
         with driver.session(database=NEO4J_DATABASE) as session:
             total = session.run("MATCH (c:Chunk) RETURN count(c) AS cnt").single()["cnt"]
@@ -578,6 +579,7 @@ async def admin_kg_stats():
                 )
             }
         driver.close()
+        print(f"[KG_STATS] Results: total={total}, sources={sources}, by_type={by_type}", flush=True)
         return {"total_chunks": total, "unique_sources": sources, "by_type": by_type}
     except Exception as e:
         raise HTTPException(500, str(e))
