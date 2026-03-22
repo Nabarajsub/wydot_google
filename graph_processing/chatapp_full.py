@@ -809,10 +809,10 @@ class WydotDataLayer(BaseDataLayer):
                 user_email = ctx.get("user_email")
                 logger.info(f"[FEEDBACK] forId={for_id}, source=memory_cache, question={question[:50] if question else None}")
 
-            # Strategy 2: Database lookup (reliable across restarts/scaling)
+            # Strategy 2: Database lookup via feedback_context table (no FK constraints)
             if not question and for_id:
                 try:
-                    db_ctx = CHAT_DB.get_feedback_context_by_msg_id(for_id)
+                    db_ctx = CHAT_DB.get_feedback_context(for_id)
                     if db_ctx:
                         question = question or db_ctx.get("question")
                         answer = answer or db_ctx.get("answer")
@@ -2764,22 +2764,24 @@ async def main(message: cl.Message):
         while len(_feedback_context) > _FEEDBACK_CTX_MAX:
             _feedback_context.popitem(last=False)
 
-        # Persist multimodal interaction
+        # Persist feedback context to DB (no FK — works for all users)
+        try:
+            CHAT_DB.save_feedback_context(
+                cl_msg_id=msg.id,
+                question=message.content[:500],
+                answer=response[:1000],
+                user_email=_user_email,
+            )
+        except Exception as e:
+            print(f"[WARN] Failed to save feedback context: {e}")
+
+        # Persist multimodal interaction if NOT guest
         if user and user.metadata.get("db_id") and not user.metadata.get("is_guest"):
             session_id = cl.user_session.get("session_id", "cl_session")
             uid = user.metadata["db_id"]
             file_note = f" [Attached {len(files)} file(s)]"
             CHAT_DB.add_message(uid, session_id, "user", message.content + file_note, cl_msg_id=message.id)
             CHAT_DB.add_message(uid, session_id, "assistant", response, cl_msg_id=msg.id)
-        else:
-            # Save for guests too so feedback Q&A JOIN works (user_id=0)
-            try:
-                session_id = cl.user_session.get("session_id", "cl_session")
-                file_note = f" [Attached {len(files)} file(s)]"
-                CHAT_DB.add_message(0, session_id, "user", message.content + file_note, cl_msg_id=message.id)
-                CHAT_DB.add_message(0, session_id, "assistant", response, cl_msg_id=msg.id)
-            except Exception:
-                pass  # best-effort for guests
 
         return
 
@@ -2921,7 +2923,19 @@ async def main(message: cl.Message):
     while len(_feedback_context) > _FEEDBACK_CTX_MAX:
         _feedback_context.popitem(last=False)
 
-    # Update conversation: Redis + in-session; persist to DB
+    # Persist feedback context to DB (no FK constraints — works for all users incl guests)
+    try:
+        CHAT_DB.save_feedback_context(
+            cl_msg_id=msg.id,
+            question=message.content[:500],
+            answer=enhanced_answer[:1000],
+            user_email=_user_email,
+            sources=sources,
+        )
+    except Exception as e:
+        print(f"[WARN] Failed to save feedback context: {e}")
+
+    # Update conversation: Redis + in-session; persist to DB if NOT guest
     if user and user.metadata.get("db_id") and not user.metadata.get("is_guest"):
         uid = user.metadata["db_id"]
         conv_mem.append(uid, session_id, "user", message.content)
@@ -2932,12 +2946,6 @@ async def main(message: cl.Message):
         history_msgs.append({"role": "user", "content": message.content})
         history_msgs.append({"role": "assistant", "content": enhanced_answer})
         cl.user_session.set("memory", history_msgs)
-        # Also save to DB for guests so feedback Q&A JOIN works (user_id=0)
-        try:
-            CHAT_DB.add_message(0, session_id, "user", message.content, cl_msg_id=message.id)
-            CHAT_DB.add_message(0, session_id, "assistant", enhanced_answer, sources=sources, cl_msg_id=msg.id)
-        except Exception:
-            pass  # best-effort for guests
 
     # Online telemetry (local SQLite; Cloud: BigQuery)
     telemetry.record_request(

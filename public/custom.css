@@ -401,8 +401,8 @@ button[aria-label*="mode" i] {
 .MuiModal-backdrop,
 div[class*="Backdrop"],
 div[aria-hidden="true"][style*="opacity"] {
-    background-color: rgba(255, 255, 255, 0.7) !important;
-    background: rgba(255, 255, 255, 0.7) !important;
+    background-color: #ffffff !important;
+    background: #ffffff !important;
     backdrop-filter: none !important;
     -webkit-backdrop-filter: none !important;
 }
@@ -473,8 +473,8 @@ div[style*="position:fixed"][style*="inset:0"],
 div[style*="position: fixed"][style*="z-index"],
 .css-i9fmh8-MuiBackdrop-root-MuiModal-backdrop,
 [class*="MuiBackdrop"][style*="opacity"] {
-    background-color: rgba(255, 255, 255, 0.7) !important;
-    background: rgba(255, 255, 255, 0.7) !important;
+    background-color: #ffffff !important;
+    background: #ffffff !important;
 }
 
 /* Chainlit settings drawer / feedback dialog — override dark mode colors */
