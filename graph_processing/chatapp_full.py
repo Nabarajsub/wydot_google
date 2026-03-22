@@ -282,8 +282,9 @@ def generate_public_url(gcs_uri: str) -> str:
         if len(parts) != 2:
             return ""
         bucket_name, blob_name = parts
-        # Encode the blob path but keep commas and slashes safe since GCS URLs often need raw commas
-        encoded_blob = urllib.parse.quote(blob_name, safe="/,")
+        # Decode first to avoid double-encoding (blob names in Neo4j may already be URL-encoded)
+        decoded_blob = urllib.parse.unquote(blob_name)
+        encoded_blob = urllib.parse.quote(decoded_blob, safe="/,")
         return f"https://storage.googleapis.com/{bucket_name}/{encoded_blob}"
     except Exception as e:
         print(f"Error generating public URL: {e}")
@@ -783,10 +784,28 @@ class WydotDataLayer(BaseDataLayer):
         import logging
         logger = logging.getLogger("chainlit")
         try:
-            CHAT_DB.upsert_feedback(feedback)
+            # Enrich feedback with question and user from session context
+            user = cl.user_session.get("user")
+            user_email = None
+            if user:
+                user_email = getattr(user, 'identifier', None) or user.metadata.get("email")
+            # Find the question and answer from session history
+            question = None
+            answer = None
+            history = cl.user_session.get("memory") or []
+            # Walk backwards: first assistant msg is the answer, first user msg is the question
+            for i in range(len(history) - 1, -1, -1):
+                if not answer and history[i].get("role") == "assistant":
+                    answer = history[i].get("content", "")[:1000]
+                if not question and history[i].get("role") == "user":
+                    question = history[i].get("content", "")[:500]
+                if question and answer:
+                    break
+            CHAT_DB.upsert_feedback(feedback, question=question, answer=answer, user_email=user_email)
             return True
         except Exception as e:
             logger.error(f"Error saving feedback: {e}")
+            import traceback; traceback.print_exc()
             return False
         
     async def delete_feedback(self, feedback_id):
