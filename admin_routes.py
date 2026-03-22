@@ -348,7 +348,7 @@ class AdminAuthMiddleware(BaseHTTPMiddleware):
       - Query param: ?token=<ADMIN_PASSWORD>
     Login page served at /login if not authenticated.
     """
-    OPEN_PATHS = {"/health", "/ingest", "/login", "/login/submit"}
+    OPEN_PATHS = {"/health", "/ingest", "/login", "/login/submit", "/api/debug/neo4j", "/api/debug/feedback-context"}
 
     async def dispatch(self, request: Request, call_next):
         # Strip the mount prefix (e.g. /admin) so paths match OPEN_PATHS
@@ -936,3 +936,30 @@ async def debug_feedback_context():
     except Exception as e:
         import traceback
         return {"error": str(e), "traceback": traceback.format_exc()}
+
+@admin_app.get("/api/debug/neo4j")
+async def debug_neo4j():
+    """Public debug endpoint: check Neo4j connectivity and chunk count."""
+    result = {
+        "neo4j_uri": NEO4J_URI,
+        "neo4j_database": NEO4J_DATABASE,
+        "neo4j_index": NEO4J_INDEX,
+        "neo4j_username": NEO4J_USERNAME,
+        "env_NEO4J_URI": os.getenv("NEO4J_URI"),
+        "env_NEO4J_URI_GEMINI": os.getenv("NEO4J_URI_GEMINI"),
+        "env_NEO4J_DATABASE": os.getenv("NEO4J_DATABASE"),
+        "env_NEO4J_DATABASE_GEMINI": os.getenv("NEO4J_DATABASE_GEMINI"),
+    }
+    try:
+        driver = _get_driver()
+        with driver.session(database=NEO4J_DATABASE) as session:
+            total = session.run("MATCH (c:Chunk) RETURN count(c) AS cnt").single()["cnt"]
+            result["chunk_count"] = total
+            result["status"] = "connected"
+        driver.close()
+    except Exception as e:
+        import traceback
+        result["status"] = "error"
+        result["error"] = str(e)
+        result["traceback"] = traceback.format_exc()
+    return result
