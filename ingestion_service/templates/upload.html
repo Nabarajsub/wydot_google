@@ -2240,13 +2240,23 @@
                     } catch (e) { }
 
                     const date = f.ts ? new Date(f.ts * 1000).toLocaleString() : '-';
-                    const answerPreview = f.answer ? (f.answer.length > 200 ? f.answer.substring(0, 200) + '...' : f.answer) : '';
+                    const rowId = 'fb-ans-' + Math.random().toString(36).substr(2, 9);
+                    let answerCell = '<span style="color:#999;">-</span>';
+                    if (f.answer) {
+                        if (f.answer.length > 150) {
+                            const preview = f.answer.substring(0, 150).replace(/</g, '&lt;');
+                            const full = f.answer.replace(/</g, '&lt;').replace(/\n/g, '<br>');
+                            answerCell = `<span id="${rowId}-short">${preview}... <a href="#" onclick="document.getElementById('${rowId}-short').style.display='none';document.getElementById('${rowId}-full').style.display='block';return false;" style="color:#1d72b8;font-weight:500;white-space:nowrap;">See all</a></span><span id="${rowId}-full" style="display:none;">${full} <a href="#" onclick="document.getElementById('${rowId}-full').style.display='none';document.getElementById('${rowId}-short').style.display='inline';return false;" style="color:#1d72b8;font-weight:500;white-space:nowrap;">Show less</a></span>`;
+                        } else {
+                            answerCell = f.answer.replace(/</g, '&lt;');
+                        }
+                    }
                     return `<tr>
                         <td style="white-space:nowrap; color:#666; font-size:0.85rem;">${date}</td>
                         <td style="font-weight:500; font-size:0.85rem;">${f.user || 'Anonymous'}</td>
                         <td style="font-size:1.3rem; text-align:center;">${f.value === 1 ? '👍' : '👎'}</td>
-                        <td style="font-size:0.85rem; color:#444; max-width:250px; overflow:hidden; text-overflow:ellipsis;">${f.question || '<em style="color:#999;">Unknown</em>'}</td>
-                        <td style="font-size:0.8rem; color:#555; max-width:300px; overflow:hidden; text-overflow:ellipsis; cursor:pointer;" title="${(f.answer || '').replace(/"/g, '&quot;')}">${answerPreview || '<span style="color:#999;">-</span>'}</td>
+                        <td style="font-size:0.85rem; color:#444; max-width:250px;">${f.question || '<em style="color:#999;">Unknown</em>'}</td>
+                        <td style="font-size:0.8rem; color:#555; max-width:350px; word-wrap:break-word;">${answerCell}</td>
                         <td style="font-size:0.85rem; color:#1a2332;">${f.comment ? `<em>"${f.comment}"</em>` : '<span style="color:#999;">No comment</span>'}</td>
                         <td style="font-size:0.75rem;">${sourcesHtml || '<span style="color:#999;">-</span>'}</td>
                     </tr>`;

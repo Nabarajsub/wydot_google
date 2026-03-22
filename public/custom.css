@@ -394,3 +394,68 @@ button[aria-label*="theme" i],
 button[aria-label*="mode" i] {
     display: none !important;
 }
+
+/* ===== Force Light Theme on ALL MUI Modals, Dialogs, Drawers, Popovers ===== */
+.MuiBackdrop-root {
+    background-color: rgba(255, 255, 255, 0.75) !important;
+}
+
+.MuiDialog-paper,
+.MuiModal-root > div,
+.MuiDrawer-paper,
+.MuiPopover-paper,
+.MuiPaper-root {
+    background-color: #ffffff !important;
+    color: #1f1f1f !important;
+}
+
+.MuiDialog-root,
+.MuiModal-root {
+    color-scheme: light only !important;
+}
+
+.MuiDialog-paper input,
+.MuiDialog-paper textarea,
+.MuiDrawer-paper input,
+.MuiDrawer-paper textarea {
+    background-color: #f8f9fa !important;
+    color: #1f1f1f !important;
+    border-color: #d1d5db !important;
+}
+
+.MuiMenu-paper,
+.MuiList-root,
+.MuiMenuItem-root,
+.MuiSelect-select {
+    background-color: #ffffff !important;
+    color: #1f1f1f !important;
+}
+
+.MuiDrawer-root .MuiPaper-root,
+div[role="presentation"] .MuiPaper-root {
+    background-color: #ffffff !important;
+    color: #1f1f1f !important;
+}
+
+.MuiFormLabel-root,
+.MuiInputLabel-root,
+.MuiFormHelperText-root,
+.MuiTypography-root {
+    color: #1f1f1f !important;
+}
+
+.MuiSlider-root {
+    color: var(--accent-color) !important;
+}
+
+.MuiSwitch-track {
+    background-color: #ccc !important;
+}
+
+.MuiSvgIcon-root {
+    color: #666 !important;
+}
+
+.MuiDivider-root {
+    border-color: #e5e7eb !important;
+}
