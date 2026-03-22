@@ -439,6 +439,8 @@ async def admin_index():
         html = html.replace("'/api/monitoring/", "'/admin/api/monitoring/")
         html = html.replace('"/api/evaluation/', '"/admin/api/evaluation/')
         html = html.replace("'/api/evaluation/", "'/admin/api/evaluation/")
+        html = html.replace("`/api/evaluation/", "`/admin/api/evaluation/")
+        html = html.replace("`/api/monitoring/", "`/admin/api/monitoring/")
         return HTMLResponse(html)
     return HTMLResponse("<h1>WYDOT Admin</h1><p>Upload template not found. Place ingestion_service/templates/upload.html</p>")
 
