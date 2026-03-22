@@ -348,8 +348,11 @@ class AdminAuthMiddleware(BaseHTTPMiddleware):
     OPEN_PATHS = {"/health", "/ingest", "/login", "/login/submit"}
 
     async def dispatch(self, request: Request, call_next):
-        # Use scope["path"] which is relative to the mount point (e.g., "/login" not "/admin/login")
-        path = request.scope.get("path", request.url.path)
+        # Strip the mount prefix (e.g. /admin) so paths match OPEN_PATHS
+        path = request.url.path
+        root_path = request.scope.get("root_path", "")
+        if root_path and path.startswith(root_path):
+            path = path[len(root_path):] or "/"
         if path in self.OPEN_PATHS or path.startswith("/static"):
             return await call_next(request)
 
