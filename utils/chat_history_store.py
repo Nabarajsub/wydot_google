@@ -362,6 +362,38 @@ class SQLiteChatHistoryStore(BaseChatHistoryStore):
             )
             self._conn.commit()
 
+    def get_feedback_context_by_msg_id(self, cl_msg_id: str) -> Optional[Dict]:
+        """Look up question/answer/user_email/sources for a given Chainlit message ID."""
+        import json
+        with self._lock:
+            cur = self._conn.execute(
+                "SELECT id, user_id, session_id, content, sources FROM messages WHERE cl_msg_id=? AND role='assistant' LIMIT 1",
+                (cl_msg_id,)
+            )
+            row = cur.fetchone()
+            if not row:
+                return None
+            msg_id, uid, session_id, answer, sources_json = row
+            cur2 = self._conn.execute(
+                "SELECT content FROM messages WHERE session_id=? AND role='user' AND id < ? ORDER BY id DESC LIMIT 1",
+                (session_id, msg_id)
+            )
+            q_row = cur2.fetchone()
+            question = q_row[0] if q_row else None
+            user_email = None
+            if uid and uid > 0:
+                cur3 = self._conn.execute("SELECT email FROM users WHERE id=?", (uid,))
+                u_row = cur3.fetchone()
+                if u_row:
+                    user_email = u_row[0]
+            sources = None
+            if sources_json:
+                try:
+                    sources = json.loads(sources_json)
+                except Exception:
+                    pass
+            return {"question": question, "answer": answer, "user_email": user_email, "sources": sources}
+
     def get_recent(self, user_id: int, session_id: str, limit: int = 20) -> List[Dict]:
         import json
         with self._lock:
@@ -903,6 +935,42 @@ class CloudSQLChatHistoryStore(BaseChatHistoryStore):
                     (user_id, session_id, role, content, sources, cl_msg_id)
                 )
             conn.commit()
+        finally:
+            conn.close()
+
+    def get_feedback_context_by_msg_id(self, cl_msg_id: str) -> Optional[Dict]:
+        """Look up question/answer/user_email/sources for a given Chainlit message ID."""
+        import json
+        conn = self._get_conn()
+        try:
+            with conn.cursor() as cur:
+                cur.execute(
+                    "SELECT id, user_id, session_id, content, sources FROM messages WHERE cl_msg_id=%s AND role='assistant' LIMIT 1",
+                    (cl_msg_id,)
+                )
+                row = cur.fetchone()
+                if not row:
+                    return None
+                msg_id, uid, session_id, answer, sources_json = row
+                cur.execute(
+                    "SELECT content FROM messages WHERE session_id=%s AND role='user' AND id < %s ORDER BY id DESC LIMIT 1",
+                    (session_id, msg_id)
+                )
+                q_row = cur.fetchone()
+                question = q_row[0] if q_row else None
+                user_email = None
+                if uid and uid > 0:
+                    cur.execute("SELECT email FROM users WHERE id=%s", (uid,))
+                    u_row = cur.fetchone()
+                    if u_row:
+                        user_email = u_row[0]
+                sources = None
+                if sources_json:
+                    try:
+                        sources = json.loads(sources_json) if isinstance(sources_json, str) else sources_json
+                    except Exception:
+                        pass
+                return {"question": question, "answer": answer, "user_email": user_email, "sources": sources}
         finally:
             conn.close()
 
