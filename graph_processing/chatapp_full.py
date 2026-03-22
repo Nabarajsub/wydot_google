@@ -797,14 +797,29 @@ class WydotDataLayer(BaseDataLayer):
             elif isinstance(feedback, dict):
                 for_id = feedback.get("forId")
 
-            # Look up question/answer/user from module-level cache
-            # (cl.user_session is unavailable here — Chainlit calls this without context)
-            ctx = _feedback_context.get(for_id, {})
-            question = ctx.get("question")
-            answer = ctx.get("answer")
-            user_email = ctx.get("user_email")
+            question = None
+            answer = None
+            user_email = None
 
-            logger.info(f"[FEEDBACK] forId={for_id}, ctx_found={bool(ctx)}, question={question[:50] if question else None}")
+            # Strategy 1: In-memory cache (fast, works within same process)
+            ctx = _feedback_context.get(for_id, {})
+            if ctx:
+                question = ctx.get("question")
+                answer = ctx.get("answer")
+                user_email = ctx.get("user_email")
+                logger.info(f"[FEEDBACK] forId={for_id}, source=memory_cache, question={question[:50] if question else None}")
+
+            # Strategy 2: Database lookup (reliable across restarts/scaling)
+            if not question and for_id:
+                try:
+                    db_ctx = CHAT_DB.get_feedback_context_by_msg_id(for_id)
+                    if db_ctx:
+                        question = question or db_ctx.get("question")
+                        answer = answer or db_ctx.get("answer")
+                        user_email = user_email or db_ctx.get("user_email")
+                        logger.info(f"[FEEDBACK] forId={for_id}, source=db_lookup, question={question[:50] if question else None}")
+                except Exception as db_err:
+                    logger.warning(f"[FEEDBACK] DB lookup failed: {db_err}")
 
             CHAT_DB.upsert_feedback(feedback, question=question, answer=answer, user_email=user_email)
             return True
