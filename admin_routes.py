@@ -42,7 +42,8 @@ logger = logging.getLogger("wydot.admin")
 NEO4J_URI = os.getenv("NEO4J_URI") or os.getenv("NEO4J_URI_GEMINI")
 NEO4J_USERNAME = os.getenv("NEO4J_USERNAME") or os.getenv("NEO4J_USERNAME_GEMINI")
 NEO4J_PASSWORD = os.getenv("NEO4J_PASSWORD") or os.getenv("NEO4J_PASSWORD_GEMINI")
-NEO4J_INDEX = os.getenv("NEO4J_INDEX_DEFAULT", "wydot_vector_index")
+NEO4J_INDEX = os.getenv("NEO4J_INDEX_DEFAULT_GEMINI", os.getenv("NEO4J_INDEX_DEFAULT", "wydot_gemini_index"))
+NEO4J_DATABASE = os.getenv("NEO4J_DATABASE_GEMINI", os.getenv("NEO4J_DATABASE", "neo4j"))
 GEMINI_API_KEY = os.getenv("GEMINI_API_KEY")
 GCS_BUCKET = os.getenv("GCS_BUCKET")
 ADMIN_PASSWORD = os.getenv("ADMIN_PASSWORD", "wydot-admin-2025")
@@ -76,13 +77,13 @@ _tracker_funcs = {}
 def _get_embeddings():
     global _embeddings
     if _embeddings is None:
-        logger.info("Loading sentence-transformer model...")
-        from langchain_huggingface import HuggingFaceEmbeddings
-        _embeddings = HuggingFaceEmbeddings(
-            model_name="sentence-transformers/all-MiniLM-L6-v2",
-            cache_folder=HF_HOME,
+        logger.info("Loading Gemini embedding model...")
+        from langchain_google_genai import GoogleGenerativeAIEmbeddings
+        _embeddings = GoogleGenerativeAIEmbeddings(
+            model="models/gemini-embedding-001",
+            google_api_key=GEMINI_API_KEY,
         )
-        logger.info("Embeddings model loaded.")
+        logger.info("Gemini embeddings model loaded.")
     return _embeddings
 
 
@@ -318,6 +319,7 @@ def ingest_documents(docs):
         url=NEO4J_URI,
         username=NEO4J_USERNAME,
         password=NEO4J_PASSWORD,
+        database=NEO4J_DATABASE,
         index_name=NEO4J_INDEX,
         node_label="Chunk",
         text_node_property="text",
@@ -348,8 +350,11 @@ class AdminAuthMiddleware(BaseHTTPMiddleware):
     OPEN_PATHS = {"/health", "/ingest", "/login", "/login/submit"}
 
     async def dispatch(self, request: Request, call_next):
-        # Use scope["path"] which is relative to the mount point (e.g., "/login" not "/admin/login")
-        path = request.scope.get("path", request.url.path)
+        # Strip the mount prefix (e.g. /admin) so paths match OPEN_PATHS
+        path = request.url.path
+        root_path = request.scope.get("root_path", "")
+        if root_path and path.startswith(root_path):
+            path = path[len(root_path):] or "/"
         if path in self.OPEN_PATHS or path.startswith("/static"):
             return await call_next(request)
 
@@ -533,7 +538,7 @@ async def admin_delete(request: Request):
         raise HTTPException(400, "No filename provided")
     try:
         driver = _get_driver()
-        with driver.session() as session:
+        with driver.session(database=NEO4J_DATABASE) as session:
             r = session.run(
                 "MATCH (c:Chunk) WHERE c.source = $source WITH c, count(c) AS cnt DETACH DELETE c RETURN cnt",
                 source=filename,
@@ -556,7 +561,7 @@ async def admin_delete(request: Request):
 async def admin_kg_stats():
     try:
         driver = _get_driver()
-        with driver.session() as session:
+        with driver.session(database=NEO4J_DATABASE) as session:
             total = session.run("MATCH (c:Chunk) RETURN count(c) AS cnt").single()["cnt"]
             sources = session.run("MATCH (c:Chunk) RETURN count(DISTINCT c.source) AS cnt").single()["cnt"]
             by_type = {
@@ -575,7 +580,7 @@ async def admin_kg_stats():
 async def admin_kg_documents():
     try:
         driver = _get_driver()
-        with driver.session() as session:
+        with driver.session(database=NEO4J_DATABASE) as session:
             rows = session.run(
                 "MATCH (c:Chunk) RETURN c.source AS source, count(c) AS chunks, "
                 "head(collect(c.title)) AS title, head(collect(c.doc_type)) AS doc_type, "
@@ -601,7 +606,7 @@ async def admin_kg_documents():
 async def admin_kg_chunks(source: str):
     try:
         driver = _get_driver()
-        with driver.session() as session:
+        with driver.session(database=NEO4J_DATABASE) as session:
             try:
                 rows = list(session.run(
                     "MATCH (c:Chunk) WHERE c.source = $source RETURN elementId(c) AS id, "
@@ -645,8 +650,8 @@ async def admin_kg_search(request: Request):
         from langchain_neo4j import Neo4jVector
         vs = Neo4jVector.from_existing_index(
             _get_embeddings(), url=NEO4J_URI, username=NEO4J_USERNAME, password=NEO4J_PASSWORD,
-            index_name=NEO4J_INDEX, node_label="Chunk", text_node_property="text",
-            embedding_node_property="embedding",
+            database=NEO4J_DATABASE, index_name=NEO4J_INDEX, node_label="Chunk",
+            text_node_property="text", embedding_node_property="embedding",
         )
         results = vs.similarity_search_with_score(query, k=top_k)
         hits = [
@@ -677,7 +682,7 @@ async def admin_kg_update(request: Request):
         raise HTTPException(400, "source and updates required")
     try:
         driver = _get_driver()
-        with driver.session() as session:
+        with driver.session(database=NEO4J_DATABASE) as session:
             set_clauses = ", ".join([f"c.{k} = ${k}" for k in updates])
             session.run(
                 f"MATCH (c:Chunk) WHERE c.source = $source_filter SET {set_clauses} RETURN count(c) AS updated",
@@ -692,7 +697,7 @@ async def admin_kg_update(request: Request):
             texts = [r["text"] for r in reembed_rows]
             vecs = _get_embeddings().embed_documents(texts)
             driver2 = _get_driver()
-            with driver2.session() as session2:
+            with driver2.session(database=NEO4J_DATABASE) as session2:
                 for r, vec in zip(reembed_rows, vecs):
                     try:
                         session2.run(
@@ -789,8 +794,8 @@ async def admin_ingest_event(request: Request):
             chunks = text_splitter.split_documents(docs)
             Neo4jVector.from_documents(
                 chunks, _get_embeddings(), url=NEO4J_URI, username=NEO4J_USERNAME,
-                password=NEO4J_PASSWORD, index_name=NEO4J_INDEX, node_label="Chunk",
-                text_node_property="text", embedding_node_property="embedding",
+                password=NEO4J_PASSWORD, database=NEO4J_DATABASE, index_name=NEO4J_INDEX,
+                node_label="Chunk", text_node_property="text", embedding_node_property="embedding",
             )
             bucket.rename_blob(blob, file_path.replace("incoming/", "processed/"))
             tracker = _get_tracker()

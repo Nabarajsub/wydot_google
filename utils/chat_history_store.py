@@ -953,14 +953,28 @@ class CloudSQLChatHistoryStore(BaseChatHistoryStore):
         finally:
             conn.close()
 
-    def upsert_feedback(self, feedback: Dict) -> None:
+    def upsert_feedback(self, feedback) -> None:
+        # Convert dataclass to dict if needed (Chainlit passes Feedback dataclass)
+        if hasattr(feedback, '__dataclass_fields__'):
+            import dataclasses
+            fb = dataclasses.asdict(feedback)
+        elif hasattr(feedback, 'forId'):
+            fb = {
+                "forId": getattr(feedback, 'forId', None),
+                "threadId": getattr(feedback, 'threadId', None),
+                "userId": getattr(feedback, 'userId', None),
+                "value": getattr(feedback, 'value', 1),
+                "comment": getattr(feedback, 'comment', ""),
+            }
+        else:
+            fb = feedback
         conn = self._get_conn()
         try:
             with conn.cursor() as cur:
                 cur.execute("""
                     INSERT INTO feedback (for_id, thread_id, user_id, value, comment)
                     VALUES (%s, %s, %s, %s, %s)
-                """, (feedback.get("forId"), feedback.get("threadId"), feedback.get("userId"), int(feedback.get("value", 0)), feedback.get("comment")))
+                """, (fb.get("forId"), fb.get("threadId"), fb.get("userId"), int(fb.get("value", 0)), fb.get("comment")))
             conn.commit()
         finally:
             conn.close()

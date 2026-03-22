@@ -282,8 +282,9 @@ def generate_public_url(gcs_uri: str) -> str:
         if len(parts) != 2:
             return ""
         bucket_name, blob_name = parts
-        # Encode the blob path but keep commas and slashes safe since GCS URLs often need raw commas
-        encoded_blob = urllib.parse.quote(blob_name, safe="/,")
+        # Decode first to avoid double-encoding (blob names in Neo4j may already be URL-encoded)
+        decoded_blob = urllib.parse.unquote(blob_name)
+        encoded_blob = urllib.parse.quote(decoded_blob, safe="/,")
         return f"https://storage.googleapis.com/{bucket_name}/{encoded_blob}"
     except Exception as e:
         print(f"Error generating public URL: {e}")
