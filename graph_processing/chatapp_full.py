@@ -801,6 +801,8 @@ class WydotDataLayer(BaseDataLayer):
             answer = None
             user_email = None
 
+            print(f"[FEEDBACK_UPSERT] forId={for_id}, cache_keys={list(_feedback_context.keys())[:5]}, cache_size={len(_feedback_context)}", flush=True)
+
             # Strategy 1: In-memory cache (fast, works within same process)
             ctx = _feedback_context.get(for_id, {})
             if ctx:
@@ -821,6 +823,7 @@ class WydotDataLayer(BaseDataLayer):
                 except Exception as db_err:
                     logger.warning(f"[FEEDBACK] DB lookup failed: {db_err}")
 
+            print(f"[FEEDBACK_UPSERT] FINAL: question={'YES' if question else 'NO'}, answer={'YES' if answer else 'NO'}, user={user_email}", flush=True)
             CHAT_DB.upsert_feedback(feedback, question=question, answer=answer, user_email=user_email)
             return True
         except Exception as e:
@@ -2914,6 +2917,7 @@ async def main(message: cl.Message):
     _user_email = None
     if user:
         _user_email = getattr(user, 'identifier', None) or (user.metadata or {}).get("email")
+    print(f"[FEEDBACK_CTX] Saving context for msg.id={msg.id}, question={message.content[:50]}, user={_user_email}", flush=True)
     _feedback_context[msg.id] = {
         "question": message.content[:500],
         "answer": enhanced_answer[:1000],
