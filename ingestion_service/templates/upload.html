@@ -1001,6 +1001,7 @@
         <div class="header-nav">
             <button class="nav-btn" onclick="showPage('monitoring')">📊 Monitoring</button>
             <button class="nav-btn" onclick="showPage('evaluation')">📝 Evaluation</button>
+            <button class="nav-btn" onclick="showPage('feedback')">💬 Feedback</button>
             <button class="nav-btn" onclick="showPage('explorer')">🔍 KG Explorer</button>
             <button class="nav-btn active" onclick="showPage('upload')"> Upload & Ingest</button>
             <button class="nav-btn" onclick="showPage('library')"> Ingested Library</button>
@@ -1107,6 +1108,65 @@
                             </tr>
                         </thead>
                         <tbody id="feedback-table-body"></tbody>
+                    </table>
+                </div>
+            </div>
+        </div>
+
+        <!-- ==================== FEEDBACK PAGE ==================== -->
+        <div id="page-feedback" class="page">
+            <div class="page-header">
+                <h2>User Feedback & Comments</h2>
+                <div class="actions">
+                    <button class="action-btn" onclick="loadFeedbackPage()">🔄 Refresh</button>
+                </div>
+            </div>
+
+            <!-- Summary Stats -->
+            <div class="stats-grid">
+                <div class="stat-card">
+                    <h3>Total Feedback</h3>
+                    <div class="value" id="fb-total">-</div>
+                </div>
+                <div class="stat-card">
+                    <h3>Thumbs Up</h3>
+                    <div class="value" style="color: var(--success);" id="fb-up">-</div>
+                </div>
+                <div class="stat-card">
+                    <h3>Thumbs Down</h3>
+                    <div class="value" style="color: var(--error);" id="fb-down">-</div>
+                </div>
+                <div class="stat-card">
+                    <h3>Approval Rate</h3>
+                    <div class="value" style="color: var(--info);" id="fb-rate">-</div>
+                </div>
+            </div>
+
+            <!-- Feedback Table -->
+            <div style="background: white; border-radius: var(--radius); box-shadow: var(--shadow); margin-top: 20px; overflow: hidden;">
+                <div style="padding: 16px 20px; border-bottom: 1px solid var(--border); display: flex; align-items: center; justify-content: space-between;">
+                    <h3 style="font-size: 0.95rem; font-weight: 600;">Recent Feedback</h3>
+                    <select id="fb-limit" onchange="loadFeedbackPage()" style="padding: 6px 10px; border: 1px solid var(--border); border-radius: 6px; font-size: 0.85rem;">
+                        <option value="25">Show 25</option>
+                        <option value="50" selected>Show 50</option>
+                        <option value="100">Show 100</option>
+                    </select>
+                </div>
+                <div class="table-wrap" style="overflow-x: auto;">
+                    <table class="data-table" style="width: 100%;">
+                        <thead>
+                            <tr>
+                                <th style="width: 140px;">Date</th>
+                                <th style="width: 160px;">User</th>
+                                <th style="width: 60px; text-align: center;">Rating</th>
+                                <th style="min-width: 250px;">Question</th>
+                                <th style="min-width: 200px;">Comment</th>
+                                <th style="width: 200px;">Sources</th>
+                            </tr>
+                        </thead>
+                        <tbody id="fb-page-table-body">
+                            <tr><td colspan="6" style="text-align:center; padding:40px; color: var(--text-muted);">Click Refresh to load feedback data</td></tr>
+                        </tbody>
                     </table>
                 </div>
             </div>
@@ -1455,6 +1515,7 @@
             if (page === 'library') loadLibrary();
             if (page === 'monitoring') loadMonitoring();
             if (page === 'evaluation') loadEvaluation();
+            if (page === 'feedback') loadFeedbackPage();
             if (page === 'explorer') { loadKgStats(); loadKgDocuments(); }
         }
 
@@ -2145,6 +2206,53 @@
                 `}).join('');
 
             } catch (err) { console.error('Evaluation error:', err); }
+        }
+
+        // ===== FEEDBACK PAGE =====
+        async function loadFeedbackPage() {
+            try {
+                const limit = document.getElementById('fb-limit')?.value || 50;
+                const fbData = await (await fetch(`/api/evaluation/feedback?limit=${limit}`)).json();
+
+                // Update stats
+                const stats = fbData.stats || {};
+                document.getElementById('fb-total').textContent = stats.total || 0;
+                document.getElementById('fb-up').textContent = stats.thumbs_up || 0;
+                document.getElementById('fb-down').textContent = stats.thumbs_down || 0;
+                document.getElementById('fb-rate').textContent = stats.up_rate ? stats.up_rate.toFixed(1) + '%' : '0%';
+
+                // Render table
+                const tbody = document.getElementById('fb-page-table-body');
+                const recent = fbData.recent || [];
+                if (recent.length === 0) {
+                    tbody.innerHTML = '<tr><td colspan="6" style="text-align:center; padding:40px; color:var(--text-muted);">No feedback received yet</td></tr>';
+                    return;
+                }
+                tbody.innerHTML = recent.map(f => {
+                    let sourcesHtml = '';
+                    try {
+                        const srcs = typeof f.sources === 'string' ? JSON.parse(f.sources) : (f.sources || []);
+                        sourcesHtml = srcs.map(s => {
+                            const name = s.source || s.name || 'Unknown';
+                            return `<span class="badge badge-doc" style="margin:2px; font-size:0.65rem;">${name}</span>`;
+                        }).join(' ');
+                    } catch (e) { }
+
+                    const date = f.ts ? new Date(f.ts * 1000).toLocaleString() : '-';
+                    return `<tr>
+                        <td style="white-space:nowrap; color:#666; font-size:0.85rem;">${date}</td>
+                        <td style="font-weight:500; font-size:0.85rem;">${f.user || 'Anonymous'}</td>
+                        <td style="font-size:1.3rem; text-align:center;">${f.value === 1 ? '👍' : '👎'}</td>
+                        <td style="font-size:0.85rem; color:#444; max-width:300px; overflow:hidden; text-overflow:ellipsis;">${f.question || '<em style="color:#999;">Unknown</em>'}</td>
+                        <td style="font-size:0.85rem; color:#1a2332;">${f.comment ? `<em>"${f.comment}"</em>` : '<span style="color:#999;">No comment</span>'}</td>
+                        <td style="font-size:0.75rem;">${sourcesHtml || '<span style="color:#999;">-</span>'}</td>
+                    </tr>`;
+                }).join('');
+            } catch (err) {
+                console.error('Feedback page error:', err);
+                document.getElementById('fb-page-table-body').innerHTML =
+                    '<tr><td colspan="6" style="text-align:center; padding:40px; color:var(--error);">Error loading feedback: ' + err.message + '</td></tr>';
+            }
         }
 
         async function runOfflineEval() {
