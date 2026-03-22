@@ -31,6 +31,9 @@ spec:
         # Model cache
         - name: HF_HOME
           value: /app/model_cache
+        # Neo4j Aura database name (must match the instance ID)
+        - name: NEO4J_DATABASE_GEMINI
+          value: "1c9edfe6"
         - name: HF_HUB_OFFLINE
           value: "1"
         - name: TRANSFORMERS_OFFLINE

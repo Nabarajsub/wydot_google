@@ -39,14 +39,15 @@ from dotenv import load_dotenv
 logger = logging.getLogger("wydot.admin")
 
 # ── Config (shared with chatbot via same .env) ──
-NEO4J_URI = os.getenv("NEO4J_URI") or os.getenv("NEO4J_URI_GEMINI")
-NEO4J_USERNAME = os.getenv("NEO4J_USERNAME") or os.getenv("NEO4J_USERNAME_GEMINI")
-NEO4J_PASSWORD = os.getenv("NEO4J_PASSWORD") or os.getenv("NEO4J_PASSWORD_GEMINI")
+NEO4J_URI = os.getenv("NEO4J_URI_GEMINI") or os.getenv("NEO4J_URI") or "neo4j+s://1c9edfe6.databases.neo4j.io"
+NEO4J_USERNAME = os.getenv("NEO4J_USERNAME_GEMINI") or os.getenv("NEO4J_USERNAME") or "neo4j"
+NEO4J_PASSWORD = os.getenv("NEO4J_PASSWORD_GEMINI") or os.getenv("NEO4J_PASSWORD")
 NEO4J_INDEX = os.getenv("NEO4J_INDEX_DEFAULT_GEMINI", os.getenv("NEO4J_INDEX_DEFAULT", "wydot_gemini_index"))
-NEO4J_DATABASE = os.getenv("NEO4J_DATABASE_GEMINI", os.getenv("NEO4J_DATABASE", "neo4j"))
+NEO4J_DATABASE = os.getenv("NEO4J_DATABASE_GEMINI", os.getenv("NEO4J_DATABASE", "1c9edfe6"))
 GEMINI_API_KEY = os.getenv("GEMINI_API_KEY")
 GCS_BUCKET = os.getenv("GCS_BUCKET")
 ADMIN_PASSWORD = os.getenv("ADMIN_PASSWORD", "wydot-admin-2025")
+print(f"[ADMIN] Neo4j config: URI={NEO4J_URI}, DB={NEO4J_DATABASE}, Index={NEO4J_INDEX}, User={NEO4J_USERNAME}", flush=True)
 
 if os.getenv("K_SERVICE"):
     INGESTED_DIR = "/tmp/ingested_data"
@@ -441,6 +442,9 @@ async def admin_index():
         html = html.replace("'/api/evaluation/", "'/admin/api/evaluation/")
         html = html.replace("`/api/evaluation/", "`/admin/api/evaluation/")
         html = html.replace("`/api/monitoring/", "`/admin/api/monitoring/")
+        html = html.replace("`/kg/", "`/admin/kg/")
+        html = html.replace("`/upload", "`/admin/upload")
+        html = html.replace("`/library", "`/admin/library")
         return HTMLResponse(html)
     return HTMLResponse("<h1>WYDOT Admin</h1><p>Upload template not found. Place ingestion_service/templates/upload.html</p>")
 
@@ -490,11 +494,12 @@ async def admin_upload(file: UploadFile = File(...)):
         gc.collect()
 
         return {"status": "success", "message": f"Ingested {filename}", "chunks": chunk_count, "filename": filename, "index": NEO4J_INDEX}
-    except HTTPException:
-        raise
+    except HTTPException as he:
+        # Convert FastAPI HTTPException to JSON format the frontend expects
+        return {"status": "error", "message": he.detail}
     except Exception as e:
         logger.exception("Upload failed")
-        raise HTTPException(500, str(e))
+        return {"status": "error", "message": str(e) or "Unknown server error"}
     finally:
         try:
             os.unlink(tmp_path)
@@ -562,6 +567,7 @@ async def admin_delete(request: Request):
 @admin_app.get("/kg/stats")
 async def admin_kg_stats():
     try:
+        print(f"[KG_STATS] Connecting to {NEO4J_URI}, database={NEO4J_DATABASE}", flush=True)
         driver = _get_driver()
         with driver.session(database=NEO4J_DATABASE) as session:
             total = session.run("MATCH (c:Chunk) RETURN count(c) AS cnt").single()["cnt"]
@@ -573,6 +579,7 @@ async def admin_kg_stats():
                 )
             }
         driver.close()
+        print(f"[KG_STATS] Results: total={total}, sources={sources}, by_type={by_type}", flush=True)
         return {"total_chunks": total, "unique_sources": sources, "by_type": by_type}
     except Exception as e:
         raise HTTPException(500, str(e))

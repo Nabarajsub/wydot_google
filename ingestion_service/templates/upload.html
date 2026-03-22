@@ -469,8 +469,9 @@
 
         /* === LOG / STATUS === */
         .log-box {
-            background: #1e293b;
-            color: #e2e8f0;
+            background: #f8f9fb;
+            color: #1f2937;
+            border: 1px solid #e5e7eb;
             border-radius: 8px;
             padding: 1rem;
             font-family: 'SF Mono', 'Fira Code', monospace;
@@ -486,26 +487,26 @@
         }
 
         .log-line.success {
-            color: #34d399;
+            color: #16a34a;
         }
 
         .log-line.error {
-            color: #f87171;
+            color: #dc2626;
         }
 
         .log-line.info {
-            color: #60a5fa;
+            color: #2563eb;
         }
 
         .log-line.warn {
-            color: #fbbf24;
+            color: #d97706;
         }
 
         /* === PREVIEW MODAL === */
         .modal-overlay {
             position: fixed;
             inset: 0;
-            background: rgba(0, 0, 0, 0.5);
+            background: rgba(255, 255, 255, 0.95);
             display: none;
             align-items: center;
             justify-content: center;
@@ -1792,9 +1793,11 @@
 
                     if (data.status === 'success') {
                         addLog(`   > Vectorizing ${data.chunks} chunks...`, 'info');
-                        addLog(`   ✅ ${data.chunks} chunks saved to Neo4j index '${data.index || 'wydot_vector_index'}'.`, 'success');
+                        addLog(`   ✅ ${data.chunks} chunks saved to Neo4j index '${data.index || 'wydot_gemini_index'}'.`, 'success');
                     } else {
-                        addLog(`   ❌ Failed: ${data.message}`, 'error');
+                        // Handle both {message: ...} and FastAPI {detail: ...} formats
+                        const errMsg = data.message || data.detail || JSON.stringify(data);
+                        addLog(`   ❌ Failed: ${errMsg}`, 'error');
                     }
                 } catch (err) {
                     addLog(`   ❌ Error: ${err.message}`, 'error');
