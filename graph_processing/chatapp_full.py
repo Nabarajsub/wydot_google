@@ -2749,15 +2749,24 @@ async def main(message: cl.Message):
         while len(_feedback_context) > _FEEDBACK_CTX_MAX:
             _feedback_context.popitem(last=False)
 
-        # Persist multimodal interaction if NOT guest
+        # Persist multimodal interaction
         if user and user.metadata.get("db_id") and not user.metadata.get("is_guest"):
             session_id = cl.user_session.get("session_id", "cl_session")
             uid = user.metadata["db_id"]
             # Save user message with note about files
             file_note = f" [Attached {len(files)} file(s)]"
-            CHAT_DB.add_message(uid, session_id, "user", message.content + file_note)
-            CHAT_DB.add_message(uid, session_id, "assistant", response)
-            
+            CHAT_DB.add_message(uid, session_id, "user", message.content + file_note, cl_msg_id=message.id)
+            CHAT_DB.add_message(uid, session_id, "assistant", response, cl_msg_id=msg.id)
+        else:
+            # Save for guests too so feedback Q&A JOIN works (user_id=0)
+            try:
+                session_id = cl.user_session.get("session_id", "cl_session")
+                file_note = f" [Attached {len(files)} file(s)]"
+                CHAT_DB.add_message(0, session_id, "user", message.content + file_note, cl_msg_id=message.id)
+                CHAT_DB.add_message(0, session_id, "assistant", response, cl_msg_id=msg.id)
+            except Exception:
+                pass  # best-effort for guests
+
         return
 
     # 2. Text Retrieval Route (with timing for telemetry)
@@ -2898,7 +2907,7 @@ async def main(message: cl.Message):
     while len(_feedback_context) > _FEEDBACK_CTX_MAX:
         _feedback_context.popitem(last=False)
 
-    # Update conversation: Redis + in-session; persist to DB if NOT guest
+    # Update conversation: Redis + in-session; persist to DB
     if user and user.metadata.get("db_id") and not user.metadata.get("is_guest"):
         uid = user.metadata["db_id"]
         conv_mem.append(uid, session_id, "user", message.content)
@@ -2909,6 +2918,12 @@ async def main(message: cl.Message):
         history_msgs.append({"role": "user", "content": message.content})
         history_msgs.append({"role": "assistant", "content": enhanced_answer})
         cl.user_session.set("memory", history_msgs)
+        # Also save to DB for guests so feedback Q&A JOIN works (use user_id=0)
+        try:
+            CHAT_DB.add_message(0, session_id, "user", message.content, cl_msg_id=message.id)
+            CHAT_DB.add_message(0, session_id, "assistant", enhanced_answer, sources=sources, cl_msg_id=msg.id)
+        except Exception:
+            pass  # best-effort for guests
 
     # Online telemetry (local SQLite; Cloud: BigQuery)
     telemetry.record_request(
