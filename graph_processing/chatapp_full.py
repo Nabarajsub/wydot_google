@@ -789,15 +789,19 @@ class WydotDataLayer(BaseDataLayer):
             user_email = None
             if user:
                 user_email = getattr(user, 'identifier', None) or user.metadata.get("email")
-            # Find the question that this feedback is for
+            # Find the question and answer from session history
             question = None
+            answer = None
             history = cl.user_session.get("memory") or []
-            # Walk backwards through history to find the last user message before this assistant msg
+            # Walk backwards: first assistant msg is the answer, first user msg is the question
             for i in range(len(history) - 1, -1, -1):
-                if history[i].get("role") == "user":
+                if not answer and history[i].get("role") == "assistant":
+                    answer = history[i].get("content", "")[:1000]
+                if not question and history[i].get("role") == "user":
                     question = history[i].get("content", "")[:500]
+                if question and answer:
                     break
-            CHAT_DB.upsert_feedback(feedback, question=question, user_email=user_email)
+            CHAT_DB.upsert_feedback(feedback, question=question, answer=answer, user_email=user_email)
             return True
         except Exception as e:
             logger.error(f"Error saving feedback: {e}")

@@ -210,20 +210,21 @@ class SQLiteChatHistoryStore(BaseChatHistoryStore):
                 value INTEGER NOT NULL,
                 comment TEXT,
                 question TEXT,
+                answer TEXT,
                 user_email TEXT,
                 ts REAL NOT NULL DEFAULT (strftime('%s','now'))
             )
         """)
-        # Add question/user_email columns if they don't exist (migration)
-        try:
-            self._conn.execute("SELECT question FROM feedback LIMIT 1")
-        except Exception:
+        # Migration: add columns if they don't exist
+        for col in ["question", "answer", "user_email"]:
             try:
-                self._conn.execute("ALTER TABLE feedback ADD COLUMN question TEXT")
-                self._conn.execute("ALTER TABLE feedback ADD COLUMN user_email TEXT")
-                self._conn.commit()
+                self._conn.execute(f"SELECT {col} FROM feedback LIMIT 1")
             except Exception:
-                pass
+                try:
+                    self._conn.execute(f"ALTER TABLE feedback ADD COLUMN {col} TEXT")
+                    self._conn.commit()
+                except Exception:
+                    pass
         self._conn.commit()
 
         # Seed guest user if not exists (same as CloudSQLChatHistoryStore)
@@ -431,7 +432,7 @@ class SQLiteChatHistoryStore(BaseChatHistoryStore):
         # Convert to Chainlit Step dict format if possible, or just raw for now
         return [{"role": r[0], "content": r[1], "createdAt": r[2], "id": str(r[3])} for r in rows]
 
-    def upsert_feedback(self, feedback, question: str = None, user_email: str = None) -> None:
+    def upsert_feedback(self, feedback, question: str = None, answer: str = None, user_email: str = None) -> None:
         """Stored feedback from Chainlit (value 0 or 1).
         Accepts both Chainlit Feedback dataclass and plain dict."""
         import logging
@@ -452,7 +453,7 @@ class SQLiteChatHistoryStore(BaseChatHistoryStore):
         else:
             fb = feedback
 
-        logger.info(f"[FEEDBACK] Saving feedback: forId={fb.get('forId')}, value={fb.get('value')}, comment={fb.get('comment')}, question={question[:50] if question else None}, user={user_email}")
+        logger.info(f"[FEEDBACK] Saving: forId={fb.get('forId')}, value={fb.get('value')}, question={question[:50] if question else None}, user={user_email}")
 
         with self._lock:
             cur = self._conn.execute("SELECT id FROM feedback WHERE for_id=?", (fb.get("forId"),))
@@ -463,13 +464,13 @@ class SQLiteChatHistoryStore(BaseChatHistoryStore):
 
             if row:
                 self._conn.execute(
-                    "UPDATE feedback SET value=?, comment=?, question=COALESCE(?, question), user_email=COALESCE(?, user_email), ts=? WHERE id=?",
-                    (val, comment, question, user_email, time.time(), row[0])
+                    "UPDATE feedback SET value=?, comment=?, question=COALESCE(?, question), answer=COALESCE(?, answer), user_email=COALESCE(?, user_email), ts=? WHERE id=?",
+                    (val, comment, question, answer, user_email, time.time(), row[0])
                 )
             else:
                 self._conn.execute(
-                    "INSERT INTO feedback (for_id, thread_id, value, comment, question, user_email, ts) VALUES (?, ?, ?, ?, ?, ?, ?)",
-                    (fb.get("forId"), fb.get("threadId"), val, comment, question, user_email, time.time())
+                    "INSERT INTO feedback (for_id, thread_id, value, comment, question, answer, user_email, ts) VALUES (?, ?, ?, ?, ?, ?, ?, ?)",
+                    (fb.get("forId"), fb.get("threadId"), val, comment, question, answer, user_email, time.time())
                 )
             self._conn.commit()
             logger.info(f"[FEEDBACK] Feedback saved successfully")
@@ -501,6 +502,7 @@ class SQLiteChatHistoryStore(BaseChatHistoryStore):
                             WHERE m2.session_id = f.thread_id AND m2.role = 'user' AND m2.ts <= m_asst.ts
                             ORDER BY m2.ts DESC LIMIT 1)
                        ) as question,
+                       COALESCE(f.answer, m_asst.content) as answer,
                        m_asst.sources as sources,
                        m_asst.cl_msg_id as cl_id
                 FROM feedback f
@@ -517,7 +519,8 @@ class SQLiteChatHistoryStore(BaseChatHistoryStore):
                     "ts": r[3],
                     "user": r[4],
                     "question": r[5],
-                    "sources": r[6]
+                    "answer": r[6],
+                    "sources": r[7]
                 }
                 for r in rows
             ]
@@ -746,14 +749,16 @@ class CloudSQLChatHistoryStore(BaseChatHistoryStore):
                         value INTEGER NOT NULL,
                         comment TEXT,
                         question TEXT,
+                        answer TEXT,
                         user_email TEXT,
                         ts TIMESTAMP DEFAULT CURRENT_TIMESTAMP
                     )
                 """)
-                # Migration: add question/user_email columns and unique index if missing
+                # Migration: add columns if missing
                 cur.execute("""
                     DO $$ BEGIN
                         ALTER TABLE feedback ADD COLUMN IF NOT EXISTS question TEXT;
+                        ALTER TABLE feedback ADD COLUMN IF NOT EXISTS answer TEXT;
                         ALTER TABLE feedback ADD COLUMN IF NOT EXISTS user_email TEXT;
                     END $$;
                 """)
@@ -971,7 +976,7 @@ class CloudSQLChatHistoryStore(BaseChatHistoryStore):
         finally:
             conn.close()
 
-    def upsert_feedback(self, feedback, question: str = None, user_email: str = None) -> None:
+    def upsert_feedback(self, feedback, question: str = None, answer: str = None, user_email: str = None) -> None:
         # Convert dataclass to dict if needed (Chainlit passes Feedback dataclass)
         if hasattr(feedback, '__dataclass_fields__'):
             import dataclasses
@@ -990,13 +995,14 @@ class CloudSQLChatHistoryStore(BaseChatHistoryStore):
         try:
             with conn.cursor() as cur:
                 cur.execute("""
-                    INSERT INTO feedback (for_id, thread_id, user_id, value, comment, question, user_email)
-                    VALUES (%s, %s, %s, %s, %s, %s, %s)
+                    INSERT INTO feedback (for_id, thread_id, user_id, value, comment, question, answer, user_email)
+                    VALUES (%s, %s, %s, %s, %s, %s, %s, %s)
                     ON CONFLICT (for_id) DO UPDATE SET value=EXCLUDED.value, comment=EXCLUDED.comment,
                         question=COALESCE(EXCLUDED.question, feedback.question),
+                        answer=COALESCE(EXCLUDED.answer, feedback.answer),
                         user_email=COALESCE(EXCLUDED.user_email, feedback.user_email)
                 """, (fb.get("forId"), fb.get("threadId"), fb.get("userId"),
-                      int(fb.get("value", 0)), fb.get("comment"), question, user_email))
+                      int(fb.get("value", 0)), fb.get("comment"), question, answer, user_email))
             conn.commit()
         finally:
             conn.close()
@@ -1031,6 +1037,7 @@ class CloudSQLChatHistoryStore(BaseChatHistoryStore):
                                 WHERE m2.session_id = f.thread_id AND m2.role = 'user' AND m2.ts <= m_asst.ts
                                 ORDER BY m2.ts DESC LIMIT 1)
                            ) as question,
+                           COALESCE(f.answer, m_asst.content) as answer,
                            m_asst.sources as sources,
                            m_asst.cl_msg_id as cl_id
                     FROM feedback f
@@ -1047,8 +1054,9 @@ class CloudSQLChatHistoryStore(BaseChatHistoryStore):
                         "ts": r[3],
                         "user": r[4],
                         "question": r[5],
-                        "sources": r[6],
-                        "cl_id": r[7]
+                        "answer": r[6],
+                        "sources": r[7],
+                        "cl_id": r[8]
                     }
                     for r in rows
                 ]
