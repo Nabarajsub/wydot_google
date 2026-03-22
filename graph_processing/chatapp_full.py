@@ -84,6 +84,7 @@ from flashrank import Ranker, RerankRequest
 # GraphRAG / LangChain imports
 # Heavy imports moved to lazy loaders below to prevent Cloud Run startup timeouts
 from langchain_core.documents import Document
+from neo4j import GraphDatabase
 
 # --- CUSTOM AUTH ENDPOINTS ---
 from chainlit.server import app
