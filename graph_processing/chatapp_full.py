@@ -797,14 +797,29 @@ class WydotDataLayer(BaseDataLayer):
             elif isinstance(feedback, dict):
                 for_id = feedback.get("forId")
 
-            # Look up question/answer/user from module-level cache
-            # (cl.user_session is unavailable here — Chainlit calls this without context)
-            ctx = _feedback_context.get(for_id, {})
-            question = ctx.get("question")
-            answer = ctx.get("answer")
-            user_email = ctx.get("user_email")
+            question = None
+            answer = None
+            user_email = None
 
-            logger.info(f"[FEEDBACK] forId={for_id}, ctx_found={bool(ctx)}, question={question[:50] if question else None}")
+            # Strategy 1: In-memory cache (fast, works within same process)
+            ctx = _feedback_context.get(for_id, {})
+            if ctx:
+                question = ctx.get("question")
+                answer = ctx.get("answer")
+                user_email = ctx.get("user_email")
+                logger.info(f"[FEEDBACK] forId={for_id}, source=memory_cache, question={question[:50] if question else None}")
+
+            # Strategy 2: Database lookup (reliable across restarts/scaling)
+            if not question and for_id:
+                try:
+                    db_ctx = CHAT_DB.get_feedback_context_by_msg_id(for_id)
+                    if db_ctx:
+                        question = question or db_ctx.get("question")
+                        answer = answer or db_ctx.get("answer")
+                        user_email = user_email or db_ctx.get("user_email")
+                        logger.info(f"[FEEDBACK] forId={for_id}, source=db_lookup, question={question[:50] if question else None}")
+                except Exception as db_err:
+                    logger.warning(f"[FEEDBACK] DB lookup failed: {db_err}")
 
             CHAT_DB.upsert_feedback(feedback, question=question, answer=answer, user_email=user_email)
             return True
@@ -2749,15 +2764,23 @@ async def main(message: cl.Message):
         while len(_feedback_context) > _FEEDBACK_CTX_MAX:
             _feedback_context.popitem(last=False)
 
-        # Persist multimodal interaction if NOT guest
+        # Persist multimodal interaction
         if user and user.metadata.get("db_id") and not user.metadata.get("is_guest"):
             session_id = cl.user_session.get("session_id", "cl_session")
             uid = user.metadata["db_id"]
-            # Save user message with note about files
             file_note = f" [Attached {len(files)} file(s)]"
-            CHAT_DB.add_message(uid, session_id, "user", message.content + file_note)
-            CHAT_DB.add_message(uid, session_id, "assistant", response)
-            
+            CHAT_DB.add_message(uid, session_id, "user", message.content + file_note, cl_msg_id=message.id)
+            CHAT_DB.add_message(uid, session_id, "assistant", response, cl_msg_id=msg.id)
+        else:
+            # Save for guests too so feedback Q&A JOIN works (user_id=0)
+            try:
+                session_id = cl.user_session.get("session_id", "cl_session")
+                file_note = f" [Attached {len(files)} file(s)]"
+                CHAT_DB.add_message(0, session_id, "user", message.content + file_note, cl_msg_id=message.id)
+                CHAT_DB.add_message(0, session_id, "assistant", response, cl_msg_id=msg.id)
+            except Exception:
+                pass  # best-effort for guests
+
         return
 
     # 2. Text Retrieval Route (with timing for telemetry)
@@ -2898,7 +2921,7 @@ async def main(message: cl.Message):
     while len(_feedback_context) > _FEEDBACK_CTX_MAX:
         _feedback_context.popitem(last=False)
 
-    # Update conversation: Redis + in-session; persist to DB if NOT guest
+    # Update conversation: Redis + in-session; persist to DB
     if user and user.metadata.get("db_id") and not user.metadata.get("is_guest"):
         uid = user.metadata["db_id"]
         conv_mem.append(uid, session_id, "user", message.content)
@@ -2909,6 +2932,12 @@ async def main(message: cl.Message):
         history_msgs.append({"role": "user", "content": message.content})
         history_msgs.append({"role": "assistant", "content": enhanced_answer})
         cl.user_session.set("memory", history_msgs)
+        # Also save to DB for guests so feedback Q&A JOIN works (user_id=0)
+        try:
+            CHAT_DB.add_message(0, session_id, "user", message.content, cl_msg_id=message.id)
+            CHAT_DB.add_message(0, session_id, "assistant", enhanced_answer, sources=sources, cl_msg_id=msg.id)
+        except Exception:
+            pass  # best-effort for guests
 
     # Online telemetry (local SQLite; Cloud: BigQuery)
     telemetry.record_request(

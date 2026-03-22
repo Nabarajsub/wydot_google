@@ -396,8 +396,15 @@ button[aria-label*="mode" i] {
 }
 
 /* ===== Force Light Theme on ALL MUI Modals, Dialogs, Drawers, Popovers ===== */
-.MuiBackdrop-root {
-    background-color: rgba(255, 255, 255, 0.75) !important;
+/* Override dark backdrop on feedback modal, settings panel, etc. */
+.MuiBackdrop-root,
+.MuiModal-backdrop,
+div[class*="Backdrop"],
+div[aria-hidden="true"][style*="opacity"] {
+    background-color: rgba(255, 255, 255, 0.7) !important;
+    background: rgba(255, 255, 255, 0.7) !important;
+    backdrop-filter: none !important;
+    -webkit-backdrop-filter: none !important;
 }
 
 .MuiDialog-paper,
@@ -458,4 +465,26 @@ div[role="presentation"] .MuiPaper-root {
 
 .MuiDivider-root {
     border-color: #e5e7eb !important;
+}
+
+/* Extra: force ALL fixed/absolute overlays to be light, not dark */
+div[style*="position: fixed"][style*="inset: 0"],
+div[style*="position:fixed"][style*="inset:0"],
+div[style*="position: fixed"][style*="z-index"],
+.css-i9fmh8-MuiBackdrop-root-MuiModal-backdrop,
+[class*="MuiBackdrop"][style*="opacity"] {
+    background-color: rgba(255, 255, 255, 0.7) !important;
+    background: rgba(255, 255, 255, 0.7) !important;
+}
+
+/* Chainlit settings drawer / feedback dialog — override dark mode colors */
+div[role="dialog"],
+div[role="presentation"] {
+    color-scheme: light only !important;
+}
+
+div[role="dialog"] > div,
+div[role="presentation"] > div {
+    background-color: #ffffff !important;
+    color: #1f1f1f !important;
 }
