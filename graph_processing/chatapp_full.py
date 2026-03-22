@@ -85,6 +85,12 @@ from flashrank import Ranker, RerankRequest
 # Heavy imports moved to lazy loaders below to prevent Cloud Run startup timeouts
 from langchain_core.documents import Document
 from neo4j import GraphDatabase
+from collections import OrderedDict
+
+# Module-level cache: maps Chainlit message ID -> {question, answer, user_email, sources}
+# Used by upsert_feedback callback (which runs without Chainlit session context)
+_feedback_context: OrderedDict = OrderedDict()
+_FEEDBACK_CTX_MAX = 500  # keep last 500 entries to avoid memory bloat
 
 # --- CUSTOM AUTH ENDPOINTS ---
 from chainlit.server import app
@@ -784,24 +790,23 @@ class WydotDataLayer(BaseDataLayer):
         import logging
         logger = logging.getLogger("chainlit")
         try:
-            # Try to enrich feedback with question/answer/user from session context
-            user_email = None
-            question = None
-            answer = None
-            try:
-                user = cl.user_session.get("user")
-                if user:
-                    user_email = getattr(user, 'identifier', None) or (user.metadata or {}).get("email")
-                history = cl.user_session.get("memory") or []
-                for i in range(len(history) - 1, -1, -1):
-                    if not answer and history[i].get("role") == "assistant":
-                        answer = history[i].get("content", "")[:1000]
-                    if not question and history[i].get("role") == "user":
-                        question = history[i].get("content", "")[:500]
-                    if question and answer:
-                        break
-            except (LookupError, Exception) as ctx_err:
-                logger.warning(f"Could not get session context for feedback enrichment: {ctx_err}")
+            # Get the message ID this feedback is for
+            for_id = None
+            if hasattr(feedback, 'forId'):
+                for_id = feedback.forId
+            elif isinstance(feedback, dict):
+                for_id = feedback.get("forId")
+
+            # Look up question/answer/user from module-level cache
+            # (cl.user_session is unavailable here — Chainlit calls this without context)
+            ctx = _feedback_context.get(for_id, {})
+            question = ctx.get("question")
+            answer = ctx.get("answer")
+            user_email = ctx.get("user_email")
+            sources_json = ctx.get("sources")
+
+            logger.info(f"[FEEDBACK] forId={for_id}, ctx_found={bool(ctx)}, question={question[:50] if question else None}")
+
             CHAT_DB.upsert_feedback(feedback, question=question, answer=answer, user_email=user_email)
             return True
         except Exception as e:
@@ -2730,9 +2735,22 @@ async def main(message: cl.Message):
         response = model.generate_content(parts).text
         await msg.stream_token(response)
         await msg.send()
-        
-        # Persist multimodal interaction if NOT guest
+
+        # Cache context for feedback callback (which has no session access)
         user = cl.user_session.get("user")
+        _user_email = None
+        if user:
+            _user_email = getattr(user, 'identifier', None) or (user.metadata or {}).get("email")
+        _feedback_context[msg.id] = {
+            "question": message.content[:500],
+            "answer": response[:1000],
+            "user_email": _user_email,
+            "sources": None,
+        }
+        while len(_feedback_context) > _FEEDBACK_CTX_MAX:
+            _feedback_context.popitem(last=False)
+
+        # Persist multimodal interaction if NOT guest
         if user and user.metadata.get("db_id") and not user.metadata.get("is_guest"):
             session_id = cl.user_session.get("session_id", "cl_session")
             uid = user.metadata["db_id"]
@@ -2867,6 +2885,19 @@ async def main(message: cl.Message):
     # Final update with sources
     msg.elements = clean_elements
     await msg.update()
+
+    # Cache context for feedback callback (which has no session access)
+    _user_email = None
+    if user:
+        _user_email = getattr(user, 'identifier', None) or (user.metadata or {}).get("email")
+    _feedback_context[msg.id] = {
+        "question": message.content[:500],
+        "answer": enhanced_answer[:1000],
+        "user_email": _user_email,
+        "sources": sources,
+    }
+    while len(_feedback_context) > _FEEDBACK_CTX_MAX:
+        _feedback_context.popitem(last=False)
 
     # Update conversation: Redis + in-session; persist to DB if NOT guest
     if user and user.metadata.get("db_id") and not user.metadata.get("is_guest"):

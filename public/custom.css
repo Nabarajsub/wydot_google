@@ -394,3 +394,79 @@ button[aria-label*="theme" i],
 button[aria-label*="mode" i] {
     display: none !important;
 }
+
+/* ===== Force Light Theme on ALL MUI Modals, Dialogs, Drawers, Popovers ===== */
+/* Backdrop: semi-transparent white instead of dark */
+.MuiBackdrop-root {
+    background-color: rgba(255, 255, 255, 0.75) !important;
+}
+
+/* Dialog / Modal content */
+.MuiDialog-paper,
+.MuiModal-root > div,
+.MuiDrawer-paper,
+.MuiPopover-paper,
+.MuiPaper-root {
+    background-color: #ffffff !important;
+    color: #1f1f1f !important;
+}
+
+/* Dialog overlay container */
+.MuiDialog-root,
+.MuiModal-root {
+    color-scheme: light only !important;
+}
+
+/* Feedback dialog specific */
+.MuiDialog-paper input,
+.MuiDialog-paper textarea,
+.MuiDrawer-paper input,
+.MuiDrawer-paper textarea {
+    background-color: #f8f9fa !important;
+    color: #1f1f1f !important;
+    border-color: #d1d5db !important;
+}
+
+/* MUI Select, Menu items inside dialogs */
+.MuiMenu-paper,
+.MuiList-root,
+.MuiMenuItem-root,
+.MuiSelect-select {
+    background-color: #ffffff !important;
+    color: #1f1f1f !important;
+}
+
+/* Settings panel / Chat settings drawer */
+.MuiDrawer-root .MuiPaper-root,
+div[role="presentation"] .MuiPaper-root {
+    background-color: #ffffff !important;
+    color: #1f1f1f !important;
+}
+
+/* Labels and helper text inside dialogs */
+.MuiFormLabel-root,
+.MuiInputLabel-root,
+.MuiFormHelperText-root,
+.MuiTypography-root {
+    color: #1f1f1f !important;
+}
+
+/* Slider tracks and thumbs in settings */
+.MuiSlider-root {
+    color: var(--accent-color) !important;
+}
+
+/* Switch toggles */
+.MuiSwitch-track {
+    background-color: #ccc !important;
+}
+
+/* Icons inside dialogs */
+.MuiSvgIcon-root {
+    color: #666 !important;
+}
+
+/* Dividers */
+.MuiDivider-root {
+    border-color: #e5e7eb !important;
+}
