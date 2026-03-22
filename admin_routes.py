@@ -677,7 +677,8 @@ async def admin_kg_search(request: Request):
         ]
         return {"results": hits, "query": query}
     except Exception as e:
-        raise HTTPException(500, str(e))
+        logger.exception("kg/search failed")
+        return {"results": [], "query": query, "error": str(e)}
 
 
 @admin_app.post("/kg/update")
@@ -763,11 +764,29 @@ async def admin_kg_graph_stats():
             except Exception:
                 result["relationship_counts"] = {}
 
-            # Documents by category (primary_category on Document nodes, or doc_type on Chunk nodes)
+            # Documents by category (smart categorization using doc_type + source name patterns)
             try:
                 cat_rows = session.run(
-                    "MATCH (c:Chunk) RETURN coalesce(c.doc_type, 'Other') AS category, "
-                    "count(DISTINCT c.source) AS docs, count(c) AS chunks ORDER BY chunks DESC"
+                    "MATCH (c:Chunk) "
+                    "WITH c, CASE "
+                    "  WHEN c.doc_type IS NOT NULL AND c.doc_type <> '' AND c.doc_type <> 'Other' THEN c.doc_type "
+                    "  WHEN toLower(c.source) CONTAINS 'standard spec' OR toLower(c.source) CONTAINS 'standard_spec' THEN 'Standard Specs' "
+                    "  WHEN toLower(c.source) CONTAINS 'construction manual' OR toLower(c.source) CONTAINS 'construction_manual' THEN 'Construction Manual' "
+                    "  WHEN toLower(c.source) CONTAINS 'material' OR toLower(c.source) CONTAINS 'testing' THEN 'Materials Testing' "
+                    "  WHEN toLower(c.source) CONTAINS 'design' OR toLower(c.source) CONTAINS 'design_manual' THEN 'Design Manual' "
+                    "  WHEN toLower(c.source) CONTAINS 'traffic' OR toLower(c.source) CONTAINS 'crash' OR toLower(c.source) CONTAINS 'safety' THEN 'Traffic & Safety' "
+                    "  WHEN toLower(c.source) CONTAINS 'stip' OR toLower(c.source) CONTAINS 'improvement' THEN 'STIP' "
+                    "  WHEN toLower(c.source) CONTAINS 'annual' OR toLower(c.source) CONTAINS 'report' THEN 'Annual Reports' "
+                    "  WHEN toLower(c.source) CONTAINS 'bridge' THEN 'Bridge Program' "
+                    "  WHEN toLower(c.source) CONTAINS 'highway' OR toLower(c.source) CONTAINS 'road' THEN 'Highway Program' "
+                    "  WHEN toLower(c.source) CONTAINS 'form' OR toLower(c.source) CONTAINS 'E-' THEN 'Forms' "
+                    "  WHEN toLower(c.source) CONTAINS 'manual' THEN 'Manuals' "
+                    "  WHEN toLower(c.source) CONTAINS 'spec' THEN 'Specifications' "
+                    "  WHEN toLower(c.source) CONTAINS 'minutes' OR toLower(c.source) CONTAINS 'meeting' THEN 'Meeting Minutes' "
+                    "  WHEN toLower(c.source) CONTAINS 'financial' OR toLower(c.source) CONTAINS 'compliance' OR toLower(c.source) CONTAINS 'budget' THEN 'Financial Reports' "
+                    "  ELSE 'Other' "
+                    "END AS category "
+                    "RETURN category, count(DISTINCT c.source) AS docs, count(c) AS chunks ORDER BY chunks DESC"
                 )
                 categories = []
                 total_chunks = 0
@@ -833,7 +852,7 @@ async def admin_kg_graph_stats():
                     "RETURN d1.source AS newer, d2.source AS older, r.confidence AS confidence "
                     "ORDER BY r.confidence DESC LIMIT 20"
                 )
-                result["supersedes"] = [{"newer": r["newer"], "older": r["older"], "confidence": r.get("confidence")} for r in sup_rows]
+                result["supersedes"] = [{"newer": r["newer"], "older": r["older"], "confidence": r["confidence"] if r["confidence"] is not None and r["confidence"] == r["confidence"] else None} for r in sup_rows]
             except Exception:
                 result["supersedes"] = []
 
@@ -944,6 +963,167 @@ async def admin_kg_graph_sample(source: str = None, limit: int = 30):
         return {"nodes": nodes, "edges": edges}
     except Exception as e:
         return {"nodes": [], "edges": [], "error": str(e)}
+
+
+@admin_app.get("/kg/entity-search")
+async def admin_kg_entity_search(q: str = "", limit: int = 20):
+    """Search entities by name and return their document connections."""
+    if not q:
+        return {"entities": [], "error": "Query required"}
+    try:
+        driver = _get_driver()
+        with driver.session(database=NEO4J_DATABASE) as session:
+            rows = session.run(
+                "MATCH (e:Entity) WHERE toLower(e.name) CONTAINS toLower($q) "
+                "OPTIONAL MATCH (c:Chunk)-[:MENTIONS]->(e) "
+                "WITH e, count(DISTINCT c) AS mentions, collect(DISTINCT c.source)[..5] AS sources "
+                "RETURN e.name AS name, coalesce(e.type, 'Unknown') AS type, mentions, sources "
+                "ORDER BY mentions DESC LIMIT $limit",
+                q=q, limit=limit
+            )
+            entities = [{
+                "name": r["name"], "type": r["type"],
+                "mentions": r["mentions"], "sources": r["sources"]
+            } for r in rows]
+        driver.close()
+        return {"entities": entities, "query": q}
+    except Exception as e:
+        return {"entities": [], "error": str(e)}
+
+
+@admin_app.get("/kg/document-detail")
+async def admin_kg_document_detail(source: str = ""):
+    """Get detailed info about a specific document: chunks, entities, relationships."""
+    if not source:
+        return {"error": "source parameter required"}
+    try:
+        driver = _get_driver()
+        with driver.session(database=NEO4J_DATABASE) as session:
+            result = {"source": source}
+
+            # Document metadata
+            meta = session.run(
+                "MATCH (c:Chunk) WHERE c.source = $src "
+                "RETURN c.title AS title, c.doc_type AS doc_type, c.year AS year, "
+                "c.author AS author, count(c) AS chunk_count, "
+                "collect(DISTINCT c.section)[..20] AS sections LIMIT 1",
+                src=source
+            ).single()
+            if meta:
+                result["title"] = meta["title"]
+                result["doc_type"] = meta["doc_type"]
+                result["year"] = meta["year"]
+                result["author"] = meta["author"]
+                result["chunk_count"] = meta["chunk_count"]
+                result["sections"] = meta["sections"]
+
+            # Top entities mentioned in this document
+            ent_rows = session.run(
+                "MATCH (c:Chunk)-[:MENTIONS]->(e:Entity) WHERE c.source = $src "
+                "RETURN e.name AS name, coalesce(e.type, 'Unknown') AS type, count(c) AS mentions "
+                "ORDER BY mentions DESC LIMIT 30",
+                src=source
+            )
+            result["entities"] = [{"name": r["name"], "type": r["type"], "mentions": r["mentions"]} for r in ent_rows]
+
+            # Document relationships
+            rel_rows = session.run(
+                "MATCH (d1:Document)-[r]->(d2:Document) WHERE d1.source = $src OR d2.source = $src "
+                "RETURN d1.source AS from_doc, type(r) AS rel_type, d2.source AS to_doc, "
+                "r.confidence AS confidence ORDER BY type(r)",
+                src=source
+            )
+            result["relationships"] = [{
+                "from": r["from_doc"], "type": r["rel_type"], "to": r["to_doc"],
+                "confidence": r["confidence"]
+            } for r in rel_rows]
+
+            # Sample chunks (first 5)
+            chunk_rows = session.run(
+                "MATCH (c:Chunk) WHERE c.source = $src "
+                "RETURN c.text AS text, c.section AS section, c.page AS page "
+                "ORDER BY c.page LIMIT 5",
+                src=source
+            )
+            result["sample_chunks"] = [{"text": r["text"][:300], "section": r["section"], "page": r["page"]} for r in chunk_rows]
+
+        driver.close()
+        return result
+    except Exception as e:
+        import traceback
+        return {"error": str(e), "traceback": traceback.format_exc()}
+
+
+@admin_app.get("/kg/path-finder")
+async def admin_kg_path_finder(from_node: str = "", to_node: str = "", max_depth: int = 4):
+    """Find shortest paths between two nodes (documents or entities)."""
+    if not from_node or not to_node:
+        return {"error": "Both from_node and to_node parameters required"}
+    try:
+        driver = _get_driver()
+        with driver.session(database=NEO4J_DATABASE) as session:
+            # Try to find paths between documents or entities
+            rows = session.run(
+                "MATCH p = shortestPath((a)-[*1.." + str(min(max_depth, 6)) + "]->(b)) "
+                "WHERE (a:Document AND a.source CONTAINS $from) OR (a:Entity AND toLower(a.name) CONTAINS toLower($from)) "
+                "AND ((b:Document AND b.source CONTAINS $to) OR (b:Entity AND toLower(b.name) CONTAINS toLower($to))) "
+                "RETURN [n IN nodes(p) | {id: id(n), labels: labels(n), name: CASE WHEN n:Document THEN n.source WHEN n:Entity THEN n.name WHEN n:Chunk THEN LEFT(n.text, 80) ELSE coalesce(n.name, n.source, 'unknown') END}] AS path_nodes, "
+                "[r IN relationships(p) | type(r)] AS path_rels, length(p) AS path_length "
+                "LIMIT 5",
+                **{"from": from_node, "to": to_node}
+            )
+            paths = []
+            for r in rows:
+                paths.append({
+                    "nodes": r["path_nodes"],
+                    "relationships": r["path_rels"],
+                    "length": r["path_length"]
+                })
+        driver.close()
+        return {"paths": paths, "from": from_node, "to": to_node}
+    except Exception as e:
+        return {"paths": [], "error": str(e)}
+
+
+@admin_app.get("/kg/schema")
+async def admin_kg_schema():
+    """Get the graph schema: node labels, relationship types, and which labels connect."""
+    try:
+        driver = _get_driver()
+        with driver.session(database=NEO4J_DATABASE) as session:
+            # Node labels with counts and sample properties
+            node_labels = {}
+            label_rows = session.run(
+                "CALL db.labels() YIELD label "
+                "CALL { WITH label MATCH (n) WHERE label IN labels(n) RETURN count(n) AS cnt LIMIT 1 } "
+                "RETURN label, cnt ORDER BY cnt DESC"
+            )
+            for r in label_rows:
+                node_labels[r["label"]] = r["cnt"]
+
+            # Relationship schema: which labels connect via which relationship types
+            schema_rows = session.run(
+                "MATCH (a)-[r]->(b) "
+                "WITH labels(a)[0] AS from_label, type(r) AS rel_type, labels(b)[0] AS to_label, count(*) AS cnt "
+                "RETURN from_label, rel_type, to_label, cnt ORDER BY cnt DESC"
+            )
+            schema = [{"from": r["from_label"], "rel": r["rel_type"], "to": r["to_label"], "count": r["cnt"]} for r in schema_rows]
+
+            # Property keys per label (sample)
+            props = {}
+            for label in list(node_labels.keys())[:6]:
+                try:
+                    prop_row = session.run(f"MATCH (n:{label}) RETURN keys(n) AS props LIMIT 1").single()
+                    if prop_row:
+                        props[label] = prop_row["props"]
+                except Exception:
+                    props[label] = []
+
+        driver.close()
+        return {"node_labels": node_labels, "schema": schema, "properties": props}
+    except Exception as e:
+        import traceback
+        return {"error": str(e), "traceback": traceback.format_exc()}
 
 
 @admin_app.post("/ingest")
