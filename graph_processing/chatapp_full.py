@@ -784,23 +784,24 @@ class WydotDataLayer(BaseDataLayer):
         import logging
         logger = logging.getLogger("chainlit")
         try:
-            # Enrich feedback with question and user from session context
-            user = cl.user_session.get("user")
+            # Try to enrich feedback with question/answer/user from session context
             user_email = None
-            if user:
-                user_email = getattr(user, 'identifier', None) or user.metadata.get("email")
-            # Find the question and answer from session history
             question = None
             answer = None
-            history = cl.user_session.get("memory") or []
-            # Walk backwards: first assistant msg is the answer, first user msg is the question
-            for i in range(len(history) - 1, -1, -1):
-                if not answer and history[i].get("role") == "assistant":
-                    answer = history[i].get("content", "")[:1000]
-                if not question and history[i].get("role") == "user":
-                    question = history[i].get("content", "")[:500]
-                if question and answer:
-                    break
+            try:
+                user = cl.user_session.get("user")
+                if user:
+                    user_email = getattr(user, 'identifier', None) or (user.metadata or {}).get("email")
+                history = cl.user_session.get("memory") or []
+                for i in range(len(history) - 1, -1, -1):
+                    if not answer and history[i].get("role") == "assistant":
+                        answer = history[i].get("content", "")[:1000]
+                    if not question and history[i].get("role") == "user":
+                        question = history[i].get("content", "")[:500]
+                    if question and answer:
+                        break
+            except (LookupError, Exception) as ctx_err:
+                logger.warning(f"Could not get session context for feedback enrichment: {ctx_err}")
             CHAT_DB.upsert_feedback(feedback, question=question, answer=answer, user_email=user_email)
             return True
         except Exception as e:
