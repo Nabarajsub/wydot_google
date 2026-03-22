@@ -677,7 +677,8 @@ async def admin_kg_search(request: Request):
         ]
         return {"results": hits, "query": query}
     except Exception as e:
-        raise HTTPException(500, str(e))
+        logger.exception("kg/search failed")
+        return {"results": [], "query": query, "error": str(e)}
 
 
 @admin_app.post("/kg/update")

@@ -2184,6 +2184,15 @@
                 });
                 const data = await resp.json();
 
+                if (data.detail) {
+                    container.innerHTML = `<p style="color:var(--error); text-align:center; padding:2rem;">Search error: ${data.detail}</p>`;
+                    return;
+                }
+                if (data.error) {
+                    container.innerHTML = `<p style="color:var(--error); text-align:center; padding:2rem;">Search error: ${data.error}</p>`;
+                    return;
+                }
+
                 if (!data.results || data.results.length === 0) {
                     container.innerHTML = '<p style="color:var(--text-muted); text-align:center; padding:2rem;">No matching results found</p>';
                     return;
