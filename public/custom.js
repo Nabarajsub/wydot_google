@@ -11,7 +11,7 @@
         // Also force light backdrops on all MUI modals/dialogs (feedback, settings)
         var s = document.createElement("style");
         s.textContent = "html,body,#root,#app,.MuiBox-root,main{background:#fff!important;color:#1f1f1f!important;color-scheme:light only!important}" +
-            ".MuiBackdrop-root,.MuiModal-backdrop{background:rgba(255,255,255,0.7)!important;backdrop-filter:none!important}" +
+            ".MuiBackdrop-root,.MuiModal-backdrop{background:#ffffff!important;backdrop-filter:none!important}" +
             ".MuiDialog-paper,.MuiDrawer-paper,.MuiPaper-root,.MuiPopover-paper{background:#fff!important;color:#1f1f1f!important}" +
             "div[role=dialog]>div,div[role=presentation]>div{background:#fff!important;color:#1f1f1f!important}";
         document.head.appendChild(s);
@@ -160,9 +160,9 @@
         // Force-fix dark backdrops: MUI sets inline styles that override CSS
         function fixDarkBackdrops() {
             document.querySelectorAll('.MuiBackdrop-root, [class*="Backdrop"]').forEach(function(el) {
-                if (el.style.backgroundColor && el.style.backgroundColor !== 'rgba(255, 255, 255, 0.7)') {
-                    el.style.setProperty('background-color', 'rgba(255, 255, 255, 0.7)', 'important');
-                    el.style.setProperty('background', 'rgba(255, 255, 255, 0.7)', 'important');
+                if (el.style.backgroundColor && el.style.backgroundColor !== '#ffffff') {
+                    el.style.setProperty('background-color', '#ffffff', 'important');
+                    el.style.setProperty('background', '#ffffff', 'important');
                     el.style.setProperty('backdrop-filter', 'none', 'important');
                 }
             });
