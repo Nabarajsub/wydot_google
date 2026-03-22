@@ -1,0 +1,286 @@
+\relax 
+\bibstyle{acl_natbib}
+\providecommand\hyper@newdestlabel[2]{}
+\providecommand\HyField@AuxAddToFields[1]{}
+\providecommand\HyField@AuxAddToCoFields[2]{}
+\citation{lewis2020rag,guu2020realm}
+\citation{shuster2021retrieval,huang2023hallucination}
+\citation{gao2024ragsurvey}
+\citation{izacard2023atlas}
+\citation{kwiatkowski2019naturalquestions,joshi2017triviaqa}
+\citation{barnett2024observations}
+\citation{rag4cm2025}
+\citation{malkov2020hnsw,johnson2021faiss}
+\@writefile{toc}{\contentsline {section}{\numberline {1}Introduction}{1}{section.1}\protected@file@percent }
+\newlabel{sec:introduction}{{1}{1}{Introduction}{section.1}{}}
+\citation{lewis2020rag}
+\citation{chen2017drqa,karpukhin2020dpr}
+\citation{guu2020realm}
+\citation{izacard2021fid}
+\citation{izacard2023atlas}
+\citation{borgeaud2022retro}
+\citation{gao2024ragsurvey,zhao2024ragsurvey2}
+\citation{gao2024ragsurvey}
+\citation{singh2025agenticrag}
+\citation{karpukhin2020dpr,xiong2021ance}
+\citation{robertson2009bm25}
+\citation{chen2024blendedrag,ma2024hybridretrieval}
+\citation{reimers2019sentencebert}
+\citation{su2023instructor}
+\citation{wang2024e5mistral,li2024bge}
+\citation{khattab2020colbert}
+\citation{santhanam2022colbertv2}
+\citation{formal2021splade}
+\citation{malkov2020hnsw}
+\citation{johnson2021faiss}
+\citation{guo2020scann}
+\citation{barnett2024observations}
+\citation{jeong2024adaptiverag}
+\citation{ragrouter2025}
+\citation{zohar2024multimetarag}
+\citation{routerag2025}
+\citation{aurelio2024semanticrouter}
+\citation{gao2023hyde}
+\citation{zheng2024stepback}
+\citation{press2023measuring,zhou2023leasttomost}
+\citation{wang2023query2doc}
+\@writefile{toc}{\contentsline {section}{\numberline {2}Related Work}{2}{section.2}\protected@file@percent }
+\newlabel{sec:related_work}{{2}{2}{Related Work}{section.2}{}}
+\@writefile{toc}{\contentsline {subsection}{\numberline {2.1}Retrieval-Augmented Generation}{2}{subsection.2.1}\protected@file@percent }
+\@writefile{toc}{\contentsline {subsection}{\numberline {2.2}Dense Retrieval and Scaling}{2}{subsection.2.2}\protected@file@percent }
+\@writefile{toc}{\contentsline {subsection}{\numberline {2.3}Query Routing and Classification}{2}{subsection.2.3}\protected@file@percent }
+\citation{yao2023react}
+\citation{schick2023toolformer}
+\citation{patil2023gorilla,qin2024toolllm}
+\citation{wei2022chainofthought}
+\citation{yao2024treeofthoughts}
+\citation{huang2022planning}
+\citation{wu2023autogen}
+\citation{crewai2024}
+\citation{marag2025}
+\citation{multiagentrag2024}
+\citation{singh2025agenticrag}
+\citation{arag2026}
+\citation{yan2024crag}
+\citation{asai2023selfrag}
+\citation{edge2024graphrag}
+\citation{hybridrag2024}
+\citation{peng2024graphragsurvey}
+\citation{soman2024kgrag}
+\citation{grag2024}
+\citation{guo2024lightrag}
+\citation{pan2024kgllm,trajanoska2023kgconstruction}
+\citation{louis2024interpretable,pipitone2024legalrag}
+\citation{xiong2024benchmarking,zakka2024almanac}
+\citation{press2023measuring}
+\citation{li2024finrag}
+\citation{rag4cm2025}
+\citation{graphragcompliance2024}
+\citation{es2024ragas}
+\citation{saadfalcon2024ares}
+\citation{chen2024rgb}
+\citation{yang2024crag}
+\citation{kwiatkowski2019naturalquestions}
+\citation{joshi2017triviaqa}
+\citation{nguyen2016msmarco}
+\citation{langchain2024textsplitters}
+\citation{kamradt2024semantic}
+\citation{gunther2024latechunking}
+\citation{langchain2024parentdoc}
+\citation{sarthi2024raptor}
+\@writefile{toc}{\contentsline {subsection}{\numberline {2.4}Multi-Agent LLM Systems}{3}{subsection.2.4}\protected@file@percent }
+\@writefile{toc}{\contentsline {subsection}{\numberline {2.5}Graph-Enhanced Retrieval}{3}{subsection.2.5}\protected@file@percent }
+\@writefile{toc}{\contentsline {subsection}{\numberline {2.6}Domain-Specific RAG}{3}{subsection.2.6}\protected@file@percent }
+\@writefile{toc}{\contentsline {subsection}{\numberline {2.7}RAG Evaluation}{3}{subsection.2.7}\protected@file@percent }
+\@writefile{toc}{\contentsline {subsection}{\numberline {2.8}Document Processing and Chunking}{3}{subsection.2.8}\protected@file@percent }
+\citation{chen2024blendedrag}
+\citation{reimers2019sentencebert,wang2024e5mistral}
+\citation{langchain2024recursive}
+\citation{allan1998topicdetection}
+\@writefile{toc}{\contentsline {section}{\numberline {3}Vector Search Dilution}{4}{section.3}\protected@file@percent }
+\newlabel{sec:dilution}{{3}{4}{Vector Search Dilution}{section.3}{}}
+\@writefile{toc}{\contentsline {subsection}{\numberline {3.1}System Context}{4}{subsection.3.1}\protected@file@percent }
+\@writefile{lot}{\contentsline {table}{\numberline {1}{\ignorespaces Document and chunk distribution. Traffic \& Crash reports contribute 35.7\% of chunks despite being 2.0\% of documents. Chunk density (Chk/Doc) varies up to 54$\times $ across categories.}}{4}{table.caption.1}\protected@file@percent }
+\providecommand*\caption@xref[2]{\@setref\relax\@undefined{#1}}
+\newlabel{tab:distribution}{{1}{4}{Document and chunk distribution. Traffic \& Crash reports contribute 35.7\% of chunks despite being 2.0\% of documents. Chunk density (Chk/Doc) varies up to 54$\times $ across categories}{table.caption.1}{}}
+\@writefile{toc}{\contentsline {subsection}{\numberline {3.2}Scaling and Degradation}{4}{subsection.3.2}\protected@file@percent }
+\@writefile{toc}{\contentsline {subsection}{\numberline {3.3}Root Cause Analysis}{4}{subsection.3.3}\protected@file@percent }
+\@writefile{toc}{\contentsline {paragraph}{Vocabulary Overlap.}{4}{section*.2}\protected@file@percent }
+\@writefile{toc}{\contentsline {paragraph}{Chunk Distribution Imbalance.}{4}{section*.3}\protected@file@percent }
+\@writefile{toc}{\contentsline {subsection}{\numberline {3.4}Formal Definition}{4}{subsection.3.4}\protected@file@percent }
+\newlabel{eq:dilution}{{4}{4}{Formal Definition}{equation.4}{}}
+\citation{chen2024blendedrag}
+\@writefile{toc}{\contentsline {subsection}{\numberline {3.5}Empirical Dilution Measurements}{5}{subsection.3.5}\protected@file@percent }
+\@writefile{lot}{\contentsline {table}{\numberline {2}{\ignorespaces Dilution factor $\delta $ by category. Categories with fewer chunks suffer highest dilution (Spearman $\rho = -0.71$).}}{5}{table.caption.4}\protected@file@percent }
+\newlabel{tab:dilution}{{2}{5}{Dilution factor $\delta $ by category. Categories with fewer chunks suffer highest dilution (Spearman $\rho = -0.71$)}{table.caption.4}{}}
+\@writefile{lof}{\contentsline {figure}{\numberline {1}{\ignorespaces Dilution factor $\delta $ by category. Categories with fewer chunks suffer highest dilution, confirming the inverse relationship between corpus size and embedding space contamination.}}{5}{figure.caption.5}\protected@file@percent }
+\newlabel{fig:dilution}{{1}{5}{Dilution factor $\delta $ by category. Categories with fewer chunks suffer highest dilution, confirming the inverse relationship between corpus size and embedding space contamination}{figure.caption.5}{}}
+\@writefile{toc}{\contentsline {section}{\numberline {4}Architecture: \textsc  {MASDR-RAG}{}}{5}{section.4}\protected@file@percent }
+\newlabel{sec:architecture}{{4}{5}{Architecture: \systemname {}}{section.4}{}}
+\@writefile{toc}{\contentsline {subsection}{\numberline {4.1}LLM-Based Zero-Shot Query Routing}{5}{subsection.4.1}\protected@file@percent }
+\newlabel{sec:routing}{{4.1}{5}{LLM-Based Zero-Shot Query Routing}{subsection.4.1}{}}
+\@writefile{lot}{\contentsline {table}{\numberline {3}{\ignorespaces Category taxonomy aligned with WYDOT's organizational structure.}}{5}{table.caption.7}\protected@file@percent }
+\newlabel{tab:categories}{{3}{5}{Category taxonomy aligned with WYDOT's organizational structure}{table.caption.7}{}}
+\@writefile{toc}{\contentsline {subsection}{\numberline {4.2}Domain-Scoped Retrieval}{5}{subsection.4.2}\protected@file@percent }
+\newlabel{sec:scoped_search}{{4.2}{5}{Domain-Scoped Retrieval}{subsection.4.2}{}}
+\citation{langchain2024recursive}
+\@writefile{lof}{\contentsline {figure}{\numberline {2}{\ignorespaces \textsc  {MASDR-RAG}{} architecture. The orchestrator routes queries via function calling to domain agents, each searching a scoped subset of the knowledge graph. Dashed arrow: chunks returned for answer synthesis.}}{6}{figure.caption.6}\protected@file@percent }
+\newlabel{fig:architecture}{{2}{6}{\systemname {} architecture. The orchestrator routes queries via function calling to domain agents, each searching a scoped subset of the knowledge graph. Dashed arrow: chunks returned for answer synthesis}{figure.caption.6}{}}
+\@writefile{lot}{\contentsline {table}{\numberline {4}{\ignorespaces Search space reduction. Most agents search $<$5\% of total corpus.}}{6}{table.caption.8}\protected@file@percent }
+\newlabel{tab:search_space}{{4}{6}{Search space reduction. Most agents search $<$5\% of total corpus}{table.caption.8}{}}
+\@writefile{toc}{\contentsline {subsection}{\numberline {4.3}Multi-Agent Orchestration}{6}{subsection.4.3}\protected@file@percent }
+\newlabel{sec:orchestrator}{{4.3}{6}{Multi-Agent Orchestration}{subsection.4.3}{}}
+\@writefile{loa}{\contentsline {algorithm}{\numberline {1}{\ignorespaces \textsc  {MASDR-RAG}{} Orchestration}}{6}{algorithm.1}\protected@file@percent }
+\newlabel{alg:orchestrator}{{1}{6}{\systemname {} Orchestration}{algorithm.1}{}}
+\@writefile{toc}{\contentsline {section}{\numberline {5}Implementation}{6}{section.5}\protected@file@percent }
+\newlabel{sec:implementation}{{5}{6}{Implementation}{section.5}{}}
+\@writefile{toc}{\contentsline {paragraph}{Knowledge Graph.}{6}{section*.9}\protected@file@percent }
+\@writefile{toc}{\contentsline {paragraph}{Agents.}{6}{section*.10}\protected@file@percent }
+\citation{es2024ragas}
+\@writefile{toc}{\contentsline {paragraph}{Deployment.}{7}{section*.11}\protected@file@percent }
+\@writefile{toc}{\contentsline {section}{\numberline {6}Evaluation}{7}{section.6}\protected@file@percent }
+\newlabel{sec:evaluation}{{6}{7}{Evaluation}{section.6}{}}
+\@writefile{toc}{\contentsline {subsection}{\numberline {6.1}Setup}{7}{subsection.6.1}\protected@file@percent }
+\@writefile{toc}{\contentsline {paragraph}{Test Suite.}{7}{section*.12}\protected@file@percent }
+\@writefile{toc}{\contentsline {paragraph}{Ground Truth.}{7}{section*.13}\protected@file@percent }
+\@writefile{toc}{\contentsline {paragraph}{Metrics.}{7}{section*.14}\protected@file@percent }
+\@writefile{toc}{\contentsline {paragraph}{Baselines.}{7}{section*.15}\protected@file@percent }
+\@writefile{toc}{\contentsline {subsection}{\numberline {6.2}Routing Evaluation}{7}{subsection.6.2}\protected@file@percent }
+\newlabel{sec:routing_eval}{{6.2}{7}{Routing Evaluation}{subsection.6.2}{}}
+\@writefile{lot}{\contentsline {table}{\numberline {5}{\ignorespaces Routing coverage and accuracy.}}{7}{table.caption.16}\protected@file@percent }
+\newlabel{tab:routing_eval}{{5}{7}{Routing coverage and accuracy}{table.caption.16}{}}
+\@writefile{toc}{\contentsline {subsection}{\numberline {6.3}Retrieval Quality}{7}{subsection.6.3}\protected@file@percent }
+\@writefile{toc}{\contentsline {subsection}{\numberline {6.4}Answer Quality}{7}{subsection.6.4}\protected@file@percent }
+\@writefile{lot}{\contentsline {table}{\numberline {7}{\ignorespaces Answer quality. Correctness: expert binary; others: RAGAS (0--1).}}{7}{table.caption.18}\protected@file@percent }
+\newlabel{tab:answer_quality}{{7}{7}{Answer quality. Correctness: expert binary; others: RAGAS (0--1)}{table.caption.18}{}}
+\@writefile{toc}{\contentsline {subsection}{\numberline {6.5}Ablation Study}{7}{subsection.6.5}\protected@file@percent }
+\@writefile{lot}{\contentsline {table}{\numberline {8}{\ignorespaces Ablation study.}}{7}{table.caption.19}\protected@file@percent }
+\newlabel{tab:ablation}{{8}{7}{Ablation study}{table.caption.19}{}}
+\@writefile{toc}{\contentsline {subsection}{\numberline {6.6}Dilution Factor Analysis}{8}{subsection.6.6}\protected@file@percent }
+\@writefile{toc}{\contentsline {subsection}{\numberline {6.7}Latency Analysis}{8}{subsection.6.7}\protected@file@percent }
+\@writefile{lot}{\contentsline {table}{\numberline {9}{\ignorespaces End-to-end latency.}}{8}{table.caption.20}\protected@file@percent }
+\newlabel{tab:latency}{{9}{8}{End-to-end latency}{table.caption.20}{}}
+\@writefile{toc}{\contentsline {section}{\numberline {7}Case Studies}{8}{section.7}\protected@file@percent }
+\newlabel{sec:case_studies}{{7}{8}{Case Studies}{section.7}{}}
+\@writefile{toc}{\contentsline {paragraph}{Case 1: Surface Grinding.}{8}{section*.21}\protected@file@percent }
+\@writefile{toc}{\contentsline {paragraph}{Case 2: Version Comparison.}{8}{section*.22}\protected@file@percent }
+\@writefile{toc}{\contentsline {paragraph}{Case 3: Crash Statistics (Noise $\rightarrow $ Signal).}{8}{section*.23}\protected@file@percent }
+\@writefile{toc}{\contentsline {section}{\numberline {8}Discussion}{8}{section.8}\protected@file@percent }
+\newlabel{sec:discussion}{{8}{8}{Discussion}{section.8}{}}
+\@writefile{toc}{\contentsline {paragraph}{Dilution Conditions.}{8}{section*.24}\protected@file@percent }
+\@writefile{toc}{\contentsline {paragraph}{Agent Granularity.}{8}{section*.25}\protected@file@percent }
+\citation{asai2023selfrag,yan2024crag}
+\citation{sarthi2024raptor}
+\citation{wang2024e5mistral}
+\citation{nogueira2020reranking}
+\bibstyle{acl_natbib}
+\bibdata{references}
+\bibcite{grag2024}{{1}{2024{a}}{{gra}}{{}}}
+\bibcite{graphragcompliance2024}{{2}{2024{b}}{{gra}}{{}}}
+\@writefile{toc}{\contentsline {paragraph}{Graph as Scoping Mechanism.}{9}{section*.26}\protected@file@percent }
+\@writefile{toc}{\contentsline {paragraph}{LLM vs.\ Trained Router.}{9}{section*.27}\protected@file@percent }
+\@writefile{toc}{\contentsline {paragraph}{Limitations.}{9}{section*.28}\protected@file@percent }
+\@writefile{toc}{\contentsline {paragraph}{Generalizability.}{9}{section*.29}\protected@file@percent }
+\@writefile{toc}{\contentsline {section}{\numberline {9}Future Work}{9}{section.9}\protected@file@percent }
+\newlabel{sec:future_work}{{9}{9}{Future Work}{section.9}{}}
+\@writefile{toc}{\contentsline {paragraph}{Adaptive Retrieval.}{9}{section*.30}\protected@file@percent }
+\@writefile{toc}{\contentsline {paragraph}{Hierarchical Summarization.}{9}{section*.31}\protected@file@percent }
+\@writefile{toc}{\contentsline {paragraph}{Trained Router.}{9}{section*.32}\protected@file@percent }
+\@writefile{toc}{\contentsline {paragraph}{Entity-Augmented Search.}{9}{section*.33}\protected@file@percent }
+\@writefile{toc}{\contentsline {paragraph}{Cross-Organization Evaluation.}{9}{section*.34}\protected@file@percent }
+\@writefile{toc}{\contentsline {paragraph}{Domain-Adapted Embeddings.}{9}{section*.35}\protected@file@percent }
+\@writefile{toc}{\contentsline {paragraph}{Adaptive Chunking.}{9}{section*.36}\protected@file@percent }
+\@writefile{toc}{\contentsline {paragraph}{Learned Re-ranking.}{9}{section*.37}\protected@file@percent }
+\@writefile{toc}{\contentsline {section}{\numberline {10}Conclusion}{9}{section.10}\protected@file@percent }
+\bibcite{multiagentrag2024}{{3}{2024}{{mul}}{{}}}
+\bibcite{marag2025}{{4}{2025}{{mar}}{{}}}
+\bibcite{ragrouter2025}{{5}{2025{a}}{{rag}}{{}}}
+\bibcite{rag4cm2025}{{6}{2025{b}}{{rag}}{{}}}
+\bibcite{routerag2025}{{7}{2025}{{rou}}{{}}}
+\bibcite{arag2026}{{8}{2026}{{ara}}{{}}}
+\bibcite{allan1998topicdetection}{{9}{1998}{{Allan et~al.}}{{Allan, Carbonell, Doddington, Yamron, and Yang}}}
+\bibcite{asai2023selfrag}{{10}{2023}{{Asai et~al.}}{{Asai, Wu, Wang, Sil, and Hajishirzi}}}
+\bibcite{aurelio2024semanticrouter}{{11}{2024}{{Aurelio et~al.}}{{}}}
+\bibcite{barnett2024observations}{{12}{2024}{{Barnett et~al.}}{{Barnett, Kurniawan, Thudumu, Brber, and Horawalavithana}}}
+\bibcite{hybridrag2024}{{13}{2024}{{Basu and Barui}}{{}}}
+\bibcite{borgeaud2022retro}{{14}{2022}{{Borgeaud et~al.}}{{Borgeaud, Mensch, Hoffmann, Cai, Rutherford, Millican, van~den Driessche, Lespiau, Damoc, Clark et~al.}}}
+\bibcite{chen2017drqa}{{15}{2017}{{Chen et~al.}}{{Chen, Fajardo, Bolton, and Zettlemoyer}}}
+\bibcite{chen2024rgb}{{16}{2024{a}}{{Chen et~al.}}{{Chen, Lin, Han, and Sun}}}
+\bibcite{chen2024blendedrag}{{17}{2024{b}}{{Chen et~al.}}{{Chen, Wang, Liu et~al.}}}
+\bibcite{crewai2024}{{18}{2024}{{CrewAI}}{{}}}
+\bibcite{edge2024graphrag}{{19}{2024}{{Edge et~al.}}{{Edge, Trinh, Cheng, Bradley, Chao, Mody, Truitt, and Larson}}}
+\bibcite{es2024ragas}{{20}{2024}{{Es et~al.}}{{Es, James, Espinosa-Anke, and Schockaert}}}
+\bibcite{formal2021splade}{{21}{2021}{{Formal et~al.}}{{Formal, Piwowarski, and Clinchant}}}
+\bibcite{gao2023hyde}{{22}{2023}{{Gao et~al.}}{{Gao, Ma, Lin, and Callan}}}
+\bibcite{gao2024ragsurvey}{{23}{2024}{{Gao et~al.}}{{Gao, Xiong, Gao, Jia, Pan, Bi, Dai, Sun, and Wang}}}
+\bibcite{gunther2024latechunking}{{24}{2024}{{G{\"u}nther et~al.}}{{G{\"u}nther, Mohr, Williams, Wang, and Xiao}}}
+\bibcite{guo2020scann}{{25}{2020}{{Guo et~al.}}{{Guo, Sun, Lindgren, Geng, Simcha, Chern, and Kumar}}}
+\bibcite{guo2024lightrag}{{26}{2024}{{Guo et~al.}}{{Guo, Hao, Li et~al.}}}
+\bibcite{guu2020realm}{{27}{2020}{{Guu et~al.}}{{Guu, Lee, Tung, Pasupat, and Chang}}}
+\bibcite{huang2023hallucination}{{28}{2023}{{Huang et~al.}}{{Huang, Yu, Ma, Zhong, Feng, Wang, Chen, Peng, Feng, Qin, and Liu}}}
+\bibcite{huang2022planning}{{29}{2022}{{Huang et~al.}}{{Huang, Abbeel, Pathak, and Mordatch}}}
+\bibcite{izacard2021fid}{{30}{2021}{{Izacard and Grave}}{{}}}
+\bibcite{izacard2023atlas}{{31}{2023}{{Izacard et~al.}}{{Izacard, Lewis, Lomeli, Hosseini, Petroni, Schick, Dwivedi-Yu, Joulin, Riedel, and Grave}}}
+\bibcite{jeong2024adaptiverag}{{32}{2024}{{Jeong et~al.}}{{Jeong, Baek, Cho, Hwang, and Park}}}
+\bibcite{johnson2021faiss}{{33}{2021}{{Johnson et~al.}}{{Johnson, Douze, and J{\'e}gou}}}
+\bibcite{joshi2017triviaqa}{{34}{2017}{{Joshi et~al.}}{{Joshi, Choi, Weld, and Zettlemoyer}}}
+\bibcite{kamradt2024semantic}{{35}{2024}{{Kamradt}}{{}}}
+\bibcite{karpukhin2020dpr}{{36}{2020}{{Karpukhin et~al.}}{{Karpukhin, O{\u {g}}uz, Min, Lewis, Wu, Edunov, Chen, and Yih}}}
+\bibcite{khattab2020colbert}{{37}{2020}{{Khattab and Zaharia}}{{}}}
+\bibcite{kwiatkowski2019naturalquestions}{{38}{2019}{{Kwiatkowski et~al.}}{{Kwiatkowski, Palomaki, Redfield, Collins, Parikh, Alberti, Epstein, Polosukhin, Devlin, Lee et~al.}}}
+\bibcite{langchain2024parentdoc}{{39}{2024{a}}{{LangChain}}{{}}}
+\bibcite{langchain2024recursive}{{40}{2024{b}}{{LangChain}}{{}}}
+\bibcite{langchain2024textsplitters}{{41}{2024{c}}{{LangChain}}{{}}}
+\bibcite{lewis2020rag}{{42}{2020}{{Lewis et~al.}}{{Lewis, Perez, Piktus, Petroni, Karpukhin, Goyal, K{\"u}ttler, Lewis, Yih, Rockt{\"a}schel, Riedel, and Kiela}}}
+\bibcite{li2024bge}{{43}{2024{a}}{{Li et~al.}}{{Li, Shao, Liu, Xiao, Zhao, and Bai}}}
+\bibcite{li2024finrag}{{44}{2024{b}}{{Li et~al.}}{{}}}
+\bibcite{louis2024interpretable}{{45}{2024}{{Louis et~al.}}{{Louis, van Dijck, and Spanakis}}}
+\bibcite{ma2024hybridretrieval}{{46}{2024}{{Ma et~al.}}{{Ma, Liang, Wang, Yang, Wei, and Lin}}}
+\bibcite{malkov2020hnsw}{{47}{2020}{{Malkov and Yashunin}}{{}}}
+\bibcite{nguyen2016msmarco}{{48}{2016}{{Nguyen et~al.}}{{Nguyen, Rosenberg, Song, Gao, Tiwary, Majumder, and Deng}}}
+\bibcite{nogueira2020reranking}{{49}{2020}{{Nogueira et~al.}}{{Nogueira, Jiang, and Lin}}}
+\bibcite{pan2024kgllm}{{50}{2024}{{Pan et~al.}}{{Pan, Luo, Wang, Chen, Wang, and Wu}}}
+\bibcite{patil2023gorilla}{{51}{2023}{{Patil et~al.}}{{Patil, Zhang, Wang, and Gonzalez}}}
+\bibcite{peng2024graphragsurvey}{{52}{2024}{{Peng et~al.}}{{Peng, Galkin, Zhu, Dong, Mitra, Ren, Dwivedi-Yu et~al.}}}
+\bibcite{pipitone2024legalrag}{{53}{2024}{{Pipitone et~al.}}{{}}}
+\bibcite{press2023measuring}{{54}{2023}{{Press et~al.}}{{Press, Zhang, Min, Schmidt, Smith, and Lewis}}}
+\bibcite{qin2024toolllm}{{55}{2024}{{Qin et~al.}}{{Qin, Liang, Ye, Zhu, Yan, Lu, Lin, Cong, Tang, Qian et~al.}}}
+\bibcite{reimers2019sentencebert}{{56}{2019}{{Reimers and Gurevych}}{{}}}
+\bibcite{robertson2009bm25}{{57}{2009}{{Robertson and Zaragoza}}{{}}}
+\bibcite{saadfalcon2024ares}{{58}{2024}{{Saad-Falcon et~al.}}{{Saad-Falcon, Khattab, Potts, and Zaharia}}}
+\bibcite{santhanam2022colbertv2}{{59}{2022}{{Santhanam et~al.}}{{Santhanam, Khattab, Saad-Falcon, Potts, and Zaharia}}}
+\bibcite{sarthi2024raptor}{{60}{2024}{{Sarthi et~al.}}{{Sarthi, Abdullah, Tuli, Khanna, Goldie, and Manning}}}
+\bibcite{schick2023toolformer}{{61}{2023}{{Schick et~al.}}{{Schick, Dwivedi-Yu, Dess{\`\i }, Raileanu, Lomeli, Zettlemoyer, Cancedda, and Scialom}}}
+\bibcite{shuster2021retrieval}{{62}{2021}{{Shuster et~al.}}{{Shuster, Poff, Chen, Kiela, and Weston}}}
+\bibcite{singh2025agenticrag}{{63}{2025}{{Singh et~al.}}{{Singh, Ayush, Saini, and Tewari}}}
+\bibcite{soman2024kgrag}{{64}{2024}{{Soman et~al.}}{{Soman, Rose, Morris, Akbas, Smith, Peetoom, Villoutreix, and Baranzini}}}
+\bibcite{su2023instructor}{{65}{2023}{{Su et~al.}}{{Su, Shi, Kasai, Wang, Hu, Ostendorf, Yih, Smith, Zettlemoyer, and Yu}}}
+\bibcite{trajanoska2023kgconstruction}{{66}{2023}{{Trajanoska et~al.}}{{Trajanoska, Stojanov, and Trajanov}}}
+\bibcite{wang2024e5mistral}{{67}{2024}{{Wang et~al.}}{{Wang, Yang, Huang, Yang, Majumder, and Wei}}}
+\bibcite{wang2023query2doc}{{68}{2023}{{Wang et~al.}}{{Wang, Yang, and Wei}}}
+\bibcite{wei2022chainofthought}{{69}{2022}{{Wei et~al.}}{{Wei, Wang, Schuurmans, Bosma, Ichter, Xia, Chi, Le, and Zhou}}}
+\bibcite{wu2023autogen}{{70}{2023}{{Wu et~al.}}{{Wu, Bansal, Zhang, Wu, Li, Zhu, Jiang, Zhang, Zhang, Liu et~al.}}}
+\bibcite{xiong2024benchmarking}{{71}{2024}{{Xiong et~al.}}{{Xiong, Jin, Lu, and Zhang}}}
+\bibcite{xiong2021ance}{{72}{2021}{{Xiong et~al.}}{{Xiong, Xiong, Li, Tang, Liu, Bennett, Ahmed, and Overwijk}}}
+\bibcite{yan2024crag}{{73}{2024}{{Yan et~al.}}{{Yan, Gu, Zhu, and Ling}}}
+\bibcite{yang2024crag}{{74}{2024}{{Yang et~al.}}{{Yang, Sun, Xin, Sun, Bhalla, Chen, Cai, Dang et~al.}}}
+\bibcite{yao2024treeofthoughts}{{75}{2024}{{Yao et~al.}}{{Yao, Yu, Zhao, Shafran, Griffiths, Cao, and Narasimhan}}}
+\bibcite{yao2023react}{{76}{2023}{{Yao et~al.}}{{Yao, Zhao, Yu, Du, Shafran, Narasimhan, and Cao}}}
+\bibcite{zakka2024almanac}{{77}{2024}{{Zakka et~al.}}{{Zakka, Shad, Chaurasia, Dalber, Kim, Moor, Fong, Phillips, Alexander, Ashley et~al.}}}
+\bibcite{zhao2024ragsurvey2}{{78}{2024}{{Zhao et~al.}}{{Zhao, Zhang, Yu, Wang, Geng, Fu, Yang, Zhang, and Cui}}}
+\bibcite{zheng2024stepback}{{79}{2024}{{Zheng et~al.}}{{Zheng, Mishra, Chen, Cheng, Chi, Le, and Zhou}}}
+\bibcite{zhou2023leasttomost}{{80}{2023}{{Zhou et~al.}}{{Zhou, Sch{\"a}rli, Hou, Wei, Scales, Wang, Schuurmans, Cui, Bousquet, Le, and Chi}}}
+\bibcite{zohar2024multimetarag}{{81}{2024}{{Zohar and Wang}}{{}}}
+\@writefile{toc}{\contentsline {section}{\numberline {A}Routing Prompt}{13}{appendix.A}\protected@file@percent }
+\newlabel{app:routing_prompt}{{A}{13}{Routing Prompt}{appendix.A}{}}
+\@writefile{toc}{\contentsline {section}{\numberline {B}Agent Filters}{13}{appendix.B}\protected@file@percent }
+\newlabel{app:filters}{{B}{13}{Agent Filters}{appendix.B}{}}
+\@writefile{lot}{\contentsline {table}{\numberline {10}{\ignorespaces Agent document\_series filters.}}{13}{table.caption.41}\protected@file@percent }
+\newlabel{tab:filters}{{10}{13}{Agent document\_series filters}{table.caption.41}{}}
+\@writefile{toc}{\contentsline {section}{\numberline {C}Full Evaluation Results}{13}{appendix.C}\protected@file@percent }
+\newlabel{app:full_results}{{C}{13}{Full Evaluation Results}{appendix.C}{}}
+\@writefile{toc}{\contentsline {section}{\numberline {D}System Prompts}{13}{appendix.D}\protected@file@percent }
+\newlabel{app:prompts}{{D}{13}{System Prompts}{appendix.D}{}}
+\@writefile{lot}{\contentsline {table}{\numberline {11}{\ignorespaces Representative \textsc  {MASDR-RAG}{} results across query types. Full 57-query results in supplementary materials.}}{14}{table.caption.42}\protected@file@percent }
+\newlabel{tab:full_results}{{11}{14}{Representative \systemname {} results across query types. Full 57-query results in supplementary materials}{table.caption.42}{}}
+\gdef \@abspage@last{14}

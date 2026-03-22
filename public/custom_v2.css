@@ -205,6 +205,7 @@ body {
     border-color: var(--accent-color) !important;
     background: rgba(29, 114, 184, 0.06) !important;
 }
+
 /* PDF Modal Styling */
 .wy-modal {
     display: none;
@@ -228,15 +229,22 @@ body {
     width: 90%;
     height: 90%;
     border-radius: 12px;
-    box-shadow: 0 4px 24px rgba(0,0,0,0.2);
+    box-shadow: 0 4px 24px rgba(0, 0, 0, 0.2);
     display: flex;
     flex-direction: column;
     animation: modalFadeIn 0.2s ease-out;
 }
 
 @keyframes modalFadeIn {
-    from {opacity: 0; transform: scale(0.95);}
-    to {opacity: 1; transform: scale(1);}
+    from {
+        opacity: 0;
+        transform: scale(0.95);
+    }
+
+    to {
+        opacity: 1;
+        transform: scale(1);
+    }
 }
 
 .wy-modal-header {
@@ -325,11 +333,19 @@ body {
     pointer-events: none;
 }
 
-iframe, embed {
+iframe,
+embed {
     width: 100%;
     height: 100%;
     border: none;
     display: block;
     position: relative;
     z-index: 1;
+}
+
+/* Hide Theme Toggle Switch completely */
+button[id="theme-button"],
+button[aria-label*="theme" i],
+button[aria-label*="mode" i] {
+    display: none !important;
 }

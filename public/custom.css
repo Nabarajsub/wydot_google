@@ -5,12 +5,17 @@
 html,
 html[data-theme="dark"],
 html[data-theme] {
-    color-scheme: light !important;
+    color-scheme: light only !important;
     --background-primary: #ffffff;
+    --background: #ffffff;
     --text-primary: #1f1f1f;
     --input-bg: #f0f4f9;
     --accent-color: #1d72b8;
     /* WYDOT Blueish */
+    --paper-bg: #ffffff;
+    --surface: #ffffff;
+    --bg: #ffffff;
+    color-scheme: light only !important;
 }
 
 /* Force Chainlit to use light mode colors even if system is dark */
@@ -18,6 +23,31 @@ body,
 html {
     background-color: #ffffff !important;
     color: #1f1f1f !important;
+    color-scheme: light only !important;
+}
+
+/* Force white background on all Chainlit root containers */
+#root,
+#app,
+.MuiBox-root,
+[data-testid="main"],
+main {
+    background-color: #ffffff !important;
+    background: #ffffff !important;
+}
+
+/* Login page: force white background on all containers */
+body:has(form input[type="password"]) {
+    background-color: #ffffff !important;
+    background: #ffffff !important;
+}
+
+body:has(form input[type="password"]) #root,
+body:has(form input[type="password"]) main,
+body:has(form input[type="password"]) .MuiBox-root,
+body:has(form input[type="password"]) > div {
+    background-color: #ffffff !important;
+    background: #ffffff !important;
 }
 
 
@@ -354,7 +384,13 @@ embed {
 
 /* Login page: hide right-side Chainlit branding (pink graphic) so only the form shows */
 body:has(form input[type="password"]) main>div>div:last-child,
-body:has(form[action]) main div.flex>div:last-child,
 main div.grid>div:last-child {
+    display: none !important;
+}
+
+/* Hide Theme Toggle Switch completely */
+button[id="theme-button"],
+button[aria-label*="theme" i],
+button[aria-label*="mode" i] {
     display: none !important;
 }

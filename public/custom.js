@@ -1,11 +1,16 @@
-// Force light theme on load — override any saved dark mode preference
+// Force light theme IMMEDIATELY — runs synchronously before any rendering
 (function () {
     try {
         // Chainlit stores theme in localStorage as "chainlit-theme"
         localStorage.setItem("chainlit-theme", '"light"');
-        // Also set the HTML attribute Chainlit uses
+        // Set HTML attributes synchronously to prevent flash of dark theme
         document.documentElement.setAttribute("data-theme", "light");
         document.documentElement.style.colorScheme = "light";
+        document.documentElement.style.backgroundColor = "#ffffff";
+        // Inject critical style to prevent any dark flash before CSS loads
+        var s = document.createElement("style");
+        s.textContent = "html,body,#root,#app,.MuiBox-root,main{background:#fff!important;color:#1f1f1f!important;color-scheme:light only!important}";
+        document.head.appendChild(s);
     } catch (e) { }
 })();
 

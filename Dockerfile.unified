@@ -1,0 +1,55 @@
+FROM python:3.11-slim
+
+WORKDIR /app
+
+# Ensure Python output is visible in Cloud Run logs immediately
+ENV PYTHONUNBUFFERED=1
+ENV PYTHONDONTWRITEBYTECODE=1
+
+# Install system dependencies (superset of both services)
+RUN apt-get update && apt-get install -y \
+    build-essential \
+    curl \
+    libpq-dev \
+    && rm -rf /var/lib/apt/lists/*
+
+# Install dependencies (unified requirements)
+COPY requirements.unified.txt requirements.txt
+# Install CPU-only torch first to avoid downloading huge GPU libs (~200MB vs ~2GB)
+RUN pip install --no-cache-dir torch torchvision torchaudio --index-url https://download.pytorch.org/whl/cpu
+# Install remaining deps but skip torch (already installed as CPU-only above)
+RUN grep -v -E '^torch(vision|audio)?>=' requirements.txt > /tmp/requirements-no-torch.txt \
+    && pip install --no-cache-dir -r /tmp/requirements-no-torch.txt
+
+# Set environment variables for storage (Required for Cloud Run)
+ENV HF_HOME=/app/model_cache
+ENV CHAINLIT_FILES_DIRECTORY=/tmp/.files
+ENV CHAINLIT_DB_FILE=/tmp/chainlit.db
+ENV TELEMETRY_DB_PATH=/tmp/telemetry.sqlite3
+ENV EVAL_DB_PATH=/tmp/evaluation.sqlite3
+ENV HOME=/tmp
+
+# Bake the embedding model into the image to avoid runtime downloads
+RUN mkdir -p /app/model_cache && python -c "from sentence_transformers import SentenceTransformer; SentenceTransformer('sentence-transformers/all-MiniLM-L6-v2')"
+
+# Copy application code — chatbot + admin routes + ingestion service + agentic solution
+COPY graph_processing/chatapp_full.py ./chatapp_full.py
+COPY graph_processing/agentic_solution/ ./agentic_solution/
+COPY admin_routes.py .
+COPY utils/ utils/
+COPY ingestion_service/ ingestion_service/
+
+# Copy configuration and static assets (CRITICAL for Chainlit UI)
+COPY .chainlit/ .chainlit/
+COPY public/ public/
+COPY chainlit.md .
+
+# Pre-create directories that Chainlit tries to mkdir at import time.
+# Cloud Run has a read-only filesystem, so these must exist in the image.
+RUN mkdir -p /app/.files /tmp/.files /tmp/.chainlit /tmp/ingested_data
+
+# Expose port (Cloud Run expects 8080)
+EXPOSE 8080
+
+# Run the application — single Chainlit process serves both chatbot UI and admin routes
+CMD ["chainlit", "run", "chatapp_full.py", "--host", "0.0.0.0", "--port", "8080", "--headless"]
