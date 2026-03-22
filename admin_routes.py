@@ -38,12 +38,12 @@ from dotenv import load_dotenv
 
 logger = logging.getLogger("wydot.admin")
 
-# ── Config (shared with chatbot via same .env) ──
-NEO4J_URI = os.getenv("NEO4J_URI_GEMINI") or os.getenv("NEO4J_URI") or "neo4j+s://1c9edfe6.databases.neo4j.io"
-NEO4J_USERNAME = os.getenv("NEO4J_USERNAME_GEMINI") or os.getenv("NEO4J_USERNAME") or "neo4j"
-NEO4J_PASSWORD = os.getenv("NEO4J_PASSWORD_GEMINI") or os.getenv("NEO4J_PASSWORD")
-NEO4J_INDEX = os.getenv("NEO4J_INDEX_DEFAULT_GEMINI", os.getenv("NEO4J_INDEX_DEFAULT", "wydot_gemini_index"))
-NEO4J_DATABASE = os.getenv("NEO4J_DATABASE_GEMINI", os.getenv("NEO4J_DATABASE", "1c9edfe6"))
+# ── Config: must match chatbot (chatapp_full.py lines 337-341) exactly ──
+NEO4J_URI = os.getenv("NEO4J_URI_GEMINI", "neo4j+s://1c9edfe6.databases.neo4j.io")
+NEO4J_USERNAME = os.getenv("NEO4J_USERNAME_GEMINI", "1c9edfe6")
+NEO4J_PASSWORD = os.getenv("NEO4J_PASSWORD_GEMINI", "IlZpB7BG3sM34FQ5d_Juv5CidvCHvsMnoLkXHW18CSA")
+NEO4J_INDEX = os.getenv("NEO4J_INDEX_DEFAULT_GEMINI", "wydot_gemini_index")
+NEO4J_DATABASE = os.getenv("NEO4J_DATABASE_GEMINI", "1c9edfe6")
 GEMINI_API_KEY = os.getenv("GEMINI_API_KEY")
 GCS_BUCKET = os.getenv("GCS_BUCKET")
 ADMIN_PASSWORD = os.getenv("ADMIN_PASSWORD", "wydot-admin-2025")
