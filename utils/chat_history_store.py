@@ -227,6 +227,19 @@ class SQLiteChatHistoryStore(BaseChatHistoryStore):
                     pass
         self._conn.commit()
 
+        # Feedback context table: NO foreign keys — stores Q&A for any user (incl guests)
+        self._conn.execute("""
+            CREATE TABLE IF NOT EXISTS feedback_context (
+                cl_msg_id TEXT PRIMARY KEY,
+                question TEXT,
+                answer TEXT,
+                user_email TEXT,
+                sources TEXT,
+                ts REAL NOT NULL DEFAULT (strftime('%s','now'))
+            )
+        """)
+        self._conn.commit()
+
         # Seed guest user if not exists (same as CloudSQLChatHistoryStore)
         try:
             cur = self._conn.execute("SELECT id FROM users WHERE email='guest@app.local'")
@@ -464,6 +477,37 @@ class SQLiteChatHistoryStore(BaseChatHistoryStore):
         # Convert to Chainlit Step dict format if possible, or just raw for now
         return [{"role": r[0], "content": r[1], "createdAt": r[2], "id": str(r[3])} for r in rows]
 
+    def save_feedback_context(self, cl_msg_id: str, question: str = None, answer: str = None,
+                              user_email: str = None, sources=None) -> None:
+        """Save question/answer context when a message is sent, for later feedback lookup."""
+        import json
+        sources_json = json.dumps(sources) if sources and not isinstance(sources, str) else sources
+        with self._lock:
+            self._conn.execute(
+                "INSERT OR REPLACE INTO feedback_context (cl_msg_id, question, answer, user_email, sources) VALUES (?, ?, ?, ?, ?)",
+                (cl_msg_id, question, answer, user_email, sources_json)
+            )
+            self._conn.commit()
+
+    def get_feedback_context(self, cl_msg_id: str) -> Optional[Dict]:
+        """Look up saved feedback context by Chainlit message ID."""
+        import json
+        with self._lock:
+            cur = self._conn.execute(
+                "SELECT question, answer, user_email, sources FROM feedback_context WHERE cl_msg_id=?",
+                (cl_msg_id,)
+            )
+            row = cur.fetchone()
+            if not row:
+                return None
+            sources = None
+            if row[3]:
+                try:
+                    sources = json.loads(row[3])
+                except Exception:
+                    pass
+            return {"question": row[0], "answer": row[1], "user_email": row[2], "sources": sources}
+
     def upsert_feedback(self, feedback, question: str = None, answer: str = None, user_email: str = None) -> None:
         """Stored feedback from Chainlit (value 0 or 1).
         Accepts both Chainlit Feedback dataclass and plain dict."""
@@ -525,19 +569,20 @@ class SQLiteChatHistoryStore(BaseChatHistoryStore):
     def get_recent_feedback(self, limit: int = 50) -> List[Dict]:
         """Return detailed recent feedback."""
         with self._lock:
-            # Look up user email via messages table subquery (since sessions table doesn't exist)
+            # Use feedback_context table (no FK) as primary source, messages as fallback
             cur = self._conn.execute("""
                 SELECT f.value, f.comment, f.thread_id, f.ts,
-                       COALESCE(f.user_email, u.email, 'Anonymous') as user_email,
-                       COALESCE(f.question,
+                       COALESCE(f.user_email, fc.user_email, u.email, 'Anonymous') as user_email,
+                       COALESCE(f.question, fc.question,
                            (SELECT content FROM messages m2
                             WHERE m2.session_id = f.thread_id AND m2.role = 'user' AND m2.ts <= m_asst.ts
                             ORDER BY m2.ts DESC LIMIT 1)
                        ) as question,
-                       COALESCE(f.answer, m_asst.content) as answer,
-                       m_asst.sources as sources,
+                       COALESCE(f.answer, fc.answer, m_asst.content) as answer,
+                       COALESCE(fc.sources, m_asst.sources) as sources,
                        m_asst.cl_msg_id as cl_id
                 FROM feedback f
+                LEFT JOIN feedback_context fc ON f.for_id = fc.cl_msg_id
                 LEFT JOIN messages m_asst ON f.for_id = m_asst.cl_msg_id
                 LEFT JOIN users u ON m_asst.user_id = u.id
                 ORDER BY f.ts DESC LIMIT ?
@@ -797,6 +842,17 @@ class CloudSQLChatHistoryStore(BaseChatHistoryStore):
                 cur.execute("""
                     CREATE UNIQUE INDEX IF NOT EXISTS idx_feedback_for_id ON feedback(for_id);
                 """)
+                # Feedback context: NO foreign keys — stores Q&A for any user (incl guests)
+                cur.execute("""
+                    CREATE TABLE IF NOT EXISTS feedback_context (
+                        cl_msg_id TEXT PRIMARY KEY,
+                        question TEXT,
+                        answer TEXT,
+                        user_email TEXT,
+                        sources TEXT,
+                        ts TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+                    )
+                """)
                 # Seed guest user if it doesn't exist or ensure it is verified
                 print("   Seeding/updating guest user...", flush=True)
                 cur.execute("SELECT id FROM users WHERE email='guest@app.local'")
@@ -1044,6 +1100,48 @@ class CloudSQLChatHistoryStore(BaseChatHistoryStore):
         finally:
             conn.close()
 
+    def save_feedback_context(self, cl_msg_id: str, question: str = None, answer: str = None,
+                              user_email: str = None, sources=None) -> None:
+        """Save question/answer context when a message is sent, for later feedback lookup."""
+        import json
+        sources_json = json.dumps(sources) if sources and not isinstance(sources, str) else sources
+        conn = self._get_conn()
+        try:
+            with conn.cursor() as cur:
+                cur.execute("""
+                    INSERT INTO feedback_context (cl_msg_id, question, answer, user_email, sources)
+                    VALUES (%s, %s, %s, %s, %s)
+                    ON CONFLICT (cl_msg_id) DO UPDATE SET
+                        question=EXCLUDED.question, answer=EXCLUDED.answer,
+                        user_email=EXCLUDED.user_email, sources=EXCLUDED.sources
+                """, (cl_msg_id, question, answer, user_email, sources_json))
+            conn.commit()
+        finally:
+            conn.close()
+
+    def get_feedback_context(self, cl_msg_id: str) -> Optional[Dict]:
+        """Look up saved feedback context by Chainlit message ID."""
+        import json
+        conn = self._get_conn()
+        try:
+            with conn.cursor() as cur:
+                cur.execute(
+                    "SELECT question, answer, user_email, sources FROM feedback_context WHERE cl_msg_id=%s",
+                    (cl_msg_id,)
+                )
+                row = cur.fetchone()
+                if not row:
+                    return None
+                sources = None
+                if row[3]:
+                    try:
+                        sources = json.loads(row[3]) if isinstance(row[3], str) else row[3]
+                    except Exception:
+                        pass
+                return {"question": row[0], "answer": row[1], "user_email": row[2], "sources": sources}
+        finally:
+            conn.close()
+
     def upsert_feedback(self, feedback, question: str = None, answer: str = None, user_email: str = None) -> None:
         # Convert dataclass to dict if needed (Chainlit passes Feedback dataclass)
         if hasattr(feedback, '__dataclass_fields__'):
@@ -1099,16 +1197,17 @@ class CloudSQLChatHistoryStore(BaseChatHistoryStore):
             with conn.cursor() as cur:
                 cur.execute("""
                     SELECT f.value, f.comment, f.thread_id, extract(epoch from f.ts),
-                           COALESCE(f.user_email, u.email, 'Anonymous') as user_email,
-                           COALESCE(f.question,
+                           COALESCE(f.user_email, fc.user_email, u.email, 'Anonymous') as user_email,
+                           COALESCE(f.question, fc.question,
                                (SELECT content FROM messages m2
                                 WHERE m2.session_id = f.thread_id AND m2.role = 'user' AND m2.ts <= m_asst.ts
                                 ORDER BY m2.ts DESC LIMIT 1)
                            ) as question,
-                           COALESCE(f.answer, m_asst.content) as answer,
-                           m_asst.sources as sources,
+                           COALESCE(f.answer, fc.answer, m_asst.content) as answer,
+                           COALESCE(fc.sources, m_asst.sources) as sources,
                            m_asst.cl_msg_id as cl_id
                     FROM feedback f
+                    LEFT JOIN feedback_context fc ON f.for_id = fc.cl_msg_id
                     LEFT JOIN messages m_asst ON f.for_id = m_asst.cl_msg_id
                     LEFT JOIN users u ON m_asst.user_id = u.id
                     ORDER BY f.ts DESC LIMIT %s
