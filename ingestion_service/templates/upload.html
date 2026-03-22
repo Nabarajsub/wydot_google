@@ -1345,6 +1345,7 @@
                 <button class="tab-pill active" onclick="switchKgTab('browse')">📂 Browse Documents</button>
                 <button class="tab-pill" onclick="switchKgTab('search')">🔍 Semantic Search</button>
                 <button class="tab-pill" onclick="switchKgTab('edit')">✏️ Metadata Editor</button>
+                <button class="tab-pill" onclick="switchKgTab('graph')">🕸️ Graph Explorer</button>
             </div>
 
             <!-- KG STATS -->
@@ -1475,6 +1476,164 @@
                     </div>
                 </div>
             </div>
+
+            <!-- GRAPH EXPLORER SECTION -->
+            <div id="kgSection-graph" class="kg-section">
+
+                <!-- Graph Overview Stats -->
+                <div class="stats-row" id="graphOverviewStats">
+                    <div class="stat-card">
+                        <div class="label">Total Nodes</div>
+                        <div class="value" id="graphTotalNodes">—</div>
+                    </div>
+                    <div class="stat-card">
+                        <div class="label">Total Relationships</div>
+                        <div class="value" id="graphTotalRels">—</div>
+                    </div>
+                    <div class="stat-card">
+                        <div class="label">Documents</div>
+                        <div class="value" id="graphDocCount">—</div>
+                    </div>
+                    <div class="stat-card">
+                        <div class="label">Entities</div>
+                        <div class="value" id="graphEntityCount">—</div>
+                    </div>
+                </div>
+
+                <!-- Node Counts by Label -->
+                <div class="card" style="margin-bottom:1.25rem;">
+                    <div class="card-header">
+                        <div class="icon" style="background:#e0e7ff;">🏗️</div>
+                        Pipeline Phase Results — Node & Relationship Counts
+                        <button class="btn btn-outline btn-sm" onclick="loadGraphStats()" style="margin-left:auto;">🔄 Refresh</button>
+                    </div>
+                    <div class="card-body" style="padding:0;">
+                        <div style="display:grid; grid-template-columns:1fr 1fr; gap:1.25rem; padding:1.25rem;">
+                            <!-- Node Counts -->
+                            <div>
+                                <h4 style="margin:0 0 0.75rem; font-size:0.9rem; color:var(--text-secondary);">Node Labels</h4>
+                                <table>
+                                    <thead><tr><th>Label</th><th>Count</th><th>Phase</th></tr></thead>
+                                    <tbody id="graphNodeCountsBody">
+                                        <tr><td colspan="3" style="text-align:center; color:var(--text-muted);">Loading...</td></tr>
+                                    </tbody>
+                                </table>
+                            </div>
+                            <!-- Relationship Counts -->
+                            <div>
+                                <h4 style="margin:0 0 0.75rem; font-size:0.9rem; color:var(--text-secondary);">Relationship Types</h4>
+                                <table>
+                                    <thead><tr><th>Type</th><th>Count</th><th>Phase</th></tr></thead>
+                                    <tbody id="graphRelCountsBody">
+                                        <tr><td colspan="3" style="text-align:center; color:var(--text-muted);">Loading...</td></tr>
+                                    </tbody>
+                                </table>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Documents by Category -->
+                <div class="card" style="margin-bottom:1.25rem;">
+                    <div class="card-header">
+                        <div class="icon" style="background:#fef3c7;">📊</div>
+                        Documents by Category
+                    </div>
+                    <div class="card-body" style="padding:0;">
+                        <div style="display:grid; grid-template-columns:2fr 1fr; gap:1.25rem; padding:1.25rem;">
+                            <div class="table-wrap">
+                                <table>
+                                    <thead>
+                                        <tr><th>Category</th><th>Docs</th><th>Chunks</th><th>% Chk</th><th>Chk/Doc</th></tr>
+                                    </thead>
+                                    <tbody id="graphCategoryBody">
+                                        <tr><td colspan="5" style="text-align:center; color:var(--text-muted);">Loading...</td></tr>
+                                    </tbody>
+                                </table>
+                            </div>
+                            <div style="display:flex; align-items:center; justify-content:center;">
+                                <canvas id="categoryChart" width="300" height="300"></canvas>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Entity Analysis -->
+                <div class="card" style="margin-bottom:1.25rem;">
+                    <div class="card-header">
+                        <div class="icon" style="background:#ecfdf5;">🔗</div>
+                        Entity Analysis
+                    </div>
+                    <div class="card-body" style="padding:0;">
+                        <div style="display:grid; grid-template-columns:1fr 1fr; gap:1.25rem; padding:1.25rem;">
+                            <!-- Entity Types -->
+                            <div>
+                                <h4 style="margin:0 0 0.75rem; font-size:0.9rem; color:var(--text-secondary);">Entity Types</h4>
+                                <table>
+                                    <thead><tr><th>Type</th><th>Count</th></tr></thead>
+                                    <tbody id="graphEntityTypesBody">
+                                        <tr><td colspan="2" style="text-align:center; color:var(--text-muted);">Loading...</td></tr>
+                                    </tbody>
+                                </table>
+                                <div style="margin-top:1rem; padding:0.75rem; background:var(--bg); border-radius:8px; font-size:0.82rem; color:var(--text-secondary);">
+                                    <strong>Mention Stats:</strong><br>
+                                    <span id="mentionStatsText">Loading...</span>
+                                </div>
+                            </div>
+                            <!-- Top Entities -->
+                            <div>
+                                <h4 style="margin:0 0 0.75rem; font-size:0.9rem; color:var(--text-secondary);">Top Entities (by mentions)</h4>
+                                <table>
+                                    <thead><tr><th>Entity</th><th>Type</th><th>Mentions</th></tr></thead>
+                                    <tbody id="graphTopEntitiesBody">
+                                        <tr><td colspan="3" style="text-align:center; color:var(--text-muted);">Loading...</td></tr>
+                                    </tbody>
+                                </table>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Document Relationships & Version Chains -->
+                <div class="card" style="margin-bottom:1.25rem;">
+                    <div class="card-header">
+                        <div class="icon" style="background:#fce7f3;">🔀</div>
+                        Document Relationships & Version Chains
+                    </div>
+                    <div class="card-body" style="padding:0;">
+                        <div style="display:grid; grid-template-columns:1fr 1fr; gap:1.25rem; padding:1.25rem;">
+                            <!-- Doc Relationships -->
+                            <div>
+                                <h4 style="margin:0 0 0.75rem; font-size:0.9rem; color:var(--text-secondary);">Document-Level Relationships</h4>
+                                <table>
+                                    <thead><tr><th>Relationship</th><th>Count</th><th>Phase</th></tr></thead>
+                                    <tbody id="graphDocRelsBody">
+                                        <tr><td colspan="3" style="text-align:center; color:var(--text-muted);">Loading...</td></tr>
+                                    </tbody>
+                                </table>
+                            </div>
+                            <!-- Supersedes Chains -->
+                            <div>
+                                <h4 style="margin:0 0 0.75rem; font-size:0.9rem; color:var(--text-secondary);">Version Chains (SUPERSEDES)</h4>
+                                <div id="graphSupersedesBody" style="font-size:0.82rem; color:var(--text-secondary);">Loading...</div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Documents by Year -->
+                <div class="card" style="margin-bottom:1.25rem;">
+                    <div class="card-header">
+                        <div class="icon" style="background:#e0e7ff;">📅</div>
+                        Documents by Year
+                    </div>
+                    <div class="card-body">
+                        <canvas id="yearChart" width="600" height="250"></canvas>
+                    </div>
+                </div>
+
+            </div>
+
         </div>
 
     </div>
@@ -1878,6 +2037,7 @@
             document.getElementById(`kgSection-${tab}`).classList.add('active');
             event.target.classList.add('active');
             if (tab === 'edit') loadEditDropdown();
+            if (tab === 'graph') loadGraphStats();
         }
 
         // ===== KG EXPLORER: STATS =====
@@ -2355,6 +2515,191 @@
             if (canvasId === 'chart-latency') monChart1 = chart;
             else if (canvasId === 'chart-models') monChart2 = chart;
             else if (canvasId === 'chart-quality-trend') evalChart = chart;
+        }
+
+        // ===== KG GRAPH EXPLORER =====
+        let categoryChartInstance = null;
+        let yearChartInstance = null;
+
+        const PHASE_MAP = {
+            'HAS_SECTION': 'Phase 1: Structural',
+            'HAS_CHUNK': 'Phase 1: Structural',
+            'NEXT_CHUNK': 'Phase 1: Structural',
+            'MENTIONS': 'Phase 2: Entities',
+            'REQUIRES': 'Phase 2: Entities',
+            'REFERENCES': 'Phase 2: Entities',
+            'TESTED_BY': 'Phase 2: Entities',
+            'SPECIFIES': 'Phase 2: Entities',
+            'PART_OF': 'Phase 2/4',
+            'APPLIES_TO': 'Phase 2: Entities',
+            'SUPERSEDES': 'Phase 3: Supersedes',
+            'NEXT_IN_SERIES': 'Phase 4: Doc-Rels',
+            'SUPPLEMENTS': 'Phase 4: Doc-Rels',
+            'INSTRUCTIONS_FOR': 'Phase 4: Doc-Rels',
+            'COVERS_CORRIDOR': 'Phase 4: Doc-Rels',
+            'TEACHES': 'Phase 5: LLM-Rels',
+            'IMPLEMENTS': 'Phase 5: LLM-Rels',
+            'COMPANION_TO': 'Phase 5: LLM-Rels',
+            'GOVERNED_BY': 'Phase 5: LLM-Rels',
+            'AMENDS': 'Phase 5: LLM-Rels',
+        };
+        const NODE_PHASE_MAP = {
+            'Chunk': 'Phase 1: Structural',
+            'Document': 'Phase 1: Structural',
+            'Section': 'Phase 1: Structural',
+            'Entity': 'Phase 2: Entities',
+            'Corridor': 'Phase 4: Doc-Rels',
+        };
+        const CHART_COLORS = ['#003366','#f0a500','#10b981','#3b82f6','#ef4444','#8b5cf6','#ec4899','#14b8a6','#f59e0b','#6366f1','#84cc16','#06b6d4'];
+
+        async function loadGraphStats() {
+            try {
+                const [statsResp, entResp] = await Promise.all([
+                    fetch('/kg/graph-stats'),
+                    fetch('/kg/entities?limit=20')
+                ]);
+                const stats = await statsResp.json();
+                const entData = await entResp.json();
+
+                if (stats.error) {
+                    console.error('Graph stats error:', stats.error);
+                    return;
+                }
+
+                // Overview stats
+                document.getElementById('graphTotalNodes').textContent = (stats.total_nodes || 0).toLocaleString();
+                document.getElementById('graphTotalRels').textContent = (stats.total_relationships || 0).toLocaleString();
+                document.getElementById('graphDocCount').textContent = (stats.node_counts?.Document || 0).toLocaleString();
+                document.getElementById('graphEntityCount').textContent = (stats.node_counts?.Entity || 0).toLocaleString();
+
+                // Node counts table
+                const nc = stats.node_counts || {};
+                let nodeHtml = '';
+                for (const [label, count] of Object.entries(nc)) {
+                    if (count > 0) {
+                        nodeHtml += `<tr><td><strong>${label}</strong></td><td>${count.toLocaleString()}</td><td><span style="font-size:0.75rem; padding:2px 8px; border-radius:12px; background:#e0e7ff; color:#3b5998;">${NODE_PHASE_MAP[label] || '—'}</span></td></tr>`;
+                    }
+                }
+                document.getElementById('graphNodeCountsBody').innerHTML = nodeHtml || '<tr><td colspan="3" style="text-align:center;">No nodes found</td></tr>';
+
+                // Relationship counts table
+                const rc = stats.relationship_counts || {};
+                let relHtml = '';
+                for (const [relType, count] of Object.entries(rc)) {
+                    relHtml += `<tr><td><strong>${relType}</strong></td><td>${count.toLocaleString()}</td><td><span style="font-size:0.75rem; padding:2px 8px; border-radius:12px; background:#ecfdf5; color:#059669;">${PHASE_MAP[relType] || '—'}</span></td></tr>`;
+                }
+                document.getElementById('graphRelCountsBody').innerHTML = relHtml || '<tr><td colspan="3" style="text-align:center;">No relationships found</td></tr>';
+
+                // Category table
+                const cats = stats.categories || [];
+                let catHtml = '';
+                cats.forEach(c => {
+                    catHtml += `<tr><td><strong>${c.category}</strong></td><td>${c.docs}</td><td>${c.chunks.toLocaleString()}</td><td>${c.pct}%</td><td>${Math.round(c.avg_chunks_per_doc)}</td></tr>`;
+                });
+                const totalDocs = cats.reduce((s,c) => s + c.docs, 0);
+                catHtml += `<tr style="font-weight:700; border-top:2px solid var(--border);"><td>Total</td><td>${totalDocs}</td><td>${(stats.total_chunks||0).toLocaleString()}</td><td>100%</td><td>${totalDocs ? Math.round((stats.total_chunks||0)/totalDocs) : 0}</td></tr>`;
+                document.getElementById('graphCategoryBody').innerHTML = catHtml;
+
+                // Category pie chart
+                if (categoryChartInstance) categoryChartInstance.destroy();
+                const catLabels = cats.slice(0, 10).map(c => c.category);
+                const catValues = cats.slice(0, 10).map(c => c.chunks);
+                categoryChartInstance = new Chart(document.getElementById('categoryChart'), {
+                    type: 'doughnut',
+                    data: {
+                        labels: catLabels,
+                        datasets: [{ data: catValues, backgroundColor: CHART_COLORS.slice(0, catLabels.length), borderWidth: 1 }]
+                    },
+                    options: {
+                        responsive: true,
+                        plugins: {
+                            legend: { position: 'right', labels: { font: { size: 10 }, boxWidth: 12 } },
+                            title: { display: true, text: 'Chunks by Category', font: { size: 13 } }
+                        }
+                    }
+                });
+
+                // Entity types
+                const et = stats.entity_types || {};
+                let etHtml = '';
+                for (const [type, count] of Object.entries(et)) {
+                    etHtml += `<tr><td><strong>${type}</strong></td><td>${count.toLocaleString()}</td></tr>`;
+                }
+                document.getElementById('graphEntityTypesBody').innerHTML = etHtml || '<tr><td colspan="2" style="text-align:center;">No entities found (Phase 2 not run)</td></tr>';
+
+                // Mention stats
+                const ms = stats.mention_stats || {};
+                document.getElementById('mentionStatsText').innerHTML =
+                    `Total mentions: <strong>${(ms.total_mentions||0).toLocaleString()}</strong><br>` +
+                    `Chunks with entities: <strong>${(ms.chunks_with_entities||0).toLocaleString()}</strong><br>` +
+                    `Unique entities mentioned: <strong>${(ms.unique_entities||0).toLocaleString()}</strong>`;
+
+                // Top entities
+                const topEnts = (entData.entities || []);
+                let teHtml = '';
+                topEnts.forEach(e => {
+                    const typeColor = e.type === 'Material' ? '#f59e0b' : e.type === 'Standard' ? '#3b82f6' : e.type === 'Specification' ? '#8b5cf6' : '#10b981';
+                    teHtml += `<tr><td>${e.name}</td><td><span style="font-size:0.75rem; padding:2px 8px; border-radius:12px; background:${typeColor}20; color:${typeColor};">${e.type}</span></td><td>${e.mentions}</td></tr>`;
+                });
+                document.getElementById('graphTopEntitiesBody').innerHTML = teHtml || '<tr><td colspan="3" style="text-align:center;">No entities found</td></tr>';
+
+                // Document relationships
+                const dr = stats.document_relationships || {};
+                let drHtml = '';
+                for (const [relType, count] of Object.entries(dr)) {
+                    drHtml += `<tr><td><strong>${relType}</strong></td><td>${count}</td><td><span style="font-size:0.75rem; padding:2px 8px; border-radius:12px; background:#fce7f3; color:#be185d;">${PHASE_MAP[relType] || '—'}</span></td></tr>`;
+                }
+                document.getElementById('graphDocRelsBody').innerHTML = drHtml || '<tr><td colspan="3" style="text-align:center;">No document relationships found (Phases 3-5 not run)</td></tr>';
+
+                // Supersedes chains
+                const sup = stats.supersedes || [];
+                if (sup.length > 0) {
+                    let supHtml = '<div style="display:flex; flex-direction:column; gap:0.5rem;">';
+                    sup.forEach(s => {
+                        const conf = s.confidence ? ` (${Math.round(s.confidence*100)}% confidence)` : '';
+                        supHtml += `<div style="padding:0.5rem 0.75rem; background:var(--bg); border-radius:6px; border-left:3px solid var(--wydot-gold);">
+                            <strong>${s.newer}</strong> → supersedes → <strong>${s.older}</strong>${conf}</div>`;
+                    });
+                    supHtml += '</div>';
+                    document.getElementById('graphSupersedesBody').innerHTML = supHtml;
+                } else {
+                    document.getElementById('graphSupersedesBody').innerHTML = '<div style="padding:1rem; text-align:center; color:var(--text-muted);">No version chains found (Phase 3 not run)</div>';
+                }
+
+                // Year chart
+                const byYear = stats.by_year || [];
+                if (byYear.length > 0) {
+                    if (yearChartInstance) yearChartInstance.destroy();
+                    const yLabels = byYear.reverse().map(y => y.year);
+                    const yDocs = byYear.map(y => y.docs);
+                    yearChartInstance = new Chart(document.getElementById('yearChart'), {
+                        type: 'bar',
+                        data: {
+                            labels: yLabels,
+                            datasets: [{
+                                label: 'Documents',
+                                data: yDocs,
+                                backgroundColor: '#003366',
+                                borderRadius: 4
+                            }]
+                        },
+                        options: {
+                            responsive: true,
+                            plugins: {
+                                title: { display: true, text: 'Document Count by Year', font: { size: 13 } },
+                                legend: { display: false }
+                            },
+                            scales: {
+                                y: { beginAtZero: true, title: { display: true, text: 'Documents' } },
+                                x: { title: { display: true, text: 'Year' } }
+                            }
+                        }
+                    });
+                }
+
+            } catch (err) {
+                console.error('Graph stats load error:', err);
+            }
         }
 
         // Initialize
