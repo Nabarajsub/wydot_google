@@ -1793,9 +1793,11 @@
 
                     if (data.status === 'success') {
                         addLog(`   > Vectorizing ${data.chunks} chunks...`, 'info');
-                        addLog(`   ✅ ${data.chunks} chunks saved to Neo4j index '${data.index || 'wydot_vector_index'}'.`, 'success');
+                        addLog(`   ✅ ${data.chunks} chunks saved to Neo4j index '${data.index || 'wydot_gemini_index'}'.`, 'success');
                     } else {
-                        addLog(`   ❌ Failed: ${data.message}`, 'error');
+                        // Handle both {message: ...} and FastAPI {detail: ...} formats
+                        const errMsg = data.message || data.detail || JSON.stringify(data);
+                        addLog(`   ❌ Failed: ${errMsg}`, 'error');
                     }
                 } catch (err) {
                     addLog(`   ❌ Error: ${err.message}`, 'error');
