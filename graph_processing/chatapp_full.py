@@ -784,10 +784,24 @@ class WydotDataLayer(BaseDataLayer):
         import logging
         logger = logging.getLogger("chainlit")
         try:
-            CHAT_DB.upsert_feedback(feedback)
+            # Enrich feedback with question and user from session context
+            user = cl.user_session.get("user")
+            user_email = None
+            if user:
+                user_email = getattr(user, 'identifier', None) or user.metadata.get("email")
+            # Find the question that this feedback is for
+            question = None
+            history = cl.user_session.get("memory") or []
+            # Walk backwards through history to find the last user message before this assistant msg
+            for i in range(len(history) - 1, -1, -1):
+                if history[i].get("role") == "user":
+                    question = history[i].get("content", "")[:500]
+                    break
+            CHAT_DB.upsert_feedback(feedback, question=question, user_email=user_email)
             return True
         except Exception as e:
             logger.error(f"Error saving feedback: {e}")
+            import traceback; traceback.print_exc()
             return False
         
     async def delete_feedback(self, feedback_id):

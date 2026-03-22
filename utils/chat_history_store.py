@@ -209,9 +209,21 @@ class SQLiteChatHistoryStore(BaseChatHistoryStore):
                 user_id INTEGER,
                 value INTEGER NOT NULL,
                 comment TEXT,
+                question TEXT,
+                user_email TEXT,
                 ts REAL NOT NULL DEFAULT (strftime('%s','now'))
             )
         """)
+        # Add question/user_email columns if they don't exist (migration)
+        try:
+            self._conn.execute("SELECT question FROM feedback LIMIT 1")
+        except Exception:
+            try:
+                self._conn.execute("ALTER TABLE feedback ADD COLUMN question TEXT")
+                self._conn.execute("ALTER TABLE feedback ADD COLUMN user_email TEXT")
+                self._conn.commit()
+            except Exception:
+                pass
         self._conn.commit()
 
         # Seed guest user if not exists (same as CloudSQLChatHistoryStore)
@@ -419,18 +431,17 @@ class SQLiteChatHistoryStore(BaseChatHistoryStore):
         # Convert to Chainlit Step dict format if possible, or just raw for now
         return [{"role": r[0], "content": r[1], "createdAt": r[2], "id": str(r[3])} for r in rows]
 
-    def upsert_feedback(self, feedback) -> None:
+    def upsert_feedback(self, feedback, question: str = None, user_email: str = None) -> None:
         """Stored feedback from Chainlit (value 0 or 1).
         Accepts both Chainlit Feedback dataclass and plain dict."""
         import logging
         logger = logging.getLogger("chainlit")
-        
+
         # Convert dataclass to dict if needed
         if hasattr(feedback, '__dataclass_fields__'):
             import dataclasses
             fb = dataclasses.asdict(feedback)
         elif hasattr(feedback, 'forId'):
-            # Object with attributes
             fb = {
                 "forId": getattr(feedback, 'forId', None),
                 "threadId": getattr(feedback, 'threadId', None),
@@ -439,33 +450,26 @@ class SQLiteChatHistoryStore(BaseChatHistoryStore):
                 "id": getattr(feedback, 'id', None),
             }
         else:
-            fb = feedback  # Already a dict
-        
-        logger.info(f"[FEEDBACK] Saving feedback: forId={fb.get('forId')}, value={fb.get('value')}, comment={fb.get('comment')}, threadId={fb.get('threadId')}")
-        
+            fb = feedback
+
+        logger.info(f"[FEEDBACK] Saving feedback: forId={fb.get('forId')}, value={fb.get('value')}, comment={fb.get('comment')}, question={question[:50] if question else None}, user={user_email}")
+
         with self._lock:
-            # Check if exists
             cur = self._conn.execute("SELECT id FROM feedback WHERE for_id=?", (fb.get("forId"),))
             row = cur.fetchone()
-            
-            val = fb.get("value", 1)  # 1=up, 0=down
+
+            val = fb.get("value", 1)
             comment = fb.get("comment", "") or ""
-            
+
             if row:
                 self._conn.execute(
-                    "UPDATE feedback SET value=?, comment=?, ts=? WHERE id=?",
-                    (val, comment, time.time(), row[0])
+                    "UPDATE feedback SET value=?, comment=?, question=COALESCE(?, question), user_email=COALESCE(?, user_email), ts=? WHERE id=?",
+                    (val, comment, question, user_email, time.time(), row[0])
                 )
             else:
                 self._conn.execute(
-                    "INSERT INTO feedback (for_id, thread_id, value, comment, ts) VALUES (?, ?, ?, ?, ?)",
-                    (
-                        fb.get("forId"),
-                        fb.get("threadId"),
-                        val,
-                        comment,
-                        time.time()
-                    )
+                    "INSERT INTO feedback (for_id, thread_id, value, comment, question, user_email, ts) VALUES (?, ?, ?, ?, ?, ?, ?)",
+                    (fb.get("forId"), fb.get("threadId"), val, comment, question, user_email, time.time())
                 )
             self._conn.commit()
             logger.info(f"[FEEDBACK] Feedback saved successfully")
@@ -491,10 +495,12 @@ class SQLiteChatHistoryStore(BaseChatHistoryStore):
             # Look up user email via messages table subquery (since sessions table doesn't exist)
             cur = self._conn.execute("""
                 SELECT f.value, f.comment, f.thread_id, f.ts,
-                       COALESCE(u.email, 'Anonymous') as user_email,
-                       (SELECT content FROM messages m2 
-                        WHERE m2.session_id = f.thread_id AND m2.role = 'user' AND m2.ts <= m_asst.ts 
-                        ORDER BY m2.ts DESC LIMIT 1) as question,
+                       COALESCE(f.user_email, u.email, 'Anonymous') as user_email,
+                       COALESCE(f.question,
+                           (SELECT content FROM messages m2
+                            WHERE m2.session_id = f.thread_id AND m2.role = 'user' AND m2.ts <= m_asst.ts
+                            ORDER BY m2.ts DESC LIMIT 1)
+                       ) as question,
                        m_asst.sources as sources,
                        m_asst.cl_msg_id as cl_id
                 FROM feedback f
@@ -739,8 +745,20 @@ class CloudSQLChatHistoryStore(BaseChatHistoryStore):
                         user_id INTEGER,
                         value INTEGER NOT NULL,
                         comment TEXT,
+                        question TEXT,
+                        user_email TEXT,
                         ts TIMESTAMP DEFAULT CURRENT_TIMESTAMP
                     )
+                """)
+                # Migration: add question/user_email columns and unique index if missing
+                cur.execute("""
+                    DO $$ BEGIN
+                        ALTER TABLE feedback ADD COLUMN IF NOT EXISTS question TEXT;
+                        ALTER TABLE feedback ADD COLUMN IF NOT EXISTS user_email TEXT;
+                    END $$;
+                """)
+                cur.execute("""
+                    CREATE UNIQUE INDEX IF NOT EXISTS idx_feedback_for_id ON feedback(for_id);
                 """)
                 # Seed guest user if it doesn't exist or ensure it is verified
                 print("   Seeding/updating guest user...", flush=True)
@@ -953,7 +971,7 @@ class CloudSQLChatHistoryStore(BaseChatHistoryStore):
         finally:
             conn.close()
 
-    def upsert_feedback(self, feedback) -> None:
+    def upsert_feedback(self, feedback, question: str = None, user_email: str = None) -> None:
         # Convert dataclass to dict if needed (Chainlit passes Feedback dataclass)
         if hasattr(feedback, '__dataclass_fields__'):
             import dataclasses
@@ -972,9 +990,13 @@ class CloudSQLChatHistoryStore(BaseChatHistoryStore):
         try:
             with conn.cursor() as cur:
                 cur.execute("""
-                    INSERT INTO feedback (for_id, thread_id, user_id, value, comment)
-                    VALUES (%s, %s, %s, %s, %s)
-                """, (fb.get("forId"), fb.get("threadId"), fb.get("userId"), int(fb.get("value", 0)), fb.get("comment")))
+                    INSERT INTO feedback (for_id, thread_id, user_id, value, comment, question, user_email)
+                    VALUES (%s, %s, %s, %s, %s, %s, %s)
+                    ON CONFLICT (for_id) DO UPDATE SET value=EXCLUDED.value, comment=EXCLUDED.comment,
+                        question=COALESCE(EXCLUDED.question, feedback.question),
+                        user_email=COALESCE(EXCLUDED.user_email, feedback.user_email)
+                """, (fb.get("forId"), fb.get("threadId"), fb.get("userId"),
+                      int(fb.get("value", 0)), fb.get("comment"), question, user_email))
             conn.commit()
         finally:
             conn.close()
@@ -1003,10 +1025,12 @@ class CloudSQLChatHistoryStore(BaseChatHistoryStore):
             with conn.cursor() as cur:
                 cur.execute("""
                     SELECT f.value, f.comment, f.thread_id, extract(epoch from f.ts),
-                           COALESCE(u.email, 'Anonymous') as user_email,
-                           (SELECT content FROM messages m2 
-                            WHERE m2.session_id = f.thread_id AND m2.role = 'user' AND m2.ts <= m_asst.ts 
-                            ORDER BY m2.ts DESC LIMIT 1) as question,
+                           COALESCE(f.user_email, u.email, 'Anonymous') as user_email,
+                           COALESCE(f.question,
+                               (SELECT content FROM messages m2
+                                WHERE m2.session_id = f.thread_id AND m2.role = 'user' AND m2.ts <= m_asst.ts
+                                ORDER BY m2.ts DESC LIMIT 1)
+                           ) as question,
                            m_asst.sources as sources,
                            m_asst.cl_msg_id as cl_id
                     FROM feedback f
