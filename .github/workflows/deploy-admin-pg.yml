@@ -1,17 +1,9 @@
-name: Deploy Admin PostgreSQL Service to Cloud Run
+name: Deploy Admin PostgreSQL Service to Cloud Run (DISABLED - use unified)
 
+# DISABLED: This workflow is replaced by deploy-unified.yml which deploys
+# the unified service (chatbot + admin) as a single Docker container.
 on:
-  push:
-    branches:
-      - main
-    paths:
-      - 'ingestion_service/**'
-      - 'utils/chat_history_store.py'
-      - 'ingestion_service/tracker_db.py'
-      - 'cloudrun/admin-pg.yaml'
-      - '.github/workflows/deploy-admin-pg.yml'
-      - 'Dockerfile.admin'
-      - 'requirements.txt'
+  workflow_dispatch:  # Manual trigger only, no auto-deploy
 
 env:
   PROJECT_ID: ${{ secrets.GCP_PROJECT }}
