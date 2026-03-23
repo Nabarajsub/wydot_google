@@ -82,3 +82,48 @@ jobs:
             --project="${{ env.PROJECT_ID }}" \
             --member="allUsers" \
             --role="roles/run.invoker"
+
+      - name: 'Setup Keep-Alive Scheduler Jobs'
+        run: |-
+          SERVICE_URL=$(gcloud run services describe wydot-unified-pg \
+            --region="${{ env.REGION }}" \
+            --project="${{ env.PROJECT_ID }}" \
+            --format="value(status.url)")
+
+          # App keep-alive: every 4 minutes
+          gcloud scheduler jobs create http wydot-keepalive-app \
+            --project="${{ env.PROJECT_ID }}" \
+            --location="${{ env.REGION }}" \
+            --schedule="*/4 * * * *" \
+            --uri="${SERVICE_URL}/api/health" \
+            --http-method=GET \
+            --attempt-deadline=30s \
+            --description="Keep Cloud Run instance warm" \
+            2>/dev/null || \
+          gcloud scheduler jobs update http wydot-keepalive-app \
+            --project="${{ env.PROJECT_ID }}" \
+            --location="${{ env.REGION }}" \
+            --schedule="*/4 * * * *" \
+            --uri="${SERVICE_URL}/api/health" \
+            --http-method=GET \
+            --attempt-deadline=30s || echo "⚠️ Scheduler setup skipped"
+
+          # Neo4j keep-alive: every 10 minutes
+          gcloud scheduler jobs create http wydot-keepalive-neo4j \
+            --project="${{ env.PROJECT_ID }}" \
+            --location="${{ env.REGION }}" \
+            --schedule="*/10 * * * *" \
+            --uri="${SERVICE_URL}/api/health/neo4j" \
+            --http-method=GET \
+            --attempt-deadline=30s \
+            --description="Keep Neo4j Aura warm" \
+            2>/dev/null || \
+          gcloud scheduler jobs update http wydot-keepalive-neo4j \
+            --project="${{ env.PROJECT_ID }}" \
+            --location="${{ env.REGION }}" \
+            --schedule="*/10 * * * *" \
+            --uri="${SERVICE_URL}/api/health/neo4j" \
+            --http-method=GET \
+            --attempt-deadline=30s || echo "⚠️ Neo4j scheduler setup skipped"
+
+          echo "✅ Keep-alive scheduler jobs configured"
