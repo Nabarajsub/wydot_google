@@ -44,7 +44,7 @@ NEO4J_USERNAME = os.getenv("NEO4J_USERNAME_GEMINI", "1c9edfe6")
 NEO4J_PASSWORD = os.getenv("NEO4J_PASSWORD_GEMINI", "IlZpB7BG3sM34FQ5d_Juv5CidvCHvsMnoLkXHW18CSA")
 NEO4J_INDEX = os.getenv("NEO4J_INDEX_DEFAULT_GEMINI", "wydot_gemini_index")
 NEO4J_DATABASE = os.getenv("NEO4J_DATABASE_GEMINI", "1c9edfe6")
-GEMINI_API_KEY = os.getenv("GEMINI_API_KEY") or os.getenv("GOOGLE_API_KEY") or "AIzaSyClRA499mnQg5__yCs2ryt7tqg3dq3_Luk"
+GEMINI_API_KEY = os.getenv("GEMINI_API_KEY_V2") or os.getenv("GEMINI_API_KEY") or os.getenv("GOOGLE_API_KEY")
 GCS_BUCKET = os.getenv("GCS_BUCKET")
 ADMIN_PASSWORD = os.getenv("ADMIN_PASSWORD", "wydot-admin-2025")
 print(f"[ADMIN] Neo4j config: URI={NEO4J_URI}, DB={NEO4J_DATABASE}, Index={NEO4J_INDEX}, User={NEO4J_USERNAME}", flush=True)

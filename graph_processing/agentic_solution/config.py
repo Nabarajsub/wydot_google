@@ -6,18 +6,22 @@ import os
 from dotenv import load_dotenv
 from pathlib import Path
 
-# Load .env from graph_processing/
-_env_path = Path(__file__).resolve().parent.parent / ".env"
-load_dotenv(_env_path)
+# Load .env — prefer Cloud Run secrets path, then graph_processing/.env, then root .env
+_cloud_env = Path("/etc/secrets/.env")
+_gp_env = Path(__file__).resolve().parent.parent / ".env"
+_root_env = Path(__file__).resolve().parent.parent.parent / ".env"
+for _ep in [_cloud_env, _gp_env, _root_env]:
+    if _ep.exists():
+        load_dotenv(_ep, override=False)  # don't override already-set vars
 
 # ── Neo4j ──
-NEO4J_URI = os.getenv("NEO4J_URI", "neo4j+s://1c9edfe6.databases.neo4j.io")
-NEO4J_USERNAME = os.getenv("NEO4J_USERNAME", "1c9edfe6")
-NEO4J_PASSWORD = os.getenv("NEO4J_PASSWORD", "")
-NEO4J_DATABASE = os.getenv("NEO4J_DATABASE", "")
+NEO4J_URI = os.getenv("NEO4J_URI_GEMINI") or os.getenv("NEO4J_URI", "neo4j+s://1c9edfe6.databases.neo4j.io")
+NEO4J_USERNAME = os.getenv("NEO4J_USERNAME_GEMINI") or os.getenv("NEO4J_USERNAME", "1c9edfe6")
+NEO4J_PASSWORD = os.getenv("NEO4J_PASSWORD_GEMINI") or os.getenv("NEO4J_PASSWORD", "")
+NEO4J_DATABASE = os.getenv("NEO4J_DATABASE_GEMINI") or os.getenv("NEO4J_DATABASE", "1c9edfe6")
 
 # ── Gemini ──
-GEMINI_API_KEY = os.getenv("GEMINI_API_KEY", "")
+GEMINI_API_KEY = os.getenv("GEMINI_API_KEY_V2") or os.getenv("GEMINI_API_KEY", "")
 GEMINI_EMBED_MODEL = os.getenv("GEMINI_EMBED_MODEL", "gemini-embedding-001")
 GEMINI_LLM_MODEL = os.getenv("GEMINI_LLM_MODEL", "gemini-2.5-flash")
 

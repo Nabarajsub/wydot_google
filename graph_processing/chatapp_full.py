@@ -372,7 +372,7 @@ NEO4J_INDEX_2021 = os.getenv("NEO4J_INDEX_2021", "wydot_vector_index_2021")
 
 print("💬 Initializing API Keys...")
 MISTRAL_API_KEY = os.getenv("MISTRAL_API_KEY")
-GEMINI_API_KEY = os.getenv("GEMINI_API_KEY")
+GEMINI_API_KEY = os.getenv("GEMINI_API_KEY_V2") or os.getenv("GEMINI_API_KEY")
 OPENROUTER_API_KEY = os.getenv("OPENROUTER_API_KEY")
 
 # Mapping of model names (UI) to OpenRouter IDs
