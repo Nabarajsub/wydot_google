@@ -68,6 +68,7 @@ import re
 import datetime
 import json
 import time
+import asyncio
 import tempfile
 import traceback
 import urllib.parse
@@ -86,6 +87,19 @@ from flashrank import Ranker, RerankRequest
 from langchain_core.documents import Document
 from neo4j import GraphDatabase
 from collections import OrderedDict
+
+# ── Agentic multi-agent orchestrator (lazy-loaded) ──
+_agentic_available = False
+try:
+    from agentic_solution.orchestrator import (
+        run_orchestrator_async,
+        TOOL_DISPLAY_NAMES,
+        TOOL_AGENT_LABELS,
+    )
+    _agentic_available = True
+    print("✅ Agentic orchestrator loaded", flush=True)
+except ImportError as _agentic_err:
+    print(f"⚠️ Agentic orchestrator not available: {_agentic_err}", flush=True)
 
 # Module-level cache: maps Chainlit message ID -> {question, answer, user_email, sources}
 # Used by upsert_feedback callback (which runs without Chainlit session context)
@@ -1029,6 +1043,7 @@ async def on_chat_resume(thread: Dict):
                     values=["All Documents", "2021 Specs", "2010 Specs"],
                     initial_index=0,
                 ),
+                Switch(id="agentic_mode", label="Multi-Agent Mode (Domain Routing)", initial=False),
                 Switch(id="thinking_mode", label="Thinking Mode (Slower, Detailed)", initial=False),
                 Switch(id="multihop", label="Multi-hop Reasoning", initial=False),
                 Switch(id="reranking", label="Reranking (FlashRank)", initial=False),
@@ -1038,7 +1053,7 @@ async def on_chat_resume(thread: Dict):
         ).send()
         cl.user_session.set("settings", settings)
         cl.user_session.set("memory", [])
-        
+
         # Handle backward-compat session ID for old threads saved with "thread_" prefix
         user = cl.user_session.get("user")
         if user and user.metadata.get("db_id"):
@@ -2780,6 +2795,7 @@ async def start():
                 values=["All Documents", "2021 Specs", "2010 Specs"],
                 initial_index=0,
             ),
+            Switch(id="agentic_mode", label="Multi-Agent Mode (Domain Routing)", initial=False),
             Switch(id="thinking_mode", label="Thinking Mode (Slower, Detailed)", initial=False),
             Switch(id="multihop", label="Multi-hop Reasoning", initial=False),
             Switch(id="reranking", label="Reranking (FlashRank)", initial=False),
@@ -2873,6 +2889,146 @@ async def main(message: cl.Message):
             file_note = f" [Attached {len(files)} file(s)]"
             CHAT_DB.add_message(uid, session_id, "user", message.content + file_note, cl_msg_id=message.id)
             CHAT_DB.add_message(uid, session_id, "assistant", response, cl_msg_id=msg.id)
+
+        return
+
+    # ── 1b. AGENTIC MULTI-AGENT MODE ──
+    agentic_mode = settings.get("agentic_mode", False)
+    if agentic_mode and _agentic_available:
+        t0 = time.perf_counter()
+
+        # Live loading message that updates as agents work
+        loading_lines = ["**Multi-Agent Mode** — Routing to specialized agents...", ""]
+        await msg.stream_token("\n".join(loading_lines))
+        await msg.send()
+
+        loop = asyncio.get_event_loop()
+
+        def on_tool_call(event_type, tool_name, args, chunk_count):
+            """Callback from orchestrator — updates loading message live."""
+            if event_type == "start":
+                display = TOOL_DISPLAY_NAMES.get(tool_name, f"Calling {tool_name}...")
+                agent_label = TOOL_AGENT_LABELS.get(tool_name, "Agent")
+                query_arg = args.get("query", args.get("topic", args.get("section_number", "")))
+                loading_lines.append(f"{display}")
+                loading_lines.append(f"   *{agent_label} — \"{query_arg[:60]}\"*")
+                msg.content = "\n".join(loading_lines)
+                asyncio.run_coroutine_threadsafe(msg.update(), loop)
+            elif event_type == "done":
+                agent_label = TOOL_AGENT_LABELS.get(tool_name, "Agent")
+                loading_lines.append(f"   Returned **{chunk_count}** chunks")
+                loading_lines.append("")
+                msg.content = "\n".join(loading_lines)
+                asyncio.run_coroutine_threadsafe(msg.update(), loop)
+
+        try:
+            chat_history = cl.user_session.get("memory", [])
+            answer, sources_raw, tool_events = await run_orchestrator_async(
+                message.content, chat_history, on_tool_call=on_tool_call
+            )
+            elapsed = time.time() - t0
+
+            # Build agent routing header
+            agents_used = list(dict.fromkeys(e["agent_label"] for e in tool_events))
+            total_chunks = sum(e["chunk_count"] for e in tool_events)
+            agents_str = ", ".join(f"**{a}**" for a in agents_used)
+            header = f"*Agents: {agents_str} | {total_chunks} chunks | {elapsed:.1f}s*\n\n---\n\n"
+
+            # Normalize citations [SOURCE X] -> [Source X]
+            answer = re.sub(r'\[SOURCE\s+(\d+)', lambda m: f'[Source {m.group(1)}', answer, flags=re.IGNORECASE)
+
+            # Build source elements for side panel
+            clean_elements = []
+            formatted_sources = []
+            if sources_raw:
+                for i, s in enumerate(sources_raw[:20], 1):
+                    element_name = f"Source {i}"
+                    title = s.get("title", "Unknown Document")
+                    doc_source = s.get("source", "N/A")
+                    page = s.get("page", "N/A")
+                    section = s.get("section", "N/A")
+                    year = s.get("year", "N/A")
+                    text = s.get("text", "No content available.")
+
+                    formatted_sources.append({
+                        "index": i, "title": title, "source": doc_source,
+                        "page": page, "section": section, "year": year,
+                        "preview": text[:500],
+                    })
+
+                    # Only add if cited in answer
+                    answer_upper = answer.upper()
+                    if any(f"SOURCE {i}{c}" in answer_upper for c in ["]", ",", " ", "."]):
+                        clean_elements.append(
+                            cl.Text(
+                                name=element_name,
+                                content=f"**Source {i}: {title}**\n\n**File:** {doc_source}\n**Page:** {page}\n**Section:** {section}\n**Year:** {year}\n\n**Preview:**\n{text[:1500]}",
+                                display="side"
+                            )
+                        )
+
+            # Final message with header + answer + sources
+            msg.content = header + answer
+            msg.elements = clean_elements
+            await msg.update()
+
+            # ── Feedback context (same as regular flow) ──
+            user = cl.user_session.get("user")
+            _user_email = None
+            if user:
+                _user_email = getattr(user, 'identifier', None) or (user.metadata or {}).get("email")
+            _feedback_context[msg.id] = {
+                "question": message.content[:500],
+                "answer": answer[:1000],
+                "user_email": _user_email,
+                "sources": formatted_sources,
+            }
+            while len(_feedback_context) > _FEEDBACK_CTX_MAX:
+                _feedback_context.popitem(last=False)
+            try:
+                CHAT_DB.save_feedback_context(
+                    cl_msg_id=msg.id,
+                    question=message.content[:500],
+                    answer=answer[:1000],
+                    user_email=_user_email,
+                    sources=formatted_sources,
+                )
+            except Exception as e:
+                print(f"[WARN] Failed to save agentic feedback context: {e}")
+
+            # ── Chat history persistence (same as regular flow) ──
+            session_id = cl.user_session.get("session_id", "cl_session")
+            if user and user.metadata.get("db_id") and not user.metadata.get("is_guest"):
+                uid = user.metadata["db_id"]
+                conv_mem.append(uid, session_id, "user", message.content)
+                conv_mem.append(uid, session_id, "assistant", answer)
+                CHAT_DB.add_message(uid, session_id, "user", message.content, cl_msg_id=message.id)
+                CHAT_DB.add_message(uid, session_id, "assistant", answer, cl_msg_id=msg.id)
+            else:
+                memory = cl.user_session.get("memory", [])
+                memory.append({"role": "user", "content": message.content})
+                memory.append({"role": "assistant", "content": answer})
+                if len(memory) > 20:
+                    memory = memory[-20:]
+                cl.user_session.set("memory", memory)
+
+            # ── Telemetry ──
+            total_ms = (time.perf_counter() - t0) * 1000
+            telemetry.record_request(
+                retrieval_latency_ms=total_ms * 0.6,
+                generation_latency_ms=total_ms * 0.4,
+                total_latency_ms=total_ms,
+                num_sources=len(formatted_sources),
+                model_used="Gemini (Agentic)",
+                index_used="multi-agent",
+                has_error=False,
+            )
+
+        except Exception as e:
+            msg.content = f"**Error in Multi-Agent Mode:** {str(e)}"
+            await msg.update()
+            print(f"[AGENTIC ERROR] {e}", flush=True)
+            traceback.print_exc()
 
         return
 
