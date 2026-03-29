@@ -1037,17 +1037,8 @@ async def on_chat_resume(thread: Dict):
                     values=["Mistral Large", "Gemini 2.5 Flash"] + list(OPENROUTER_MODELS.keys()),
                     initial_index=1,
                 ),
-                Select(
-                    id="index",
-                    label="Document Index",
-                    values=["All Documents", "2021 Specs", "2010 Specs"],
-                    initial_index=0,
-                ),
                 Switch(id="agentic_mode", label="Multi-Agent Mode (Domain Routing)", initial=False),
-                Switch(id="thinking_mode", label="Thinking Mode (Slower, Detailed)", initial=False),
-                Switch(id="multihop", label="Multi-hop Reasoning", initial=False),
-                Switch(id="reranking", label="Reranking (FlashRank)", initial=False),
-                Switch(id="hyde", label="HyDE (Query Expansion)", initial=False),
+                Switch(id="multihop", label="Multi-hop Reasoning (HyDE + Reranking)", initial=False),
                 Slider(id="fetch_k", label="Initial Candidates (FETCH_K)", min=10, max=100, step=5, initial=15),
             ]
         ).send()
@@ -2790,18 +2781,12 @@ async def start():
                 values=["Mistral Large", "Gemini 2.5 Flash"] + list(OPENROUTER_MODELS.keys()),
                 initial_index=1,
             ),
-            Select(
-                id="index",
-                label="Document Index",
-                values=["All Documents", "2021 Specs", "2010 Specs"],
-                initial_index=0,
-            ),
             Switch(id="agentic_mode", label="Multi-Agent Mode (Domain Routing)", initial=False),
             Switch(id="multihop", label="Multi-hop Reasoning (HyDE + Reranking)", initial=False),
             Slider(id="fetch_k", label="Initial Candidates (FETCH_K)", min=10, max=100, step=5, initial=15),
         ]
     ).send()
-    
+
     cl.user_session.set("settings", settings)
     
     # Send welcome message
@@ -2819,12 +2804,9 @@ async def setup_agent(settings):
 @cl.on_message
 async def main(message: cl.Message):
     settings = cl.user_session.get("settings") or {}
-    model_choice = settings.get("model", "Mistral Large")
-    index_choice = settings.get("index", "All Documents")
+    model_choice = settings.get("model", "Gemini 2.5 Flash")
     multihop = settings.get("multihop", False)
-    
-    index_map = {"All Documents": NEO4J_INDEX_DEFAULT, "2021 Specs": NEO4J_INDEX_2021}
-    index_name = index_map.get(index_choice, NEO4J_INDEX_DEFAULT)
+    index_name = NEO4J_INDEX_DEFAULT
     
     # MULTIMODAL HANDLING
     files = message.elements
@@ -2946,19 +2928,22 @@ async def main(message: cl.Message):
                     section = s.get("section", "N/A")
                     year = s.get("year", "N/A")
                     text = s.get("text", "No content available.")
+                    gcs_uri = s.get("gcs_uri", s.get("url", ""))
+                    public_url = generate_public_url(gcs_uri) if gcs_uri else ""
 
                     formatted_sources.append({
                         "index": i, "title": title, "source": doc_source,
                         "page": page, "section": section, "year": year,
-                        "preview": text[:500],
+                        "preview": text[:500], "url": public_url,
                     })
 
                     # Add source element if cited (check multiple patterns)
                     if f"Source {i}" in answer or f"source {i}" in answer.lower() or f"SOURCE {i}" in answer.upper():
+                        file_link = f"[{doc_source}]({public_url})" if public_url else doc_source
                         clean_elements.append(
                             cl.Text(
                                 name=element_name,
-                                content=f"**Source {i}: {title}**\n\n**File:** {doc_source}\n**Page:** {page}\n**Section:** {section}\n**Year:** {year}\n\n**Preview:**\n{text[:1500]}",
+                                content=f"**Source {i}: {title}**\n\n**File:** {file_link}\n**Page:** {page}\n**Section:** {section}\n**Year:** {year}\n\n**Preview:**\n{text[:1500]}",
                                 display="side"
                             )
                         )
