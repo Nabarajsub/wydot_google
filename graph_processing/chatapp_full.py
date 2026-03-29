@@ -1037,17 +1037,8 @@ async def on_chat_resume(thread: Dict):
                     values=["Mistral Large", "Gemini 2.5 Flash"] + list(OPENROUTER_MODELS.keys()),
                     initial_index=1,
                 ),
-                Select(
-                    id="index",
-                    label="Document Index",
-                    values=["All Documents", "2021 Specs", "2010 Specs"],
-                    initial_index=0,
-                ),
                 Switch(id="agentic_mode", label="Multi-Agent Mode (Domain Routing)", initial=False),
-                Switch(id="thinking_mode", label="Thinking Mode (Slower, Detailed)", initial=False),
-                Switch(id="multihop", label="Multi-hop Reasoning", initial=False),
-                Switch(id="reranking", label="Reranking (FlashRank)", initial=False),
-                Switch(id="hyde", label="HyDE (Query Expansion)", initial=False),
+                Switch(id="multihop", label="Multi-hop Reasoning (HyDE + Reranking)", initial=False),
                 Slider(id="fetch_k", label="Initial Candidates (FETCH_K)", min=10, max=100, step=5, initial=15),
             ]
         ).send()
@@ -1826,8 +1817,9 @@ async def search_graph_async(query: str, index_name: str, use_gemini: bool = Fal
     k_val = int(settings.get("fetch_k", FETCH_K))
     
     try:
-        # HyDE expansion if enabled
-        hyde_enabled = settings.get("hyde", False)
+        # HyDE expansion — auto-enabled when Multi-hop Reasoning is on
+        multihop_on = settings.get("multihop", False)
+        hyde_enabled = multihop_on
         search_query = query
         if hyde_enabled:
             print("🧪 HyDE enabled: generating hypothetical snippet...")
@@ -2010,8 +2002,8 @@ async def search_graph_async(query: str, index_name: str, use_gemini: bool = Fal
 
         pass  # Driver managed by connection pool singleton
 
-        # --- FlashRank Reranking (only if enabled in settings) ---
-        reranking_enabled = settings.get("reranking", False)
+        # --- FlashRank Reranking — auto-enabled when Multi-hop Reasoning is on ---
+        reranking_enabled = multihop_on
         if chunks and reranking_enabled:
             ranker = get_reranker()
             if ranker:
@@ -2240,8 +2232,8 @@ def search_graph(query: str, index_name: str, use_gemini: bool = False) -> Tuple
         
         pass  # Driver managed by connection pool singleton
 
-        # --- FlashRank Reranking (only if enabled in settings) ---
-        reranking_enabled = settings.get("reranking", False) if 'settings' in dir() else False
+        # --- FlashRank Reranking — auto-enabled when Multi-hop is on ---
+        reranking_enabled = settings.get("multihop", False) if 'settings' in dir() else False
         if chunks and reranking_enabled:
             ranker = get_reranker()
             if ranker:
@@ -2789,21 +2781,12 @@ async def start():
                 values=["Mistral Large", "Gemini 2.5 Flash"] + list(OPENROUTER_MODELS.keys()),
                 initial_index=1,
             ),
-            Select(
-                id="index",
-                label="Document Index",
-                values=["All Documents", "2021 Specs", "2010 Specs"],
-                initial_index=0,
-            ),
             Switch(id="agentic_mode", label="Multi-Agent Mode (Domain Routing)", initial=False),
-            Switch(id="thinking_mode", label="Thinking Mode (Slower, Detailed)", initial=False),
-            Switch(id="multihop", label="Multi-hop Reasoning", initial=False),
-            Switch(id="reranking", label="Reranking (FlashRank)", initial=False),
-            Switch(id="hyde", label="HyDE (Query Expansion)", initial=False),
+            Switch(id="multihop", label="Multi-hop Reasoning (HyDE + Reranking)", initial=False),
             Slider(id="fetch_k", label="Initial Candidates (FETCH_K)", min=10, max=100, step=5, initial=15),
         ]
     ).send()
-    
+
     cl.user_session.set("settings", settings)
     
     # Send welcome message
@@ -2821,13 +2804,9 @@ async def setup_agent(settings):
 @cl.on_message
 async def main(message: cl.Message):
     settings = cl.user_session.get("settings") or {}
-    model_choice = settings.get("model", "Mistral Large")
-    index_choice = settings.get("index", "All Documents")
-    thinking_mode = settings.get("thinking_mode", False)
+    model_choice = settings.get("model", "Gemini 2.5 Flash")
     multihop = settings.get("multihop", False)
-    
-    index_map = {"All Documents": NEO4J_INDEX_DEFAULT, "2021 Specs": NEO4J_INDEX_2021}
-    index_name = index_map.get(index_choice, NEO4J_INDEX_DEFAULT)
+    index_name = NEO4J_INDEX_DEFAULT
     
     # MULTIMODAL HANDLING
     files = message.elements
@@ -2935,7 +2914,7 @@ async def main(message: cl.Message):
             header = f"*Agents: {agents_str} | {total_chunks} chunks | {elapsed:.1f}s*\n\n---\n\n"
 
             # Normalize citations [SOURCE X] -> [Source X]
-            answer = re.sub(r'\[SOURCE\s+(\d+)', lambda m: f'[Source {m.group(1)}', answer, flags=re.IGNORECASE)
+            answer = re.sub(r'\[SOURCE[\s_]+(\d+)', lambda m: f'[Source {m.group(1)}', answer, flags=re.IGNORECASE)
 
             # Build source elements for side panel
             clean_elements = []
@@ -2949,20 +2928,32 @@ async def main(message: cl.Message):
                     section = s.get("section", "N/A")
                     year = s.get("year", "N/A")
                     text = s.get("text", "No content available.")
+                    gcs_uri = s.get("gcs_uri", s.get("url", ""))
+                    public_url = generate_public_url(gcs_uri) if gcs_uri else ""
+
+                    # Build clickable GCS URL from source filename
+                    gcs_uri = s.get("gcs_uri", "")
+                    if not gcs_uri and doc_source and doc_source != "N/A":
+                        project_id = os.getenv("GOOGLE_CLOUD_PROJECT") or os.getenv("GCP_PROJECT")
+                        if project_id:
+                            gcs_uri = f"gs://wydot-documents-{project_id}/wydot documents/{doc_source}"
+                    public_url = generate_public_url(gcs_uri)
+                    if public_url and page and page != "N/A":
+                        public_url += f"#page={page}"
 
                     formatted_sources.append({
                         "index": i, "title": title, "source": doc_source,
                         "page": page, "section": section, "year": year,
-                        "preview": text[:500],
+                        "preview": text[:500], "url": public_url,
                     })
 
-                    # Only add if cited in answer
-                    answer_upper = answer.upper()
-                    if any(f"SOURCE {i}{c}" in answer_upper for c in ["]", ",", " ", "."]):
+                    # Add source element if cited (check multiple patterns)
+                    if f"Source {i}" in answer or f"source {i}" in answer.lower() or f"SOURCE {i}" in answer.upper():
+                        file_link = f"[{doc_source}]({public_url})" if public_url else doc_source
                         clean_elements.append(
                             cl.Text(
                                 name=element_name,
-                                content=f"**Source {i}: {title}**\n\n**File:** {doc_source}\n**Page:** {page}\n**Section:** {section}\n**Year:** {year}\n\n**Preview:**\n{text[:1500]}",
+                                content=f"**Source {i}: {title}**\n\n**File:** {file_link}\n**Page:** {page}\n**Section:** {section}\n**Year:** {year}\n\n**Preview:**\n{text[:1500]}",
                                 display="side"
                             )
                         )
@@ -3037,10 +3028,7 @@ async def main(message: cl.Message):
     await msg.stream_token(" **Thinking...**\n")
     
     use_gemini = "Gemini" in model_choice
-    if thinking_mode:
-        # SYNC (Blocking) Search
-        context, sources = search_graph(message.content, index_name)
-    elif multihop:
+    if multihop:
         # INTENT ROUTING & ADVANCED GRAPH SEARCH
         await msg.stream_token(" **Analyzing query intent...**\n")
         intent = await route_query_intent(message.content, use_gemini)
@@ -3095,32 +3083,21 @@ async def main(message: cl.Message):
 
     t_gen_start = time.perf_counter()
     
-    # Streaming vs Sync Generation
+    # Streaming Generation
     full_answer = ""
     try:
-        if thinking_mode:
-            # SYNC Generation (Wait for full answer)
-            if model_type == "gemini":
-                full_answer = generate_answer_gemini(message.content, context, history_msgs, enhanced_citations=True)
-            elif model_type == "mistral":
-                full_answer = generate_answer_mistral(message.content, context, history_msgs, enhanced_citations=True)
-            else:
-                full_answer = await generate_answer_openrouter(model_id, message.content, context, history_msgs, enhanced_citations=True)
-            await msg.stream_token(full_answer) # Send all at once
+        if model_type == "gemini":
+            async for chunk in generate_answer_gemini_stream(message.content, context, history_msgs, enhanced_citations=True):
+                await msg.stream_token(chunk)
+                full_answer += chunk
+        elif model_type == "mistral":
+            async for chunk in generate_answer_mistral_stream(message.content, context, history_msgs, enhanced_citations=True):
+                await msg.stream_token(chunk)
+                full_answer += chunk
         else:
-            # ASYNC / Streaming Generation
-            if model_type == "gemini":
-                async for chunk in generate_answer_gemini_stream(message.content, context, history_msgs, enhanced_citations=True):
-                    await msg.stream_token(chunk)
-                    full_answer += chunk
-            elif model_type == "mistral":
-                async for chunk in generate_answer_mistral_stream(message.content, context, history_msgs, enhanced_citations=True):
-                    await msg.stream_token(chunk)
-                    full_answer += chunk
-            else:
-                async for chunk in generate_answer_openrouter_stream(model_id, message.content, context, history_msgs, enhanced_citations=True):
-                    await msg.stream_token(chunk)
-                    full_answer += chunk
+            async for chunk in generate_answer_openrouter_stream(model_id, message.content, context, history_msgs, enhanced_citations=True):
+                await msg.stream_token(chunk)
+                full_answer += chunk
                     
     except Exception as e:
         error_text = f"\n\n⚠️ Error during generation: {e}"
