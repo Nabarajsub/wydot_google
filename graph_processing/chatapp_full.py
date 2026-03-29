@@ -2931,6 +2931,16 @@ async def main(message: cl.Message):
                     gcs_uri = s.get("gcs_uri", s.get("url", ""))
                     public_url = generate_public_url(gcs_uri) if gcs_uri else ""
 
+                    # Build clickable GCS URL from source filename
+                    gcs_uri = s.get("gcs_uri", "")
+                    if not gcs_uri and doc_source and doc_source != "N/A":
+                        project_id = os.getenv("GOOGLE_CLOUD_PROJECT") or os.getenv("GCP_PROJECT")
+                        if project_id:
+                            gcs_uri = f"gs://wydot-documents-{project_id}/wydot documents/{doc_source}"
+                    public_url = generate_public_url(gcs_uri)
+                    if public_url and page and page != "N/A":
+                        public_url += f"#page={page}"
+
                     formatted_sources.append({
                         "index": i, "title": title, "source": doc_source,
                         "page": page, "section": section, "year": year,
