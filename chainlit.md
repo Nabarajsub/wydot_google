@@ -2,12 +2,23 @@
 
 This is your AI-powered assistant for the Wyoming Department of Transportation. It uses advanced Graph based RAG (Retrieval-Augmented Generation) to answer questions based on official specifications, manuals, and reports.
 
+## 🧠 Advanced Reasoning Features
+
+To get the most out of the WYDOT Assistant, you can enable these advanced modes in the **Settings** menu (sidebar):
+
+### 1. Agentic reasoning
+When enabled, the chatbot uses an **Orchestrator Agent**. Instead of just searching for text, the AI "reasons" about your question, picks the best tools to find the answer, and cross-references multiple sources to ensure accuracy. It acts like a digital engineer who knows exactly where to look.
+
+### 2. Multi-hop Reasoning
+This allows the AI to "hop" across different documents and data points. For example, it can find a person in one manual, their job role in another, and the specific equipment they manage in a third—all in one answer. It connects the dots for you automatically.
+
+---
+
 ##  Key Features
--  Multi-Document Search: Instantly searches across thousands of pages of WYDOT documents.
--  Multi-Hop Reasoning: Can connect facts from different sections (e.g., relating material specs to construction methods).
--  Voice Support: Click the microphone icon to ask questions verbally.
--  Multimodal Analysis: Upload images or PDFs, and the AI will analyze them using Google Gemini models.
--  Citation Tracking: Every answer provides clickable sources so you can verify the information.
+-  **Multi-Document Search**: Instantly searches across thousands of pages of WYDOT documents.
+-  **Voice Support**: Click the microphone icon to ask questions verbally.
+-  **Multimodal Analysis**: Upload images or PDFs, and the AI will analyze them using Google Gemini models.
+-  **Citation Tracking**: Every answer provides clickable sources so you can verify the information.
 
 ## 💡 How to Ask Better Questions
  To get the **excel best** results, try to be specific and use the metadata fields our system tracks:
