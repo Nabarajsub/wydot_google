@@ -3,13 +3,13 @@ kind: Service
 metadata:
   name: wydot-unified-pg
   annotations:
-    run.googleapis.com/minScale: "1"
+    run.googleapis.com/minScale: "0"
 spec:
   template:
     metadata:
       annotations:
         run.googleapis.com/startup-cpu-boost: "true"
-        run.googleapis.com/cpu-throttling: "false"
+        run.googleapis.com/cpu-throttling: "true"
         run.googleapis.com/cloudsql-instances: ${PROJECT_ID}:us-central1:wydot-db-instance
     spec:
       serviceAccountName: cloud-run-sa@${PROJECT_ID}.iam.gserviceaccount.com
@@ -53,8 +53,8 @@ spec:
         - containerPort: 8080
         resources:
           limits:
-            memory: "2Gi"
-            cpu: "2"
+            memory: "1Gi"
+            cpu: "1"
         startupProbe:
           httpGet:
             path: /

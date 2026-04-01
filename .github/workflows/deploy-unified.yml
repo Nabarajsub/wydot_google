@@ -90,11 +90,11 @@ jobs:
             --project="${{ env.PROJECT_ID }}" \
             --format="value(status.url)")
 
-          # App keep-alive: every 4 minutes
+          # App keep-alive: every 10 minutes
           gcloud scheduler jobs create http wydot-keepalive-app \
             --project="${{ env.PROJECT_ID }}" \
             --location="${{ env.REGION }}" \
-            --schedule="*/4 * * * *" \
+            --schedule="*/10 * * * *" \
             --uri="${SERVICE_URL}/api/health" \
             --http-method=GET \
             --attempt-deadline=30s \
@@ -103,7 +103,7 @@ jobs:
           gcloud scheduler jobs update http wydot-keepalive-app \
             --project="${{ env.PROJECT_ID }}" \
             --location="${{ env.REGION }}" \
-            --schedule="*/4 * * * *" \
+            --schedule="*/10 * * * *" \
             --uri="${SERVICE_URL}/api/health" \
             --http-method=GET \
             --attempt-deadline=30s || echo "⚠️ Scheduler setup skipped"
