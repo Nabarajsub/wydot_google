@@ -1,0 +1,27 @@
+/* Fix dark feedback modal text visibility in light mode */
+.MuiDialog-root .MuiInputBase-root {
+    background-color: #ffffff !important;
+    color: #111111 !important;
+}
+
+.MuiDialog-root .MuiInputBase-input {
+    color: #111111 !important;
+    -webkit-text-fill-color: #111111 !important; /* Fix for some browsers */
+}
+
+/* Ensure the label/placeholder is visible */
+.MuiDialog-root .MuiInputLabel-root {
+    color: #666666 !important;
+}
+
+/* Modal header/content background */
+.MuiDialog-root .MuiPaper-root {
+    background-color: #ffffff !important;
+}
+
+/* Feedback textarea specific fix */
+.MuiDialog-root textarea {
+    background-color: #ffffff !important;
+    color: #111111 !important;
+    border: 1px solid #ddd !important;
+}
