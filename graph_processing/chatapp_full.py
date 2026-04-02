@@ -2913,8 +2913,8 @@ async def main(message: cl.Message):
             agents_str = ", ".join(f"**{a}**" for a in agents_used)
             header = f"*Agents: {agents_str} | {total_chunks} chunks | {elapsed:.1f}s*\n\n---\n\n"
 
-            # Normalize citations [SOURCE X] -> [Source X]
-            answer = re.sub(r'\[SOURCE[\s_]+(\d+)', lambda m: f'[Source {m.group(1)}', answer, flags=re.IGNORECASE)
+            # Normalize citations [SOURCE X] -> Source X (to match DataLayer expectations)
+            answer = re.sub(r'\[?SOURCE[\s_]+(\d+)\]?', lambda m: f'Source {m.group(1)}', answer, flags=re.IGNORECASE)
 
             # Build source elements for side panel
             clean_elements = []
@@ -2994,7 +2994,7 @@ async def main(message: cl.Message):
                 conv_mem.append(uid, session_id, "user", message.content)
                 conv_mem.append(uid, session_id, "assistant", answer)
                 CHAT_DB.add_message(uid, session_id, "user", message.content, cl_msg_id=message.id)
-                CHAT_DB.add_message(uid, session_id, "assistant", answer, cl_msg_id=msg.id)
+                CHAT_DB.add_message(uid, session_id, "assistant", answer, sources=formatted_sources, cl_msg_id=msg.id)
             else:
                 memory = cl.user_session.get("memory", [])
                 memory.append({"role": "user", "content": message.content})
