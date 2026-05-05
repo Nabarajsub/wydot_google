@@ -1031,13 +1031,7 @@ async def on_chat_resume(thread: Dict):
         await cl.sleep(0.5) 
         settings = await cl.ChatSettings(
             [
-                Select(
-                    id="model",
-                    label="Model",
-                    values=["Mistral Large", "Gemini 2.5 Flash"] + list(OPENROUTER_MODELS.keys()),
-                    initial_index=1,
-                ),
-                Switch(id="agentic_mode", label="Multi-Agent Mode (Domain Routing)", initial=False),
+                Switch(id="agentic_mode", label="Multi-Agent Mode (Domain Routing)", initial=True),
                 Switch(id="multihop", label="Multi-hop Reasoning (HyDE + Reranking)", initial=False),
                 Slider(id="fetch_k", label="Initial Candidates (FETCH_K)", min=10, max=100, step=5, initial=15),
             ]
@@ -1164,7 +1158,7 @@ Transcribe the following audio:""",
         # Step 2: Search knowledge graph (same as text query)
         settings = cl.user_session.get("settings", {})
         index_name = settings.get("index", "All Documents")
-        model_type = "gemini" if settings.get("model", "Mistral Large") == "Gemini 2.5 Flash" else "mistral"
+        model_type = "gemini"  # always Gemini 2.5 Flash
         
         context, sources = search_graph(transcribed_text, index_name)
         
@@ -2775,20 +2769,14 @@ async def start():
     # Chat Settings
     settings = await cl.ChatSettings(
         [
-            Select(
-                id="model",
-                label="Model",
-                values=["Mistral Large", "Gemini 2.5 Flash"] + list(OPENROUTER_MODELS.keys()),
-                initial_index=1,
-            ),
-            Switch(id="agentic_mode", label="Multi-Agent Mode (Domain Routing)", initial=False),
+            Switch(id="agentic_mode", label="Multi-Agent Mode (Domain Routing)", initial=True),
             Switch(id="multihop", label="Multi-hop Reasoning (HyDE + Reranking)", initial=False),
             Slider(id="fetch_k", label="Initial Candidates (FETCH_K)", min=10, max=100, step=5, initial=15),
         ]
     ).send()
 
     cl.user_session.set("settings", settings)
-    
+
     # Send welcome message
     # await cl.Message(
     #     content="**Welcome to WYDOT Assistant!**\n\nAsk about specifications, upload plans/images for analysis, or use the audio button to speak."
@@ -2804,7 +2792,7 @@ async def setup_agent(settings):
 @cl.on_message
 async def main(message: cl.Message):
     settings = cl.user_session.get("settings") or {}
-    model_choice = settings.get("model", "Gemini 2.5 Flash")
+    model_choice = "Gemini 2.5 Flash"  # always Gemini
     multihop = settings.get("multihop", False)
     index_name = NEO4J_INDEX_DEFAULT
     
@@ -2816,10 +2804,6 @@ async def main(message: cl.Message):
     
     # 1. Handle Multimodal (Gemini required)
     if has_media:
-        if model_choice != "Gemini 2.5 Flash":
-            await cl.Message(content="⚠️ **Please switch to 'Gemini 2.5 Flash' in settings to analyze files.**").send()
-            return
-            
         await msg.stream_token("🧠 **Analyzing media with Gemini...**\n")
         
         import google.generativeai as genai
