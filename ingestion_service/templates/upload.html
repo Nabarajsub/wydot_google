@@ -8,6 +8,7 @@
     <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet">
     <script src="https://cdnjs.cloudflare.com/ajax/libs/mammoth/1.6.0/mammoth.browser.min.js"></script>
     <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+    <script src="https://unpkg.com/vis-network/standalone/umd/vis-network.min.js"></script>
     <style>
         :root {
             --wydot-blue: #003366;
@@ -469,8 +470,9 @@
 
         /* === LOG / STATUS === */
         .log-box {
-            background: #1e293b;
-            color: #e2e8f0;
+            background: #f8f9fb;
+            color: #1f2937;
+            border: 1px solid #e5e7eb;
             border-radius: 8px;
             padding: 1rem;
             font-family: 'SF Mono', 'Fira Code', monospace;
@@ -486,26 +488,26 @@
         }
 
         .log-line.success {
-            color: #34d399;
+            color: #16a34a;
         }
 
         .log-line.error {
-            color: #f87171;
+            color: #dc2626;
         }
 
         .log-line.info {
-            color: #60a5fa;
+            color: #2563eb;
         }
 
         .log-line.warn {
-            color: #fbbf24;
+            color: #d97706;
         }
 
         /* === PREVIEW MODAL === */
         .modal-overlay {
             position: fixed;
             inset: 0;
-            background: rgba(0, 0, 0, 0.5);
+            background: rgba(255, 255, 255, 0.95);
             display: none;
             align-items: center;
             justify-content: center;
@@ -1344,6 +1346,7 @@
                 <button class="tab-pill active" onclick="switchKgTab('browse')">📂 Browse Documents</button>
                 <button class="tab-pill" onclick="switchKgTab('search')">🔍 Semantic Search</button>
                 <button class="tab-pill" onclick="switchKgTab('edit')">✏️ Metadata Editor</button>
+                <button class="tab-pill" onclick="switchKgTab('graph')">🕸️ Graph Explorer</button>
             </div>
 
             <!-- KG STATS -->
@@ -1474,6 +1477,304 @@
                     </div>
                 </div>
             </div>
+
+            <!-- GRAPH EXPLORER SECTION -->
+            <div id="kgSection-graph" class="kg-section">
+
+                <!-- Sub-tabs within Graph Explorer -->
+                <div style="display:flex; gap:0.5rem; margin-bottom:1.25rem; flex-wrap:wrap;">
+                    <button class="tab-pill active" onclick="switchGraphSubTab('overview', this)">📊 Overview</button>
+                    <button class="tab-pill" onclick="switchGraphSubTab('visualization', this)">🕸️ Graph Visualization</button>
+                    <button class="tab-pill" onclick="switchGraphSubTab('entity-search', this)">🔍 Entity Explorer</button>
+                    <button class="tab-pill" onclick="switchGraphSubTab('doc-detail', this)">📄 Document Detail</button>
+                    <button class="tab-pill" onclick="switchGraphSubTab('path-finder', this)">🛤️ Path Finder</button>
+                    <button class="tab-pill" onclick="switchGraphSubTab('schema', this)">🧬 Schema</button>
+                </div>
+
+                <!-- ============ SUB-TAB: OVERVIEW ============ -->
+                <div id="graphSub-overview" class="graph-sub-section" style="display:block;">
+
+                <!-- Graph Overview Stats -->
+                <div class="stats-row" id="graphOverviewStats">
+                    <div class="stat-card">
+                        <div class="label">Total Nodes</div>
+                        <div class="value" id="graphTotalNodes">—</div>
+                    </div>
+                    <div class="stat-card">
+                        <div class="label">Total Relationships</div>
+                        <div class="value" id="graphTotalRels">—</div>
+                    </div>
+                    <div class="stat-card">
+                        <div class="label">Documents</div>
+                        <div class="value" id="graphDocCount">—</div>
+                    </div>
+                    <div class="stat-card">
+                        <div class="label">Entities</div>
+                        <div class="value" id="graphEntityCount">—</div>
+                    </div>
+                </div>
+
+                <!-- Node Counts by Label -->
+                <div class="card" style="margin-bottom:1.25rem;">
+                    <div class="card-header">
+                        <div class="icon" style="background:#e0e7ff;">🏗️</div>
+                        Pipeline Phase Results — Node & Relationship Counts
+                        <button class="btn btn-outline btn-sm" onclick="loadGraphStats()" style="margin-left:auto;">🔄 Refresh</button>
+                    </div>
+                    <div class="card-body" style="padding:0;">
+                        <div style="display:grid; grid-template-columns:1fr 1fr; gap:1.25rem; padding:1.25rem;">
+                            <div>
+                                <h4 style="margin:0 0 0.75rem; font-size:0.9rem; color:var(--text-secondary);">Node Labels</h4>
+                                <table>
+                                    <thead><tr><th>Label</th><th>Count</th><th>Phase</th></tr></thead>
+                                    <tbody id="graphNodeCountsBody">
+                                        <tr><td colspan="3" style="text-align:center; color:var(--text-muted);">Loading...</td></tr>
+                                    </tbody>
+                                </table>
+                            </div>
+                            <div>
+                                <h4 style="margin:0 0 0.75rem; font-size:0.9rem; color:var(--text-secondary);">Relationship Types</h4>
+                                <table>
+                                    <thead><tr><th>Type</th><th>Count</th><th>Phase</th></tr></thead>
+                                    <tbody id="graphRelCountsBody">
+                                        <tr><td colspan="3" style="text-align:center; color:var(--text-muted);">Loading...</td></tr>
+                                    </tbody>
+                                </table>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Documents by Category -->
+                <div class="card" style="margin-bottom:1.25rem;">
+                    <div class="card-header">
+                        <div class="icon" style="background:#fef3c7;">📊</div>
+                        Documents by Category
+                    </div>
+                    <div class="card-body" style="padding:0;">
+                        <div style="display:grid; grid-template-columns:2fr 1fr; gap:1.25rem; padding:1.25rem;">
+                            <div class="table-wrap">
+                                <table>
+                                    <thead>
+                                        <tr><th>Category</th><th>Docs</th><th>Chunks</th><th>% Chk</th><th>Chk/Doc</th></tr>
+                                    </thead>
+                                    <tbody id="graphCategoryBody">
+                                        <tr><td colspan="5" style="text-align:center; color:var(--text-muted);">Loading...</td></tr>
+                                    </tbody>
+                                </table>
+                            </div>
+                            <div style="display:flex; align-items:center; justify-content:center;">
+                                <canvas id="categoryChart" width="300" height="300"></canvas>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Entity Analysis -->
+                <div class="card" style="margin-bottom:1.25rem;">
+                    <div class="card-header">
+                        <div class="icon" style="background:#ecfdf5;">🔗</div>
+                        Entity Analysis
+                    </div>
+                    <div class="card-body" style="padding:0;">
+                        <div style="display:grid; grid-template-columns:1fr 1fr; gap:1.25rem; padding:1.25rem;">
+                            <div>
+                                <h4 style="margin:0 0 0.75rem; font-size:0.9rem; color:var(--text-secondary);">Entity Types</h4>
+                                <table>
+                                    <thead><tr><th>Type</th><th>Count</th></tr></thead>
+                                    <tbody id="graphEntityTypesBody">
+                                        <tr><td colspan="2" style="text-align:center; color:var(--text-muted);">Loading...</td></tr>
+                                    </tbody>
+                                </table>
+                                <div style="margin-top:1rem; padding:0.75rem; background:var(--bg); border-radius:8px; font-size:0.82rem; color:var(--text-secondary);">
+                                    <strong>Mention Stats:</strong><br>
+                                    <span id="mentionStatsText">Loading...</span>
+                                </div>
+                            </div>
+                            <div>
+                                <h4 style="margin:0 0 0.75rem; font-size:0.9rem; color:var(--text-secondary);">Top Entities (by mentions)</h4>
+                                <table>
+                                    <thead><tr><th>Entity</th><th>Type</th><th>Mentions</th></tr></thead>
+                                    <tbody id="graphTopEntitiesBody">
+                                        <tr><td colspan="3" style="text-align:center; color:var(--text-muted);">Loading...</td></tr>
+                                    </tbody>
+                                </table>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Document Relationships & Version Chains -->
+                <div class="card" style="margin-bottom:1.25rem;">
+                    <div class="card-header">
+                        <div class="icon" style="background:#fce7f3;">🔀</div>
+                        Document Relationships & Version Chains
+                    </div>
+                    <div class="card-body" style="padding:0;">
+                        <div style="display:grid; grid-template-columns:1fr 1fr; gap:1.25rem; padding:1.25rem;">
+                            <div>
+                                <h4 style="margin:0 0 0.75rem; font-size:0.9rem; color:var(--text-secondary);">Document-Level Relationships</h4>
+                                <table>
+                                    <thead><tr><th>Relationship</th><th>Count</th><th>Phase</th></tr></thead>
+                                    <tbody id="graphDocRelsBody">
+                                        <tr><td colspan="3" style="text-align:center; color:var(--text-muted);">Loading...</td></tr>
+                                    </tbody>
+                                </table>
+                            </div>
+                            <div>
+                                <h4 style="margin:0 0 0.75rem; font-size:0.9rem; color:var(--text-secondary);">Version Chains (SUPERSEDES)</h4>
+                                <div id="graphSupersedesBody" style="font-size:0.82rem; color:var(--text-secondary);">Loading...</div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Documents by Year -->
+                <div class="card" style="margin-bottom:1.25rem;">
+                    <div class="card-header">
+                        <div class="icon" style="background:#e0e7ff;">📅</div>
+                        Documents by Year
+                    </div>
+                    <div class="card-body">
+                        <canvas id="yearChart" width="600" height="250"></canvas>
+                    </div>
+                </div>
+
+                </div><!-- end overview sub-tab -->
+
+                <!-- ============ SUB-TAB: GRAPH VISUALIZATION ============ -->
+                <div id="graphSub-visualization" class="graph-sub-section" style="display:none;">
+                    <div class="card" style="margin-bottom:1.25rem;">
+                        <div class="card-header">
+                            <div class="icon" style="background:#e0e7ff;">🕸️</div>
+                            Interactive Knowledge Graph
+                            <div style="margin-left:auto; display:flex; gap:0.5rem; align-items:center;">
+                                <select id="vizDocSelect" onchange="loadGraphViz()" style="padding:0.3rem 0.5rem; border:1px solid var(--border); border-radius:6px; font-size:0.82rem; max-width:250px;">
+                                    <option value="">All Document Relationships</option>
+                                </select>
+                                <button class="btn btn-outline btn-sm" onclick="loadGraphViz()">🔄 Reload</button>
+                            </div>
+                        </div>
+                        <div class="card-body" style="padding:0;">
+                            <div style="padding:0.75rem 1.25rem; background:var(--bg); font-size:0.8rem; color:var(--text-secondary); display:flex; gap:1.5rem; flex-wrap:wrap; align-items:center;">
+                                <span>🟦 Document</span><span>🟢 Entity</span><span>🟡 Chunk</span>
+                                <span style="margin-left:auto; font-style:italic;">Drag nodes · Scroll to zoom · Click node for details</span>
+                            </div>
+                            <div id="graphVizContainer" style="width:100%; height:550px; border-top:1px solid var(--border);"></div>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- ============ SUB-TAB: ENTITY SEARCH ============ -->
+                <div id="graphSub-entity-search" class="graph-sub-section" style="display:none;">
+                    <div class="card" style="margin-bottom:1.25rem;">
+                        <div class="card-header">
+                            <div class="icon" style="background:#ecfdf5;">🔍</div>
+                            Entity Explorer
+                        </div>
+                        <div class="card-body">
+                            <div style="display:flex; gap:0.75rem; margin-bottom:1.25rem;">
+                                <input type="text" id="entitySearchInput" placeholder="Search entities (e.g., concrete, WYDOT, pavement)..."
+                                    style="flex:1; padding:0.6rem 1rem; border:1.5px solid var(--border); border-radius:8px; font-size:0.9rem;"
+                                    onkeydown="if(event.key==='Enter') searchEntities()">
+                                <button class="btn btn-primary" onclick="searchEntities()">Search</button>
+                            </div>
+                            <div id="entitySearchResults">
+                                <p style="color:var(--text-muted); text-align:center; padding:2rem;">Search for entities to see which documents mention them</p>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- ============ SUB-TAB: DOCUMENT DETAIL ============ -->
+                <div id="graphSub-doc-detail" class="graph-sub-section" style="display:none;">
+                    <div class="card" style="margin-bottom:1.25rem;">
+                        <div class="card-header">
+                            <div class="icon" style="background:#fef3c7;">📄</div>
+                            Document Detail Inspector
+                        </div>
+                        <div class="card-body">
+                            <div style="display:flex; gap:0.75rem; margin-bottom:1.25rem;">
+                                <select id="docDetailSelect" style="flex:1; padding:0.6rem 1rem; border:1.5px solid var(--border); border-radius:8px; font-size:0.9rem;">
+                                    <option value="">Select a document...</option>
+                                </select>
+                                <button class="btn btn-primary" onclick="loadDocDetail()">Inspect</button>
+                            </div>
+                            <div id="docDetailResults">
+                                <p style="color:var(--text-muted); text-align:center; padding:2rem;">Select a document to see its entities, relationships, and sample chunks</p>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- ============ SUB-TAB: PATH FINDER ============ -->
+                <div id="graphSub-path-finder" class="graph-sub-section" style="display:none;">
+                    <div class="card" style="margin-bottom:1.25rem;">
+                        <div class="card-header">
+                            <div class="icon" style="background:#fce7f3;">🛤️</div>
+                            Graph Path Finder
+                        </div>
+                        <div class="card-body">
+                            <p style="font-size:0.85rem; color:var(--text-secondary); margin-bottom:1rem;">Find how two documents or entities are connected through the knowledge graph.</p>
+                            <div style="display:grid; grid-template-columns:1fr auto 1fr; gap:0.75rem; margin-bottom:1.25rem; align-items:end;">
+                                <div>
+                                    <label style="font-size:0.8rem; font-weight:600; color:var(--text-secondary); display:block; margin-bottom:0.3rem;">From (document or entity name)</label>
+                                    <input type="text" id="pathFromInput" placeholder="e.g., 2021 Standard Spec..."
+                                        style="width:100%; padding:0.6rem 1rem; border:1.5px solid var(--border); border-radius:8px; font-size:0.9rem;">
+                                </div>
+                                <div style="font-size:1.2rem; padding-bottom:0.5rem;">→</div>
+                                <div>
+                                    <label style="font-size:0.8rem; font-weight:600; color:var(--text-secondary); display:block; margin-bottom:0.3rem;">To (document or entity name)</label>
+                                    <input type="text" id="pathToInput" placeholder="e.g., Construction Manual..."
+                                        style="width:100%; padding:0.6rem 1rem; border:1.5px solid var(--border); border-radius:8px; font-size:0.9rem;"
+                                        onkeydown="if(event.key==='Enter') findPaths()">
+                                </div>
+                            </div>
+                            <button class="btn btn-primary" onclick="findPaths()" style="margin-bottom:1.25rem;">🔍 Find Paths</button>
+                            <div id="pathFinderResults">
+                                <p style="color:var(--text-muted); text-align:center; padding:2rem;">Enter two node names to find connections between them</p>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- ============ SUB-TAB: SCHEMA ============ -->
+                <div id="graphSub-schema" class="graph-sub-section" style="display:none;">
+                    <div class="card" style="margin-bottom:1.25rem;">
+                        <div class="card-header">
+                            <div class="icon" style="background:#e0e7ff;">🧬</div>
+                            Graph Schema
+                            <button class="btn btn-outline btn-sm" onclick="loadSchema()" style="margin-left:auto;">🔄 Refresh</button>
+                        </div>
+                        <div class="card-body" style="padding:0;">
+                            <div style="display:grid; grid-template-columns:1fr 1fr; gap:1.25rem; padding:1.25rem;">
+                                <div>
+                                    <h4 style="margin:0 0 0.75rem; font-size:0.9rem; color:var(--text-secondary);">Node Labels & Counts</h4>
+                                    <table>
+                                        <thead><tr><th>Label</th><th>Count</th><th>Properties</th></tr></thead>
+                                        <tbody id="schemaNodeBody"><tr><td colspan="3" style="text-align:center; color:var(--text-muted);">Click Refresh to load</td></tr></tbody>
+                                    </table>
+                                </div>
+                                <div>
+                                    <h4 style="margin:0 0 0.75rem; font-size:0.9rem; color:var(--text-secondary);">Schema Visualization</h4>
+                                    <div id="schemaVizContainer" style="width:100%; height:350px; border:1px solid var(--border); border-radius:8px;"></div>
+                                </div>
+                            </div>
+                            <div style="padding:0 1.25rem 1.25rem;">
+                                <h4 style="margin:0 0 0.75rem; font-size:0.9rem; color:var(--text-secondary);">Relationship Schema (From → Relationship → To)</h4>
+                                <div class="table-wrap" style="max-height:400px; overflow-y:auto;">
+                                    <table>
+                                        <thead><tr><th>From</th><th>Relationship</th><th>To</th><th>Count</th></tr></thead>
+                                        <tbody id="schemaRelBody"><tr><td colspan="4" style="text-align:center; color:var(--text-muted);">Click Refresh to load</td></tr></tbody>
+                                    </table>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+            </div>
+
         </div>
 
     </div>
@@ -1792,9 +2093,11 @@
 
                     if (data.status === 'success') {
                         addLog(`   > Vectorizing ${data.chunks} chunks...`, 'info');
-                        addLog(`   ✅ ${data.chunks} chunks saved to Neo4j index '${data.index || 'wydot_vector_index'}'.`, 'success');
+                        addLog(`   ✅ ${data.chunks} chunks saved to Neo4j index '${data.index || 'wydot_gemini_index'}'.`, 'success');
                     } else {
-                        addLog(`   ❌ Failed: ${data.message}`, 'error');
+                        // Handle both {message: ...} and FastAPI {detail: ...} formats
+                        const errMsg = data.message || data.detail || JSON.stringify(data);
+                        addLog(`   ❌ Failed: ${errMsg}`, 'error');
                     }
                 } catch (err) {
                     addLog(`   ❌ Error: ${err.message}`, 'error');
@@ -1875,6 +2178,7 @@
             document.getElementById(`kgSection-${tab}`).classList.add('active');
             event.target.classList.add('active');
             if (tab === 'edit') loadEditDropdown();
+            if (tab === 'graph') loadGraphStats();
         }
 
         // ===== KG EXPLORER: STATS =====
@@ -2020,6 +2324,15 @@
                     body: JSON.stringify({ query, top_k: 8 })
                 });
                 const data = await resp.json();
+
+                if (data.detail) {
+                    container.innerHTML = `<p style="color:var(--error); text-align:center; padding:2rem;">Search error: ${data.detail}</p>`;
+                    return;
+                }
+                if (data.error) {
+                    container.innerHTML = `<p style="color:var(--error); text-align:center; padding:2rem;">Search error: ${data.error}</p>`;
+                    return;
+                }
 
                 if (!data.results || data.results.length === 0) {
                     container.innerHTML = '<p style="color:var(--text-muted); text-align:center; padding:2rem;">No matching results found</p>';
@@ -2352,6 +2665,564 @@
             if (canvasId === 'chart-latency') monChart1 = chart;
             else if (canvasId === 'chart-models') monChart2 = chart;
             else if (canvasId === 'chart-quality-trend') evalChart = chart;
+        }
+
+        // ===== KG GRAPH EXPLORER =====
+        let categoryChartInstance = null;
+        let yearChartInstance = null;
+
+        const PHASE_MAP = {
+            'HAS_SECTION': 'Phase 1: Structural',
+            'HAS_CHUNK': 'Phase 1: Structural',
+            'NEXT_CHUNK': 'Phase 1: Structural',
+            'MENTIONS': 'Phase 2: Entities',
+            'REQUIRES': 'Phase 2: Entities',
+            'REFERENCES': 'Phase 2: Entities',
+            'TESTED_BY': 'Phase 2: Entities',
+            'SPECIFIES': 'Phase 2: Entities',
+            'PART_OF': 'Phase 2/4',
+            'APPLIES_TO': 'Phase 2: Entities',
+            'SUPERSEDES': 'Phase 3: Supersedes',
+            'NEXT_IN_SERIES': 'Phase 4: Doc-Rels',
+            'SUPPLEMENTS': 'Phase 4: Doc-Rels',
+            'INSTRUCTIONS_FOR': 'Phase 4: Doc-Rels',
+            'COVERS_CORRIDOR': 'Phase 4: Doc-Rels',
+            'TEACHES': 'Phase 5: LLM-Rels',
+            'IMPLEMENTS': 'Phase 5: LLM-Rels',
+            'COMPANION_TO': 'Phase 5: LLM-Rels',
+            'GOVERNED_BY': 'Phase 5: LLM-Rels',
+            'AMENDS': 'Phase 5: LLM-Rels',
+        };
+        const NODE_PHASE_MAP = {
+            'Chunk': 'Phase 1: Structural',
+            'Document': 'Phase 1: Structural',
+            'Section': 'Phase 1: Structural',
+            'Entity': 'Phase 2: Entities',
+            'Corridor': 'Phase 4: Doc-Rels',
+        };
+        const CHART_COLORS = ['#003366','#f0a500','#10b981','#3b82f6','#ef4444','#8b5cf6','#ec4899','#14b8a6','#f59e0b','#6366f1','#84cc16','#06b6d4'];
+
+        async function loadGraphStats() {
+            try {
+                const [statsResp, entResp] = await Promise.all([
+                    fetch('/kg/graph-stats'),
+                    fetch('/kg/entities?limit=20')
+                ]);
+                const stats = await statsResp.json();
+                const entData = await entResp.json();
+
+                if (stats.error) {
+                    console.error('Graph stats error:', stats.error);
+                    return;
+                }
+
+                // Overview stats
+                document.getElementById('graphTotalNodes').textContent = (stats.total_nodes || 0).toLocaleString();
+                document.getElementById('graphTotalRels').textContent = (stats.total_relationships || 0).toLocaleString();
+                document.getElementById('graphDocCount').textContent = (stats.node_counts?.Document || 0).toLocaleString();
+                document.getElementById('graphEntityCount').textContent = (stats.node_counts?.Entity || 0).toLocaleString();
+
+                // Node counts table
+                const nc = stats.node_counts || {};
+                let nodeHtml = '';
+                for (const [label, count] of Object.entries(nc)) {
+                    if (count > 0) {
+                        nodeHtml += `<tr><td><strong>${label}</strong></td><td>${count.toLocaleString()}</td><td><span style="font-size:0.75rem; padding:2px 8px; border-radius:12px; background:#e0e7ff; color:#3b5998;">${NODE_PHASE_MAP[label] || '—'}</span></td></tr>`;
+                    }
+                }
+                document.getElementById('graphNodeCountsBody').innerHTML = nodeHtml || '<tr><td colspan="3" style="text-align:center;">No nodes found</td></tr>';
+
+                // Relationship counts table
+                const rc = stats.relationship_counts || {};
+                let relHtml = '';
+                for (const [relType, count] of Object.entries(rc)) {
+                    relHtml += `<tr><td><strong>${relType}</strong></td><td>${count.toLocaleString()}</td><td><span style="font-size:0.75rem; padding:2px 8px; border-radius:12px; background:#ecfdf5; color:#059669;">${PHASE_MAP[relType] || '—'}</span></td></tr>`;
+                }
+                document.getElementById('graphRelCountsBody').innerHTML = relHtml || '<tr><td colspan="3" style="text-align:center;">No relationships found</td></tr>';
+
+                // Category table
+                const cats = stats.categories || [];
+                let catHtml = '';
+                cats.forEach(c => {
+                    catHtml += `<tr><td><strong>${c.category}</strong></td><td>${c.docs}</td><td>${c.chunks.toLocaleString()}</td><td>${c.pct}%</td><td>${Math.round(c.avg_chunks_per_doc)}</td></tr>`;
+                });
+                const totalDocs = cats.reduce((s,c) => s + c.docs, 0);
+                catHtml += `<tr style="font-weight:700; border-top:2px solid var(--border);"><td>Total</td><td>${totalDocs}</td><td>${(stats.total_chunks||0).toLocaleString()}</td><td>100%</td><td>${totalDocs ? Math.round((stats.total_chunks||0)/totalDocs) : 0}</td></tr>`;
+                document.getElementById('graphCategoryBody').innerHTML = catHtml;
+
+                // Category pie chart
+                if (categoryChartInstance) categoryChartInstance.destroy();
+                const catLabels = cats.slice(0, 10).map(c => c.category);
+                const catValues = cats.slice(0, 10).map(c => c.chunks);
+                categoryChartInstance = new Chart(document.getElementById('categoryChart'), {
+                    type: 'doughnut',
+                    data: {
+                        labels: catLabels,
+                        datasets: [{ data: catValues, backgroundColor: CHART_COLORS.slice(0, catLabels.length), borderWidth: 1 }]
+                    },
+                    options: {
+                        responsive: true,
+                        plugins: {
+                            legend: { position: 'right', labels: { font: { size: 10 }, boxWidth: 12 } },
+                            title: { display: true, text: 'Chunks by Category', font: { size: 13 } }
+                        }
+                    }
+                });
+
+                // Entity types
+                const et = stats.entity_types || {};
+                let etHtml = '';
+                for (const [type, count] of Object.entries(et)) {
+                    etHtml += `<tr><td><strong>${type}</strong></td><td>${count.toLocaleString()}</td></tr>`;
+                }
+                document.getElementById('graphEntityTypesBody').innerHTML = etHtml || '<tr><td colspan="2" style="text-align:center;">No entities found (Phase 2 not run)</td></tr>';
+
+                // Mention stats
+                const ms = stats.mention_stats || {};
+                document.getElementById('mentionStatsText').innerHTML =
+                    `Total mentions: <strong>${(ms.total_mentions||0).toLocaleString()}</strong><br>` +
+                    `Chunks with entities: <strong>${(ms.chunks_with_entities||0).toLocaleString()}</strong><br>` +
+                    `Unique entities mentioned: <strong>${(ms.unique_entities||0).toLocaleString()}</strong>`;
+
+                // Top entities
+                const topEnts = (entData.entities || []);
+                let teHtml = '';
+                topEnts.forEach(e => {
+                    const typeColor = e.type === 'Material' ? '#f59e0b' : e.type === 'Standard' ? '#3b82f6' : e.type === 'Specification' ? '#8b5cf6' : '#10b981';
+                    teHtml += `<tr><td>${e.name}</td><td><span style="font-size:0.75rem; padding:2px 8px; border-radius:12px; background:${typeColor}20; color:${typeColor};">${e.type}</span></td><td>${e.mentions}</td></tr>`;
+                });
+                document.getElementById('graphTopEntitiesBody').innerHTML = teHtml || '<tr><td colspan="3" style="text-align:center;">No entities found</td></tr>';
+
+                // Document relationships
+                const dr = stats.document_relationships || {};
+                let drHtml = '';
+                for (const [relType, count] of Object.entries(dr)) {
+                    drHtml += `<tr><td><strong>${relType}</strong></td><td>${count}</td><td><span style="font-size:0.75rem; padding:2px 8px; border-radius:12px; background:#fce7f3; color:#be185d;">${PHASE_MAP[relType] || '—'}</span></td></tr>`;
+                }
+                document.getElementById('graphDocRelsBody').innerHTML = drHtml || '<tr><td colspan="3" style="text-align:center;">No document relationships found (Phases 3-5 not run)</td></tr>';
+
+                // Supersedes chains
+                const sup = stats.supersedes || [];
+                if (sup.length > 0) {
+                    let supHtml = '<div style="display:flex; flex-direction:column; gap:0.5rem;">';
+                    sup.forEach(s => {
+                        const conf = s.confidence ? ` (${Math.round(s.confidence*100)}% confidence)` : '';
+                        supHtml += `<div style="padding:0.5rem 0.75rem; background:var(--bg); border-radius:6px; border-left:3px solid var(--wydot-gold);">
+                            <strong>${s.newer}</strong> → supersedes → <strong>${s.older}</strong>${conf}</div>`;
+                    });
+                    supHtml += '</div>';
+                    document.getElementById('graphSupersedesBody').innerHTML = supHtml;
+                } else {
+                    document.getElementById('graphSupersedesBody').innerHTML = '<div style="padding:1rem; text-align:center; color:var(--text-muted);">No version chains found (Phase 3 not run)</div>';
+                }
+
+                // Year chart
+                const byYear = stats.by_year || [];
+                if (byYear.length > 0) {
+                    if (yearChartInstance) yearChartInstance.destroy();
+                    const yLabels = byYear.reverse().map(y => y.year);
+                    const yDocs = byYear.map(y => y.docs);
+                    yearChartInstance = new Chart(document.getElementById('yearChart'), {
+                        type: 'bar',
+                        data: {
+                            labels: yLabels,
+                            datasets: [{
+                                label: 'Documents',
+                                data: yDocs,
+                                backgroundColor: '#003366',
+                                borderRadius: 4
+                            }]
+                        },
+                        options: {
+                            responsive: true,
+                            plugins: {
+                                title: { display: true, text: 'Document Count by Year', font: { size: 13 } },
+                                legend: { display: false }
+                            },
+                            scales: {
+                                y: { beginAtZero: true, title: { display: true, text: 'Documents' } },
+                                x: { title: { display: true, text: 'Year' } }
+                            }
+                        }
+                    });
+                }
+
+            } catch (err) {
+                console.error('Graph stats load error:', err);
+            }
+        }
+
+        // ===== GRAPH SUB-TAB SWITCHING =====
+        function switchGraphSubTab(tab, btn) {
+            document.querySelectorAll('.graph-sub-section').forEach(s => s.style.display = 'none');
+            document.getElementById('graphSub-' + tab).style.display = 'block';
+            // Update pill styles within the graph explorer
+            if (btn) {
+                btn.closest('div').querySelectorAll('.tab-pill').forEach(b => b.classList.remove('active'));
+                btn.classList.add('active');
+            }
+            if (tab === 'visualization') loadGraphViz();
+            if (tab === 'schema') loadSchema();
+            if (tab === 'doc-detail') loadDocDropdown();
+        }
+
+        // ===== INTERACTIVE GRAPH VISUALIZATION (vis.js) =====
+        let visNetwork = null;
+        async function loadGraphViz() {
+            const container = document.getElementById('graphVizContainer');
+            const docSelect = document.getElementById('vizDocSelect');
+            const source = docSelect.value;
+
+            container.innerHTML = '<p style="text-align:center; padding:4rem; color:var(--text-muted);">Loading graph...</p>';
+
+            try {
+                // Populate doc dropdown if empty
+                if (docSelect.options.length <= 1) {
+                    const docsResp = await fetch('/kg/documents');
+                    const docsData = await docsResp.json();
+                    (docsData.documents || []).forEach(d => {
+                        const opt = document.createElement('option');
+                        opt.value = d.source;
+                        opt.textContent = d.source.replace(/%20/g, ' ').substring(0, 60);
+                        docSelect.appendChild(opt);
+                    });
+                }
+
+                const url = source ? '/kg/graph-sample?source=' + encodeURIComponent(source) + '&limit=50' : '/kg/graph-sample?limit=60';
+                const resp = await fetch(url);
+                const data = await resp.json();
+
+                if (data.error) {
+                    container.innerHTML = '<p style="text-align:center; padding:4rem; color:var(--error);">Error: ' + data.error + '</p>';
+                    return;
+                }
+
+                const colorMap = { document: '#003366', entity: '#10b981', chunk: '#f0a500' };
+                const shapeMap = { document: 'box', entity: 'dot', chunk: 'diamond' };
+
+                const nodes = new vis.DataSet((data.nodes || []).map(n => ({
+                    id: n.id,
+                    label: (n.label || '').replace(/%20/g, ' ').substring(0, 35),
+                    title: n.label + ' (' + (n.type || n.group) + ')' + (n.mentions ? '\nMentions: ' + n.mentions : ''),
+                    color: { background: colorMap[n.group] || '#6366f1', border: colorMap[n.group] || '#6366f1', highlight: { background: '#f0a500', border: '#003366' } },
+                    shape: shapeMap[n.group] || 'dot',
+                    font: { color: '#1a2332', size: 11 },
+                    size: n.group === 'document' ? 25 : (n.mentions ? Math.min(10 + n.mentions / 5, 40) : 15)
+                })));
+
+                const edges = new vis.DataSet((data.edges || []).map((e, i) => ({
+                    id: 'e' + i,
+                    from: e.from, to: e.to,
+                    label: e.label,
+                    font: { size: 9, color: '#8a93a3' },
+                    arrows: 'to',
+                    color: { color: '#c0c8d4', highlight: '#003366' },
+                    smooth: { type: 'curvedCW', roundness: 0.2 }
+                })));
+
+                container.innerHTML = '';
+                visNetwork = new vis.Network(container, { nodes, edges }, {
+                    physics: { solver: 'forceAtlas2Based', forceAtlas2Based: { gravitationalConstant: -50, springLength: 120 }, stabilization: { iterations: 150 } },
+                    interaction: { hover: true, tooltipDelay: 200 },
+                    layout: { improvedLayout: true }
+                });
+
+                visNetwork.on('click', function(params) {
+                    if (params.nodes.length > 0) {
+                        const nodeId = params.nodes[0];
+                        const node = nodes.get(nodeId);
+                        if (node && node.title) {
+                            const label = (node.title || '').split(' (')[0];
+                            if (nodeId.startsWith('d_')) {
+                                document.getElementById('docDetailSelect').value = label;
+                                switchGraphSubTab('doc-detail', null);
+                                loadDocDetail();
+                            }
+                        }
+                    }
+                });
+
+            } catch (err) {
+                container.innerHTML = '<p style="text-align:center; padding:4rem; color:var(--error);">Error loading graph: ' + err.message + '</p>';
+            }
+        }
+
+        // ===== ENTITY SEARCH & EXPLORATION =====
+        async function searchEntities() {
+            const query = document.getElementById('entitySearchInput').value.trim();
+            if (!query) return;
+            const container = document.getElementById('entitySearchResults');
+            container.innerHTML = '<p style="text-align:center; padding:2rem; color:var(--text-muted);">Searching...</p>';
+
+            try {
+                const resp = await fetch('/kg/entity-search?q=' + encodeURIComponent(query) + '&limit=30');
+                const data = await resp.json();
+
+                if (data.error) {
+                    container.innerHTML = '<p style="color:var(--error); text-align:center; padding:2rem;">Error: ' + data.error + '</p>';
+                    return;
+                }
+
+                const entities = data.entities || [];
+                if (entities.length === 0) {
+                    container.innerHTML = '<p style="color:var(--text-muted); text-align:center; padding:2rem;">No entities found matching "' + escapeHtml(query) + '"</p>';
+                    return;
+                }
+
+                let html = '<div style="display:flex; flex-direction:column; gap:1rem;">';
+                entities.forEach(e => {
+                    const typeColor = e.type === 'Material' ? '#f59e0b' : e.type === 'Standard' ? '#3b82f6' : e.type === 'Specification' ? '#8b5cf6' : e.type === 'Concept' ? '#10b981' : '#6366f1';
+                    html += '<div style="padding:1rem; border:1px solid var(--border); border-radius:8px; border-left:4px solid ' + typeColor + ';">';
+                    html += '<div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:0.5rem;">';
+                    html += '<strong style="font-size:1rem;">' + escapeHtml(e.name) + '</strong>';
+                    html += '<span style="font-size:0.75rem; padding:2px 10px; border-radius:12px; background:' + typeColor + '20; color:' + typeColor + ';">' + e.type + '</span>';
+                    html += '</div>';
+                    html += '<div style="font-size:0.82rem; color:var(--text-secondary); margin-bottom:0.5rem;">Mentioned in <strong>' + e.mentions + '</strong> chunks</div>';
+                    if (e.sources && e.sources.length > 0) {
+                        html += '<div style="font-size:0.8rem; color:var(--text-secondary);">📄 Found in: ';
+                        e.sources.forEach((s, i) => {
+                            const shortName = s.replace(/%20/g, ' ').substring(0, 50);
+                            html += '<a href="#" onclick="event.preventDefault(); inspectDocFromEntity(\'' + escapeHtml(s.replace(/'/g, "\\'")) + '\')" style="color:var(--wydot-blue); text-decoration:underline;">' + shortName + '</a>';
+                            if (i < e.sources.length - 1) html += ', ';
+                        });
+                        html += '</div>';
+                    }
+                    html += '</div>';
+                });
+                html += '</div>';
+                container.innerHTML = html;
+            } catch (err) {
+                container.innerHTML = '<p style="color:var(--error); text-align:center; padding:2rem;">Error: ' + err.message + '</p>';
+            }
+        }
+
+        function inspectDocFromEntity(source) {
+            const sel = document.getElementById('docDetailSelect');
+            // Add option if not present
+            let found = false;
+            for (let opt of sel.options) { if (opt.value === source) { found = true; break; } }
+            if (!found) { const opt = document.createElement('option'); opt.value = source; opt.textContent = source.replace(/%20/g, ' '); sel.appendChild(opt); }
+            sel.value = source;
+            switchGraphSubTab('doc-detail', null);
+            loadDocDetail();
+        }
+
+        // ===== DOCUMENT DETAIL PANEL =====
+        async function loadDocDropdown() {
+            const sel = document.getElementById('docDetailSelect');
+            if (sel.options.length > 1) return;
+            try {
+                const resp = await fetch('/kg/documents');
+                const data = await resp.json();
+                (data.documents || []).forEach(d => {
+                    const opt = document.createElement('option');
+                    opt.value = d.source;
+                    opt.textContent = d.source.replace(/%20/g, ' ').substring(0, 70);
+                    sel.appendChild(opt);
+                });
+            } catch (err) { console.error('Doc dropdown error:', err); }
+        }
+
+        async function loadDocDetail() {
+            const source = document.getElementById('docDetailSelect').value;
+            if (!source) return;
+            const container = document.getElementById('docDetailResults');
+            container.innerHTML = '<p style="text-align:center; padding:2rem; color:var(--text-muted);">Loading document details...</p>';
+
+            try {
+                const resp = await fetch('/kg/document-detail?source=' + encodeURIComponent(source));
+                const data = await resp.json();
+
+                if (data.error) {
+                    container.innerHTML = '<p style="color:var(--error); padding:2rem;">Error: ' + data.error + '</p>';
+                    return;
+                }
+
+                let html = '';
+
+                // Metadata header
+                html += '<div style="padding:1rem; background:var(--bg); border-radius:8px; margin-bottom:1.25rem;">';
+                html += '<h3 style="margin:0 0 0.75rem; font-size:1rem;">📄 ' + escapeHtml((data.source || '').replace(/%20/g, ' ')) + '</h3>';
+                html += '<div style="display:grid; grid-template-columns:repeat(auto-fill, minmax(200px, 1fr)); gap:0.5rem; font-size:0.85rem;">';
+                html += '<div><strong>Title:</strong> ' + escapeHtml(data.title || 'N/A') + '</div>';
+                html += '<div><strong>Type:</strong> ' + escapeHtml(data.doc_type || 'N/A') + '</div>';
+                html += '<div><strong>Year:</strong> ' + escapeHtml(data.year || 'N/A') + '</div>';
+                html += '<div><strong>Author:</strong> ' + escapeHtml(data.author || 'N/A') + '</div>';
+                html += '<div><strong>Chunks:</strong> ' + (data.chunk_count || 0) + '</div>';
+                html += '</div>';
+                if (data.sections && data.sections.length > 0) {
+                    html += '<div style="margin-top:0.5rem; font-size:0.82rem;"><strong>Sections:</strong> ' + data.sections.filter(Boolean).map(s => escapeHtml(s)).join(', ') + '</div>';
+                }
+                html += '</div>';
+
+                // Entities and Relationships side by side
+                html += '<div style="display:grid; grid-template-columns:1fr 1fr; gap:1.25rem; margin-bottom:1.25rem;">';
+
+                // Entities
+                html += '<div><h4 style="margin:0 0 0.75rem; font-size:0.9rem; color:var(--text-secondary);">Top Entities in Document</h4>';
+                if (data.entities && data.entities.length > 0) {
+                    html += '<table><thead><tr><th>Entity</th><th>Type</th><th>Mentions</th></tr></thead><tbody>';
+                    data.entities.slice(0, 20).forEach(e => {
+                        const tc = e.type === 'Material' ? '#f59e0b' : e.type === 'Standard' ? '#3b82f6' : e.type === 'Specification' ? '#8b5cf6' : '#10b981';
+                        html += '<tr><td>' + escapeHtml(e.name) + '</td><td><span style="font-size:0.75rem; padding:2px 8px; border-radius:12px; background:' + tc + '20; color:' + tc + ';">' + e.type + '</span></td><td>' + e.mentions + '</td></tr>';
+                    });
+                    html += '</tbody></table>';
+                } else {
+                    html += '<p style="color:var(--text-muted); font-size:0.85rem;">No entities found</p>';
+                }
+                html += '</div>';
+
+                // Relationships
+                html += '<div><h4 style="margin:0 0 0.75rem; font-size:0.9rem; color:var(--text-secondary);">Document Relationships</h4>';
+                if (data.relationships && data.relationships.length > 0) {
+                    html += '<div style="display:flex; flex-direction:column; gap:0.5rem;">';
+                    data.relationships.forEach(r => {
+                        const isFrom = r.from === source;
+                        const otherDoc = isFrom ? r.to : r.from;
+                        const arrow = isFrom ? '→' : '←';
+                        const conf = r.confidence ? ' (' + Math.round(r.confidence * 100) + '%)' : '';
+                        html += '<div style="padding:0.5rem 0.75rem; background:var(--bg); border-radius:6px; font-size:0.82rem; border-left:3px solid var(--wydot-blue);">';
+                        html += arrow + ' <strong>' + r.type + '</strong> ' + arrow + ' <a href="#" onclick="event.preventDefault(); inspectDocFromEntity(\'' + escapeHtml(otherDoc.replace(/'/g, "\\'")) + '\')" style="color:var(--wydot-blue);">' + escapeHtml(otherDoc.replace(/%20/g, ' ').substring(0, 50)) + '</a>' + conf;
+                        html += '</div>';
+                    });
+                    html += '</div>';
+                } else {
+                    html += '<p style="color:var(--text-muted); font-size:0.85rem;">No document-level relationships</p>';
+                }
+                html += '</div></div>';
+
+                // Sample chunks
+                if (data.sample_chunks && data.sample_chunks.length > 0) {
+                    html += '<h4 style="margin:0 0 0.75rem; font-size:0.9rem; color:var(--text-secondary);">Sample Chunks</h4>';
+                    data.sample_chunks.forEach((ch, i) => {
+                        html += '<div style="padding:0.75rem; background:var(--bg); border-radius:8px; margin-bottom:0.5rem; font-size:0.82rem;">';
+                        html += '<div style="color:var(--text-secondary); margin-bottom:0.3rem;"><strong>Chunk ' + (i+1) + '</strong> · Section: ' + escapeHtml(ch.section || 'N/A') + ' · Page: ' + (ch.page || 'N/A') + '</div>';
+                        html += '<div style="color:var(--text);">' + escapeHtml(ch.text) + '</div>';
+                        html += '</div>';
+                    });
+                }
+
+                container.innerHTML = html;
+            } catch (err) {
+                container.innerHTML = '<p style="color:var(--error); padding:2rem;">Error: ' + err.message + '</p>';
+            }
+        }
+
+        // ===== PATH FINDER =====
+        async function findPaths() {
+            const fromNode = document.getElementById('pathFromInput').value.trim();
+            const toNode = document.getElementById('pathToInput').value.trim();
+            if (!fromNode || !toNode) { alert('Please enter both From and To node names'); return; }
+
+            const container = document.getElementById('pathFinderResults');
+            container.innerHTML = '<p style="text-align:center; padding:2rem; color:var(--text-muted);">Searching for paths...</p>';
+
+            try {
+                const resp = await fetch('/kg/path-finder?from_node=' + encodeURIComponent(fromNode) + '&to_node=' + encodeURIComponent(toNode));
+                const data = await resp.json();
+
+                if (data.error) {
+                    container.innerHTML = '<p style="color:var(--error); text-align:center; padding:2rem;">Error: ' + data.error + '</p>';
+                    return;
+                }
+
+                const paths = data.paths || [];
+                if (paths.length === 0) {
+                    container.innerHTML = '<p style="color:var(--text-muted); text-align:center; padding:2rem;">No paths found between "' + escapeHtml(fromNode) + '" and "' + escapeHtml(toNode) + '". Try partial name matches.</p>';
+                    return;
+                }
+
+                let html = '<h4 style="margin:0 0 1rem; font-size:0.9rem; color:var(--text-secondary);">Found ' + paths.length + ' path(s)</h4>';
+                paths.forEach((p, idx) => {
+                    html += '<div style="padding:1rem; background:var(--bg); border-radius:8px; margin-bottom:0.75rem; border-left:4px solid var(--wydot-blue);">';
+                    html += '<div style="font-weight:600; margin-bottom:0.5rem;">Path ' + (idx + 1) + ' (length: ' + p.length + ')</div>';
+                    html += '<div style="display:flex; flex-wrap:wrap; align-items:center; gap:0.5rem; font-size:0.85rem;">';
+                    p.nodes.forEach((n, i) => {
+                        const labelColors = { 'Document': '#003366', 'Entity': '#10b981', 'Chunk': '#f0a500', 'Section': '#8b5cf6' };
+                        const lbl = n.labels ? n.labels[0] : '?';
+                        const color = labelColors[lbl] || '#6366f1';
+                        html += '<span style="padding:4px 10px; border-radius:6px; background:' + color + '18; border:1px solid ' + color + '40; color:' + color + '; font-weight:500;">' + escapeHtml((n.name || '').substring(0, 40)) + '</span>';
+                        if (i < p.relationships.length) {
+                            html += '<span style="color:var(--text-muted); font-size:0.8rem;">—[' + p.relationships[i] + ']→</span>';
+                        }
+                    });
+                    html += '</div></div>';
+                });
+                container.innerHTML = html;
+            } catch (err) {
+                container.innerHTML = '<p style="color:var(--error); text-align:center; padding:2rem;">Error: ' + err.message + '</p>';
+            }
+        }
+
+        // ===== SCHEMA VISUALIZATION =====
+        async function loadSchema() {
+            try {
+                const resp = await fetch('/kg/schema');
+                const data = await resp.json();
+
+                if (data.error) {
+                    console.error('Schema error:', data.error);
+                    return;
+                }
+
+                // Node labels table
+                const labels = data.node_labels || {};
+                const props = data.properties || {};
+                let nlHtml = '';
+                for (const [label, count] of Object.entries(labels)) {
+                    const propList = (props[label] || []).join(', ');
+                    nlHtml += '<tr><td><strong>' + label + '</strong></td><td>' + count.toLocaleString() + '</td><td style="font-size:0.78rem; color:var(--text-secondary);">' + (propList || '—') + '</td></tr>';
+                }
+                document.getElementById('schemaNodeBody').innerHTML = nlHtml || '<tr><td colspan="3">No labels found</td></tr>';
+
+                // Relationship schema table
+                const schema = data.schema || [];
+                let rsHtml = '';
+                schema.forEach(s => {
+                    rsHtml += '<tr><td><span style="padding:2px 8px; border-radius:12px; background:#003366; color:white; font-size:0.75rem;">' + s.from + '</span></td>';
+                    rsHtml += '<td><strong>' + s.rel + '</strong></td>';
+                    rsHtml += '<td><span style="padding:2px 8px; border-radius:12px; background:#10b981; color:white; font-size:0.75rem;">' + s.to + '</span></td>';
+                    rsHtml += '<td>' + s.count.toLocaleString() + '</td></tr>';
+                });
+                document.getElementById('schemaRelBody').innerHTML = rsHtml || '<tr><td colspan="4">No schema found</td></tr>';
+
+                // Schema visualization with vis.js
+                const schemaContainer = document.getElementById('schemaVizContainer');
+                const uniqueLabels = Object.keys(labels);
+                const schemaColorMap = { 'Chunk': '#f0a500', 'Document': '#003366', 'Section': '#8b5cf6', 'Entity': '#10b981', 'Corridor': '#ef4444' };
+
+                const schemaNodes = new vis.DataSet(uniqueLabels.map((l, i) => ({
+                    id: l, label: l + '\n(' + (labels[l] || 0).toLocaleString() + ')',
+                    color: { background: schemaColorMap[l] || '#6366f1', border: schemaColorMap[l] || '#6366f1' },
+                    font: { color: 'white', size: 12, bold: true },
+                    shape: 'box', size: 30,
+                    margin: { top: 8, bottom: 8, left: 12, right: 12 }
+                })));
+
+                // Aggregate schema edges
+                const edgeMap = {};
+                schema.forEach(s => {
+                    const key = s.from + '->' + s.to;
+                    if (!edgeMap[key]) edgeMap[key] = { from: s.from, to: s.to, rels: [] };
+                    edgeMap[key].rels.push(s.rel + ' (' + s.count.toLocaleString() + ')');
+                });
+                const schemaEdges = new vis.DataSet(Object.values(edgeMap).map((e, i) => ({
+                    id: 'se' + i, from: e.from, to: e.to,
+                    label: e.rels.join('\n'),
+                    font: { size: 8, color: '#5a6577', multi: true },
+                    arrows: 'to', color: { color: '#c0c8d4' },
+                    smooth: { type: 'curvedCW', roundness: 0.15 }
+                })));
+
+                new vis.Network(schemaContainer, { nodes: schemaNodes, edges: schemaEdges }, {
+                    physics: { solver: 'forceAtlas2Based', stabilization: { iterations: 100 } },
+                    interaction: { hover: true },
+                    layout: { improvedLayout: true }
+                });
+
+            } catch (err) {
+                console.error('Schema load error:', err);
+            }
         }
 
         // Initialize

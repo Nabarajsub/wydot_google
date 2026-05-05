@@ -38,15 +38,17 @@ from dotenv import load_dotenv
 
 logger = logging.getLogger("wydot.admin")
 
-# ── Config (shared with chatbot via same .env) ──
-NEO4J_URI = os.getenv("NEO4J_URI") or os.getenv("NEO4J_URI_GEMINI")
-NEO4J_USERNAME = os.getenv("NEO4J_USERNAME") or os.getenv("NEO4J_USERNAME_GEMINI")
-NEO4J_PASSWORD = os.getenv("NEO4J_PASSWORD") or os.getenv("NEO4J_PASSWORD_GEMINI")
-NEO4J_INDEX = os.getenv("NEO4J_INDEX_DEFAULT_GEMINI", os.getenv("NEO4J_INDEX_DEFAULT", "wydot_gemini_index"))
-NEO4J_DATABASE = os.getenv("NEO4J_DATABASE_GEMINI", os.getenv("NEO4J_DATABASE", "neo4j"))
-GEMINI_API_KEY = os.getenv("GEMINI_API_KEY")
+# ── Config: must match chatbot (chatapp_full.py lines 337-341) exactly ──
+NEO4J_URI = os.getenv("NEO4J_URI_GEMINI", "neo4j+s://1c9edfe6.databases.neo4j.io")
+NEO4J_USERNAME = os.getenv("NEO4J_USERNAME_GEMINI", "1c9edfe6")
+NEO4J_PASSWORD = os.getenv("NEO4J_PASSWORD_GEMINI", "IlZpB7BG3sM34FQ5d_Juv5CidvCHvsMnoLkXHW18CSA")
+NEO4J_INDEX = os.getenv("NEO4J_INDEX_DEFAULT_GEMINI", "wydot_gemini_index")
+NEO4J_DATABASE = os.getenv("NEO4J_DATABASE_GEMINI", "1c9edfe6")
+GEMINI_API_KEY = os.getenv("GEMINI_API_KEY_V2") or os.getenv("GEMINI_API_KEY") or os.getenv("GOOGLE_API_KEY")
 GCS_BUCKET = os.getenv("GCS_BUCKET")
 ADMIN_PASSWORD = os.getenv("ADMIN_PASSWORD", "wydot-admin-2025")
+print(f"[ADMIN] Neo4j config: URI={NEO4J_URI}, DB={NEO4J_DATABASE}, Index={NEO4J_INDEX}, User={NEO4J_USERNAME}", flush=True)
+print(f"[ADMIN] GEMINI_API_KEY set: {bool(GEMINI_API_KEY)}", flush=True)
 
 if os.getenv("K_SERVICE"):
     INGESTED_DIR = "/tmp/ingested_data"
@@ -347,7 +349,7 @@ class AdminAuthMiddleware(BaseHTTPMiddleware):
       - Query param: ?token=<ADMIN_PASSWORD>
     Login page served at /login if not authenticated.
     """
-    OPEN_PATHS = {"/health", "/ingest", "/login", "/login/submit"}
+    OPEN_PATHS = {"/health", "/ingest", "/login", "/login/submit", "/api/debug/neo4j", "/api/debug/feedback-context"}
 
     async def dispatch(self, request: Request, call_next):
         # Strip the mount prefix (e.g. /admin) so paths match OPEN_PATHS
@@ -441,6 +443,9 @@ async def admin_index():
         html = html.replace("'/api/evaluation/", "'/admin/api/evaluation/")
         html = html.replace("`/api/evaluation/", "`/admin/api/evaluation/")
         html = html.replace("`/api/monitoring/", "`/admin/api/monitoring/")
+        html = html.replace("`/kg/", "`/admin/kg/")
+        html = html.replace("`/upload", "`/admin/upload")
+        html = html.replace("`/library", "`/admin/library")
         return HTMLResponse(html)
     return HTMLResponse("<h1>WYDOT Admin</h1><p>Upload template not found. Place ingestion_service/templates/upload.html</p>")
 
@@ -490,11 +495,12 @@ async def admin_upload(file: UploadFile = File(...)):
         gc.collect()
 
         return {"status": "success", "message": f"Ingested {filename}", "chunks": chunk_count, "filename": filename, "index": NEO4J_INDEX}
-    except HTTPException:
-        raise
+    except HTTPException as he:
+        # Convert FastAPI HTTPException to JSON format the frontend expects
+        return {"status": "error", "message": he.detail}
     except Exception as e:
         logger.exception("Upload failed")
-        raise HTTPException(500, str(e))
+        return {"status": "error", "message": str(e) or "Unknown server error"}
     finally:
         try:
             os.unlink(tmp_path)
@@ -562,6 +568,7 @@ async def admin_delete(request: Request):
 @admin_app.get("/kg/stats")
 async def admin_kg_stats():
     try:
+        print(f"[KG_STATS] Connecting to {NEO4J_URI}, database={NEO4J_DATABASE}", flush=True)
         driver = _get_driver()
         with driver.session(database=NEO4J_DATABASE) as session:
             total = session.run("MATCH (c:Chunk) RETURN count(c) AS cnt").single()["cnt"]
@@ -573,6 +580,7 @@ async def admin_kg_stats():
                 )
             }
         driver.close()
+        print(f"[KG_STATS] Results: total={total}, sources={sources}, by_type={by_type}", flush=True)
         return {"total_chunks": total, "unique_sources": sources, "by_type": by_type}
     except Exception as e:
         raise HTTPException(500, str(e))
@@ -669,7 +677,8 @@ async def admin_kg_search(request: Request):
         ]
         return {"results": hits, "query": query}
     except Exception as e:
-        raise HTTPException(500, str(e))
+        logger.exception("kg/search failed")
+        return {"results": [], "query": query, "error": str(e)}
 
 
 @admin_app.post("/kg/update")
@@ -716,6 +725,405 @@ async def admin_kg_update(request: Request):
     except Exception as e:
         logger.exception("kg/update failed")
         raise HTTPException(500, str(e))
+
+
+# ── KG Graph Explorer endpoints ──
+
+@admin_app.get("/kg/graph-stats")
+async def admin_kg_graph_stats():
+    """Comprehensive graph statistics: nodes, relationships, entities, categories."""
+    try:
+        driver = _get_driver()
+        with driver.session(database=NEO4J_DATABASE) as session:
+            result = {}
+
+            # Node counts by label
+            node_counts = {}
+            for label in ["Chunk", "Document", "Section", "Entity", "Corridor"]:
+                try:
+                    cnt = session.run(f"MATCH (n:{label}) RETURN count(n) AS cnt").single()["cnt"]
+                    node_counts[label] = cnt
+                except Exception:
+                    node_counts[label] = 0
+            result["node_counts"] = node_counts
+
+            # Total nodes and relationships
+            try:
+                result["total_nodes"] = session.run("MATCH (n) RETURN count(n) AS cnt").single()["cnt"]
+            except Exception:
+                result["total_nodes"] = sum(node_counts.values())
+            try:
+                result["total_relationships"] = session.run("MATCH ()-[r]->() RETURN count(r) AS cnt").single()["cnt"]
+            except Exception:
+                result["total_relationships"] = 0
+
+            # Relationship counts by type
+            try:
+                rel_rows = session.run("MATCH ()-[r]->() RETURN type(r) AS rel_type, count(r) AS cnt ORDER BY cnt DESC")
+                result["relationship_counts"] = {r["rel_type"]: r["cnt"] for r in rel_rows}
+            except Exception:
+                result["relationship_counts"] = {}
+
+            # Documents by category (smart categorization using doc_type + source name patterns)
+            try:
+                cat_rows = session.run(
+                    "MATCH (c:Chunk) "
+                    "WITH c, CASE "
+                    "  WHEN c.doc_type IS NOT NULL AND c.doc_type <> '' AND c.doc_type <> 'Other' THEN c.doc_type "
+                    "  WHEN toLower(c.source) CONTAINS 'standard spec' OR toLower(c.source) CONTAINS 'standard_spec' THEN 'Standard Specs' "
+                    "  WHEN toLower(c.source) CONTAINS 'construction manual' OR toLower(c.source) CONTAINS 'construction_manual' THEN 'Construction Manual' "
+                    "  WHEN toLower(c.source) CONTAINS 'material' OR toLower(c.source) CONTAINS 'testing' THEN 'Materials Testing' "
+                    "  WHEN toLower(c.source) CONTAINS 'design' OR toLower(c.source) CONTAINS 'design_manual' THEN 'Design Manual' "
+                    "  WHEN toLower(c.source) CONTAINS 'traffic' OR toLower(c.source) CONTAINS 'crash' OR toLower(c.source) CONTAINS 'safety' THEN 'Traffic & Safety' "
+                    "  WHEN toLower(c.source) CONTAINS 'stip' OR toLower(c.source) CONTAINS 'improvement' THEN 'STIP' "
+                    "  WHEN toLower(c.source) CONTAINS 'annual' OR toLower(c.source) CONTAINS 'report' THEN 'Annual Reports' "
+                    "  WHEN toLower(c.source) CONTAINS 'bridge' THEN 'Bridge Program' "
+                    "  WHEN toLower(c.source) CONTAINS 'highway' OR toLower(c.source) CONTAINS 'road' THEN 'Highway Program' "
+                    "  WHEN toLower(c.source) CONTAINS 'form' OR toLower(c.source) CONTAINS 'E-' THEN 'Forms' "
+                    "  WHEN toLower(c.source) CONTAINS 'manual' THEN 'Manuals' "
+                    "  WHEN toLower(c.source) CONTAINS 'spec' THEN 'Specifications' "
+                    "  WHEN toLower(c.source) CONTAINS 'minutes' OR toLower(c.source) CONTAINS 'meeting' THEN 'Meeting Minutes' "
+                    "  WHEN toLower(c.source) CONTAINS 'financial' OR toLower(c.source) CONTAINS 'compliance' OR toLower(c.source) CONTAINS 'budget' THEN 'Financial Reports' "
+                    "  ELSE 'Other' "
+                    "END AS category "
+                    "RETURN category, count(DISTINCT c.source) AS docs, count(c) AS chunks ORDER BY chunks DESC"
+                )
+                categories = []
+                total_chunks = 0
+                for r in cat_rows:
+                    categories.append({"category": r["category"], "docs": r["docs"], "chunks": r["chunks"]})
+                    total_chunks += r["chunks"]
+                for cat in categories:
+                    cat["pct"] = round(cat["chunks"] / total_chunks * 100, 1) if total_chunks else 0
+                    cat["avg_chunks_per_doc"] = round(cat["chunks"] / cat["docs"], 0) if cat["docs"] else 0
+                result["categories"] = categories
+                result["total_chunks"] = total_chunks
+            except Exception as e:
+                result["categories"] = []
+                result["categories_error"] = str(e)
+
+            # Entity counts by type
+            try:
+                ent_rows = session.run("MATCH (e:Entity) RETURN coalesce(e.type, 'Unknown') AS etype, count(e) AS cnt ORDER BY cnt DESC")
+                result["entity_types"] = {r["etype"]: r["cnt"] for r in ent_rows}
+            except Exception:
+                result["entity_types"] = {}
+
+            # Entity-Chunk mention stats
+            try:
+                mention_stats = session.run(
+                    "MATCH (c:Chunk)-[:MENTIONS]->(e:Entity) "
+                    "RETURN count(*) AS total_mentions, count(DISTINCT c) AS chunks_with_entities, "
+                    "count(DISTINCT e) AS unique_entities"
+                ).single()
+                result["mention_stats"] = {
+                    "total_mentions": mention_stats["total_mentions"],
+                    "chunks_with_entities": mention_stats["chunks_with_entities"],
+                    "unique_entities": mention_stats["unique_entities"],
+                }
+            except Exception:
+                result["mention_stats"] = {"total_mentions": 0, "chunks_with_entities": 0, "unique_entities": 0}
+
+            # Document-level relationships
+            try:
+                doc_rel_rows = session.run(
+                    "MATCH (d1:Document)-[r]->(d2:Document) "
+                    "RETURN type(r) AS rel_type, count(r) AS cnt ORDER BY cnt DESC"
+                )
+                result["document_relationships"] = {r["rel_type"]: r["cnt"] for r in doc_rel_rows}
+            except Exception:
+                result["document_relationships"] = {}
+
+            # Documents by year
+            try:
+                year_rows = session.run(
+                    "MATCH (c:Chunk) WHERE c.year IS NOT NULL AND c.year <> '' AND c.year <> '0' "
+                    "RETURN c.year AS year, count(DISTINCT c.source) AS docs, count(c) AS chunks "
+                    "ORDER BY year DESC LIMIT 20"
+                )
+                result["by_year"] = [{"year": r["year"], "docs": r["docs"], "chunks": r["chunks"]} for r in year_rows]
+            except Exception:
+                result["by_year"] = []
+
+            # Supersedes chains (version tracking)
+            try:
+                sup_rows = session.run(
+                    "MATCH (d1:Document)-[r:SUPERSEDES]->(d2:Document) "
+                    "RETURN d1.source AS newer, d2.source AS older, r.confidence AS confidence "
+                    "ORDER BY r.confidence DESC LIMIT 20"
+                )
+                result["supersedes"] = [{"newer": r["newer"], "older": r["older"], "confidence": r["confidence"] if r["confidence"] is not None and r["confidence"] == r["confidence"] else None} for r in sup_rows]
+            except Exception:
+                result["supersedes"] = []
+
+        driver.close()
+        return result
+    except Exception as e:
+        import traceback
+        return {"error": str(e), "traceback": traceback.format_exc()}
+
+
+@admin_app.get("/kg/entities")
+async def admin_kg_entities(limit: int = 50, entity_type: str = None):
+    """List entities, optionally filtered by type."""
+    try:
+        driver = _get_driver()
+        with driver.session(database=NEO4J_DATABASE) as session:
+            if entity_type:
+                rows = session.run(
+                    "MATCH (e:Entity) WHERE e.type = $etype "
+                    "OPTIONAL MATCH (c:Chunk)-[:MENTIONS]->(e) "
+                    "RETURN e.name AS name, e.type AS type, count(c) AS mention_count "
+                    "ORDER BY mention_count DESC LIMIT $limit",
+                    etype=entity_type, limit=limit
+                )
+            else:
+                rows = session.run(
+                    "MATCH (e:Entity) "
+                    "OPTIONAL MATCH (c:Chunk)-[:MENTIONS]->(e) "
+                    "RETURN e.name AS name, coalesce(e.type, 'Unknown') AS type, count(c) AS mention_count "
+                    "ORDER BY mention_count DESC LIMIT $limit",
+                    limit=limit
+                )
+            entities = [{"name": r["name"], "type": r["type"], "mentions": r["mention_count"]} for r in rows]
+        driver.close()
+        return {"entities": entities}
+    except Exception as e:
+        return {"entities": [], "error": str(e)}
+
+
+@admin_app.get("/kg/graph-sample")
+async def admin_kg_graph_sample(source: str = None, limit: int = 30):
+    """Get a sample of graph nodes and edges for visualization."""
+    try:
+        driver = _get_driver()
+        with driver.session(database=NEO4J_DATABASE) as session:
+            nodes = []
+            edges = []
+
+            if source:
+                # Show graph centered on a specific document
+                rows = session.run(
+                    "MATCH (c:Chunk) WHERE c.source = $src "
+                    "OPTIONAL MATCH (c)-[:MENTIONS]->(e:Entity) "
+                    "RETURN c.id AS chunk_id, LEFT(c.text, 100) AS text, c.source AS source, "
+                    "e.name AS entity_name, e.type AS entity_type LIMIT $limit",
+                    src=source, limit=limit
+                )
+                seen_chunks = set()
+                seen_entities = set()
+                for r in rows:
+                    cid = r["chunk_id"] or r["source"]
+                    if cid not in seen_chunks:
+                        nodes.append({"id": cid, "label": cid, "type": "Chunk", "group": "chunk"})
+                        seen_chunks.add(cid)
+                    if r["entity_name"] and r["entity_name"] not in seen_entities:
+                        nodes.append({"id": f"e_{r['entity_name']}", "label": r["entity_name"], "type": r["entity_type"] or "Entity", "group": "entity"})
+                        seen_entities.add(r["entity_name"])
+                        edges.append({"from": cid, "to": f"e_{r['entity_name']}", "label": "MENTIONS"})
+
+                # Also get document relationships
+                doc_rows = session.run(
+                    "MATCH (d1:Document)-[r]->(d2:Document) WHERE d1.source = $src OR d2.source = $src "
+                    "RETURN d1.source AS from_doc, type(r) AS rel_type, d2.source AS to_doc LIMIT 20",
+                    src=source
+                )
+                seen_docs = set()
+                for r in doc_rows:
+                    for doc in [r["from_doc"], r["to_doc"]]:
+                        if doc not in seen_docs:
+                            nodes.append({"id": f"d_{doc}", "label": doc, "type": "Document", "group": "document"})
+                            seen_docs.add(doc)
+                    edges.append({"from": f"d_{r['from_doc']}", "to": f"d_{r['to_doc']}", "label": r["rel_type"]})
+            else:
+                # Show overall graph sample: documents + relationships
+                doc_rows = session.run(
+                    "MATCH (d1:Document)-[r]->(d2:Document) "
+                    "RETURN d1.source AS from_doc, type(r) AS rel_type, d2.source AS to_doc "
+                    "LIMIT $limit", limit=limit
+                )
+                seen_docs = set()
+                for r in doc_rows:
+                    for doc in [r["from_doc"], r["to_doc"]]:
+                        if doc not in seen_docs:
+                            nodes.append({"id": f"d_{doc}", "label": doc, "type": "Document", "group": "document"})
+                            seen_docs.add(doc)
+                    edges.append({"from": f"d_{r['from_doc']}", "to": f"d_{r['to_doc']}", "label": r["rel_type"]})
+
+                # Add top entities
+                ent_rows = session.run(
+                    "MATCH (e:Entity)<-[:MENTIONS]-(c:Chunk) "
+                    "WITH e, count(c) AS mentions ORDER BY mentions DESC LIMIT 15 "
+                    "RETURN e.name AS name, e.type AS type, mentions"
+                )
+                for r in ent_rows:
+                    nodes.append({"id": f"e_{r['name']}", "label": r["name"], "type": r["type"] or "Entity", "group": "entity", "mentions": r["mentions"]})
+
+        driver.close()
+        return {"nodes": nodes, "edges": edges}
+    except Exception as e:
+        return {"nodes": [], "edges": [], "error": str(e)}
+
+
+@admin_app.get("/kg/entity-search")
+async def admin_kg_entity_search(q: str = "", limit: int = 20):
+    """Search entities by name and return their document connections."""
+    if not q:
+        return {"entities": [], "error": "Query required"}
+    try:
+        driver = _get_driver()
+        with driver.session(database=NEO4J_DATABASE) as session:
+            rows = session.run(
+                "MATCH (e:Entity) WHERE toLower(e.name) CONTAINS toLower($q) "
+                "OPTIONAL MATCH (c:Chunk)-[:MENTIONS]->(e) "
+                "WITH e, count(DISTINCT c) AS mentions, collect(DISTINCT c.source)[..5] AS sources "
+                "RETURN e.name AS name, coalesce(e.type, 'Unknown') AS type, mentions, sources "
+                "ORDER BY mentions DESC LIMIT $limit",
+                q=q, limit=limit
+            )
+            entities = [{
+                "name": r["name"], "type": r["type"],
+                "mentions": r["mentions"], "sources": r["sources"]
+            } for r in rows]
+        driver.close()
+        return {"entities": entities, "query": q}
+    except Exception as e:
+        return {"entities": [], "error": str(e)}
+
+
+@admin_app.get("/kg/document-detail")
+async def admin_kg_document_detail(source: str = ""):
+    """Get detailed info about a specific document: chunks, entities, relationships."""
+    if not source:
+        return {"error": "source parameter required"}
+    try:
+        driver = _get_driver()
+        with driver.session(database=NEO4J_DATABASE) as session:
+            result = {"source": source}
+
+            # Document metadata
+            meta = session.run(
+                "MATCH (c:Chunk) WHERE c.source = $src "
+                "RETURN c.title AS title, c.doc_type AS doc_type, c.year AS year, "
+                "c.author AS author, count(c) AS chunk_count, "
+                "collect(DISTINCT c.section)[..20] AS sections LIMIT 1",
+                src=source
+            ).single()
+            if meta:
+                result["title"] = meta["title"]
+                result["doc_type"] = meta["doc_type"]
+                result["year"] = meta["year"]
+                result["author"] = meta["author"]
+                result["chunk_count"] = meta["chunk_count"]
+                result["sections"] = meta["sections"]
+
+            # Top entities mentioned in this document
+            ent_rows = session.run(
+                "MATCH (c:Chunk)-[:MENTIONS]->(e:Entity) WHERE c.source = $src "
+                "RETURN e.name AS name, coalesce(e.type, 'Unknown') AS type, count(c) AS mentions "
+                "ORDER BY mentions DESC LIMIT 30",
+                src=source
+            )
+            result["entities"] = [{"name": r["name"], "type": r["type"], "mentions": r["mentions"]} for r in ent_rows]
+
+            # Document relationships
+            rel_rows = session.run(
+                "MATCH (d1:Document)-[r]->(d2:Document) WHERE d1.source = $src OR d2.source = $src "
+                "RETURN d1.source AS from_doc, type(r) AS rel_type, d2.source AS to_doc, "
+                "r.confidence AS confidence ORDER BY type(r)",
+                src=source
+            )
+            result["relationships"] = [{
+                "from": r["from_doc"], "type": r["rel_type"], "to": r["to_doc"],
+                "confidence": r["confidence"]
+            } for r in rel_rows]
+
+            # Sample chunks (first 5)
+            chunk_rows = session.run(
+                "MATCH (c:Chunk) WHERE c.source = $src "
+                "RETURN c.text AS text, c.section AS section, c.page AS page "
+                "ORDER BY c.page LIMIT 5",
+                src=source
+            )
+            result["sample_chunks"] = [{"text": r["text"][:300], "section": r["section"], "page": r["page"]} for r in chunk_rows]
+
+        driver.close()
+        return result
+    except Exception as e:
+        import traceback
+        return {"error": str(e), "traceback": traceback.format_exc()}
+
+
+@admin_app.get("/kg/path-finder")
+async def admin_kg_path_finder(from_node: str = "", to_node: str = "", max_depth: int = 4):
+    """Find shortest paths between two nodes (documents or entities)."""
+    if not from_node or not to_node:
+        return {"error": "Both from_node and to_node parameters required"}
+    try:
+        driver = _get_driver()
+        with driver.session(database=NEO4J_DATABASE) as session:
+            # Try to find paths between documents or entities
+            rows = session.run(
+                "MATCH p = shortestPath((a)-[*1.." + str(min(max_depth, 6)) + "]->(b)) "
+                "WHERE (a:Document AND a.source CONTAINS $from) OR (a:Entity AND toLower(a.name) CONTAINS toLower($from)) "
+                "AND ((b:Document AND b.source CONTAINS $to) OR (b:Entity AND toLower(b.name) CONTAINS toLower($to))) "
+                "RETURN [n IN nodes(p) | {id: id(n), labels: labels(n), name: CASE WHEN n:Document THEN n.source WHEN n:Entity THEN n.name WHEN n:Chunk THEN LEFT(n.text, 80) ELSE coalesce(n.name, n.source, 'unknown') END}] AS path_nodes, "
+                "[r IN relationships(p) | type(r)] AS path_rels, length(p) AS path_length "
+                "LIMIT 5",
+                **{"from": from_node, "to": to_node}
+            )
+            paths = []
+            for r in rows:
+                paths.append({
+                    "nodes": r["path_nodes"],
+                    "relationships": r["path_rels"],
+                    "length": r["path_length"]
+                })
+        driver.close()
+        return {"paths": paths, "from": from_node, "to": to_node}
+    except Exception as e:
+        return {"paths": [], "error": str(e)}
+
+
+@admin_app.get("/kg/schema")
+async def admin_kg_schema():
+    """Get the graph schema: node labels, relationship types, and which labels connect."""
+    try:
+        driver = _get_driver()
+        with driver.session(database=NEO4J_DATABASE) as session:
+            # Node labels with counts and sample properties
+            node_labels = {}
+            label_rows = session.run(
+                "CALL db.labels() YIELD label "
+                "CALL { WITH label MATCH (n) WHERE label IN labels(n) RETURN count(n) AS cnt LIMIT 1 } "
+                "RETURN label, cnt ORDER BY cnt DESC"
+            )
+            for r in label_rows:
+                node_labels[r["label"]] = r["cnt"]
+
+            # Relationship schema: which labels connect via which relationship types
+            schema_rows = session.run(
+                "MATCH (a)-[r]->(b) "
+                "WITH labels(a)[0] AS from_label, type(r) AS rel_type, labels(b)[0] AS to_label, count(*) AS cnt "
+                "RETURN from_label, rel_type, to_label, cnt ORDER BY cnt DESC"
+            )
+            schema = [{"from": r["from_label"], "rel": r["rel_type"], "to": r["to_label"], "count": r["cnt"]} for r in schema_rows]
+
+            # Property keys per label (sample)
+            props = {}
+            for label in list(node_labels.keys())[:6]:
+                try:
+                    prop_row = session.run(f"MATCH (n:{label}) RETURN keys(n) AS props LIMIT 1").single()
+                    if prop_row:
+                        props[label] = prop_row["props"]
+                except Exception:
+                    props[label] = []
+
+        driver.close()
+        return {"node_labels": node_labels, "schema": schema, "properties": props}
+    except Exception as e:
+        import traceback
+        return {"error": str(e), "traceback": traceback.format_exc()}
 
 
 @admin_app.post("/ingest")
@@ -929,3 +1337,30 @@ async def debug_feedback_context():
     except Exception as e:
         import traceback
         return {"error": str(e), "traceback": traceback.format_exc()}
+
+@admin_app.get("/api/debug/neo4j")
+async def debug_neo4j():
+    """Public debug endpoint: check Neo4j connectivity and chunk count."""
+    result = {
+        "neo4j_uri": NEO4J_URI,
+        "neo4j_database": NEO4J_DATABASE,
+        "neo4j_index": NEO4J_INDEX,
+        "neo4j_username": NEO4J_USERNAME,
+        "env_NEO4J_URI": os.getenv("NEO4J_URI"),
+        "env_NEO4J_URI_GEMINI": os.getenv("NEO4J_URI_GEMINI"),
+        "env_NEO4J_DATABASE": os.getenv("NEO4J_DATABASE"),
+        "env_NEO4J_DATABASE_GEMINI": os.getenv("NEO4J_DATABASE_GEMINI"),
+    }
+    try:
+        driver = _get_driver()
+        with driver.session(database=NEO4J_DATABASE) as session:
+            total = session.run("MATCH (c:Chunk) RETURN count(c) AS cnt").single()["cnt"]
+            result["chunk_count"] = total
+            result["status"] = "connected"
+        driver.close()
+    except Exception as e:
+        import traceback
+        result["status"] = "error"
+        result["error"] = str(e)
+        result["traceback"] = traceback.format_exc()
+    return result

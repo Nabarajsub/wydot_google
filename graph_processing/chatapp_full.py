@@ -68,6 +68,7 @@ import re
 import datetime
 import json
 import time
+import asyncio
 import tempfile
 import traceback
 import urllib.parse
@@ -86,6 +87,19 @@ from flashrank import Ranker, RerankRequest
 from langchain_core.documents import Document
 from neo4j import GraphDatabase
 from collections import OrderedDict
+
+# ── Agentic multi-agent orchestrator (lazy-loaded) ──
+_agentic_available = False
+try:
+    from agentic_solution.orchestrator import (
+        run_orchestrator_async,
+        TOOL_DISPLAY_NAMES,
+        TOOL_AGENT_LABELS,
+    )
+    _agentic_available = True
+    print("✅ Agentic orchestrator loaded", flush=True)
+except ImportError as _agentic_err:
+    print(f"⚠️ Agentic orchestrator not available: {_agentic_err}", flush=True)
 
 # Module-level cache: maps Chainlit message ID -> {question, answer, user_email, sources}
 # Used by upsert_feedback callback (which runs without Chainlit session context)
@@ -358,7 +372,7 @@ NEO4J_INDEX_2021 = os.getenv("NEO4J_INDEX_2021", "wydot_vector_index_2021")
 
 print("💬 Initializing API Keys...")
 MISTRAL_API_KEY = os.getenv("MISTRAL_API_KEY")
-GEMINI_API_KEY = os.getenv("GEMINI_API_KEY")
+GEMINI_API_KEY = os.getenv("GEMINI_API_KEY_V2") or os.getenv("GEMINI_API_KEY")
 OPENROUTER_API_KEY = os.getenv("OPENROUTER_API_KEY")
 
 # Mapping of model names (UI) to OpenRouter IDs
@@ -697,10 +711,89 @@ class WydotDataLayer(BaseDataLayer):
         pass
     
     async def create_step(self, step_dict):
-        pass
-        
+        # Chainlit creates "steps" for messages. feedback.forId uses the STEP id,
+        # not msg.id. We must copy feedback context from parent (msg.id) to step id.
+        try:
+            step_id = step_dict.get("id") if isinstance(step_dict, dict) else getattr(step_dict, "id", None)
+            parent_id = step_dict.get("parentId") if isinstance(step_dict, dict) else getattr(step_dict, "parentId", None)
+            print(f"[CREATE_STEP] step_id={step_id}, parentId={parent_id}", flush=True)
+
+            if step_id and parent_id and parent_id in _feedback_context:
+                _feedback_context[step_id] = _feedback_context[parent_id]
+                print(f"[CREATE_STEP] Mapped step {step_id} -> parent {parent_id} context", flush=True)
+                try:
+                    ctx = _feedback_context[parent_id]
+                    CHAT_DB.save_feedback_context(
+                        cl_msg_id=step_id,
+                        question=ctx.get("question"),
+                        answer=ctx.get("answer"),
+                        user_email=ctx.get("user_email"),
+                        sources=ctx.get("sources"),
+                    )
+                except Exception:
+                    pass
+            elif step_id and not parent_id:
+                output = step_dict.get("output") if isinstance(step_dict, dict) else getattr(step_dict, "output", None)
+                if output and _feedback_context:
+                    for mid, ctx in reversed(list(_feedback_context.items())):
+                        if ctx.get("answer") and output[:100] in ctx["answer"][:200]:
+                            _feedback_context[step_id] = ctx
+                            print(f"[CREATE_STEP] Matched step {step_id} to msg {mid} via output", flush=True)
+                            try:
+                                CHAT_DB.save_feedback_context(
+                                    cl_msg_id=step_id,
+                                    question=ctx.get("question"),
+                                    answer=ctx.get("answer"),
+                                    user_email=ctx.get("user_email"),
+                                    sources=ctx.get("sources"),
+                                )
+                            except Exception:
+                                pass
+                            break
+        except Exception as e:
+            print(f"[CREATE_STEP] Error: {e}", flush=True)
+
     async def update_step(self, step_dict):
-        pass
+        # Also try to map on update (Chainlit may update step with final output)
+        try:
+            step_id = step_dict.get("id") if isinstance(step_dict, dict) else getattr(step_dict, "id", None)
+            parent_id = step_dict.get("parentId") if isinstance(step_dict, dict) else getattr(step_dict, "parentId", None)
+
+            if step_id and step_id not in _feedback_context:
+                if parent_id and parent_id in _feedback_context:
+                    _feedback_context[step_id] = _feedback_context[parent_id]
+                    print(f"[UPDATE_STEP] Mapped step {step_id} -> parent {parent_id}", flush=True)
+                    try:
+                        ctx = _feedback_context[parent_id]
+                        CHAT_DB.save_feedback_context(
+                            cl_msg_id=step_id,
+                            question=ctx.get("question"),
+                            answer=ctx.get("answer"),
+                            user_email=ctx.get("user_email"),
+                            sources=ctx.get("sources"),
+                        )
+                    except Exception:
+                        pass
+                else:
+                    output = step_dict.get("output") if isinstance(step_dict, dict) else getattr(step_dict, "output", None)
+                    if output and _feedback_context:
+                        for mid, ctx in reversed(list(_feedback_context.items())):
+                            if ctx.get("answer") and output[:100] in ctx["answer"][:200]:
+                                _feedback_context[step_id] = ctx
+                                print(f"[UPDATE_STEP] Matched step {step_id} to msg {mid} via output", flush=True)
+                                try:
+                                    CHAT_DB.save_feedback_context(
+                                        cl_msg_id=step_id,
+                                        question=ctx.get("question"),
+                                        answer=ctx.get("answer"),
+                                        user_email=ctx.get("user_email"),
+                                        sources=ctx.get("sources"),
+                                    )
+                                except Exception:
+                                    pass
+                                break
+        except Exception as e:
+            print(f"[UPDATE_STEP] Error: {e}", flush=True)
         
     async def delete_step(self, step_id):
         pass
@@ -823,6 +916,15 @@ class WydotDataLayer(BaseDataLayer):
                 except Exception as db_err:
                     logger.warning(f"[FEEDBACK] DB lookup failed: {db_err}")
 
+            # Strategy 3: Fallback — use most recent feedback context entry
+            if not question and _feedback_context:
+                last_key = list(_feedback_context.keys())[-1]
+                ctx = _feedback_context[last_key]
+                question = ctx.get("question")
+                answer = ctx.get("answer")
+                user_email = ctx.get("user_email")
+                print(f"[FEEDBACK_UPSERT] Strategy 3: used most recent context (key={last_key})", flush=True)
+
             print(f"[FEEDBACK_UPSERT] FINAL: question={'YES' if question else 'NO'}, answer={'YES' if answer else 'NO'}, user={user_email}", flush=True)
             CHAT_DB.upsert_feedback(feedback, question=question, answer=answer, user_email=user_email)
             return True
@@ -936,7 +1038,7 @@ async def on_chat_resume(thread: Dict):
         ).send()
         cl.user_session.set("settings", settings)
         cl.user_session.set("memory", [])
-        
+
         # Handle backward-compat session ID for old threads saved with "thread_" prefix
         user = cl.user_session.get("user")
         if user and user.metadata.get("db_id"):
@@ -1709,8 +1811,9 @@ async def search_graph_async(query: str, index_name: str, use_gemini: bool = Fal
     k_val = int(settings.get("fetch_k", FETCH_K))
     
     try:
-        # HyDE expansion if enabled
-        hyde_enabled = settings.get("hyde", False)
+        # HyDE expansion — auto-enabled when Multi-hop Reasoning is on
+        multihop_on = settings.get("multihop", False)
+        hyde_enabled = multihop_on
         search_query = query
         if hyde_enabled:
             print("🧪 HyDE enabled: generating hypothetical snippet...")
@@ -1893,8 +1996,8 @@ async def search_graph_async(query: str, index_name: str, use_gemini: bool = Fal
 
         pass  # Driver managed by connection pool singleton
 
-        # --- FlashRank Reranking (only if enabled in settings) ---
-        reranking_enabled = settings.get("reranking", False)
+        # --- FlashRank Reranking — auto-enabled when Multi-hop Reasoning is on ---
+        reranking_enabled = multihop_on
         if chunks and reranking_enabled:
             ranker = get_reranker()
             if ranker:
@@ -2123,8 +2226,8 @@ def search_graph(query: str, index_name: str, use_gemini: bool = False) -> Tuple
         
         pass  # Driver managed by connection pool singleton
 
-        # --- FlashRank Reranking (only if enabled in settings) ---
-        reranking_enabled = settings.get("reranking", False) if 'settings' in dir() else False
+        # --- FlashRank Reranking — auto-enabled when Multi-hop is on ---
+        reranking_enabled = settings.get("multihop", False) if 'settings' in dir() else False
         if chunks and reranking_enabled:
             ranker = get_reranker()
             if ranker:
@@ -2690,12 +2793,8 @@ async def setup_agent(settings):
 async def main(message: cl.Message):
     settings = cl.user_session.get("settings") or {}
     model_choice = "Gemini 2.5 Flash"  # always Gemini
-    index_choice = settings.get("index", "All Documents")
-    thinking_mode = settings.get("thinking_mode", False)
     multihop = settings.get("multihop", False)
-    
-    index_map = {"All Documents": NEO4J_INDEX_DEFAULT, "2021 Specs": NEO4J_INDEX_2021}
-    index_name = index_map.get(index_choice, NEO4J_INDEX_DEFAULT)
+    index_name = NEO4J_INDEX_DEFAULT
     
     # MULTIMODAL HANDLING
     files = message.elements
@@ -2756,15 +2855,164 @@ async def main(message: cl.Message):
 
         return
 
+    # ── 1b. AGENTIC MULTI-AGENT MODE ──
+    agentic_mode = settings.get("agentic_mode", False)
+    if agentic_mode and _agentic_available:
+        t0 = time.perf_counter()
+
+        # Live loading message that updates as agents work
+        loading_lines = ["**Multi-Agent Mode** — Routing to specialized agents...", ""]
+        await msg.stream_token("\n".join(loading_lines))
+        await msg.send()
+
+        loop = asyncio.get_event_loop()
+
+        def on_tool_call(event_type, tool_name, args, chunk_count):
+            """Callback from orchestrator — updates loading message live."""
+            if event_type == "start":
+                display = TOOL_DISPLAY_NAMES.get(tool_name, f"Calling {tool_name}...")
+                agent_label = TOOL_AGENT_LABELS.get(tool_name, "Agent")
+                query_arg = args.get("query", args.get("topic", args.get("section_number", "")))
+                loading_lines.append(f"{display}")
+                loading_lines.append(f"   *{agent_label} — \"{query_arg[:60]}\"*")
+                msg.content = "\n".join(loading_lines)
+                asyncio.run_coroutine_threadsafe(msg.update(), loop)
+            elif event_type == "done":
+                agent_label = TOOL_AGENT_LABELS.get(tool_name, "Agent")
+                loading_lines.append(f"   Returned **{chunk_count}** chunks")
+                loading_lines.append("")
+                msg.content = "\n".join(loading_lines)
+                asyncio.run_coroutine_threadsafe(msg.update(), loop)
+
+        try:
+            chat_history = cl.user_session.get("memory", [])
+            answer, sources_raw, tool_events = await run_orchestrator_async(
+                message.content, chat_history, on_tool_call=on_tool_call
+            )
+            elapsed = time.time() - t0
+
+            # Build agent routing header
+            agents_used = list(dict.fromkeys(e["agent_label"] for e in tool_events))
+            total_chunks = sum(e["chunk_count"] for e in tool_events)
+            agents_str = ", ".join(f"**{a}**" for a in agents_used)
+            header = f"*Agents: {agents_str} | {total_chunks} chunks | {elapsed:.1f}s*\n\n---\n\n"
+
+            # Normalize citations [SOURCE X] -> Source X (to match DataLayer expectations)
+            answer = re.sub(r'\[?SOURCE[\s_]+(\d+)\]?', lambda m: f'Source {m.group(1)}', answer, flags=re.IGNORECASE)
+
+            # Build source elements for side panel
+            clean_elements = []
+            formatted_sources = []
+            if sources_raw:
+                for i, s in enumerate(sources_raw[:20], 1):
+                    element_name = f"Source {i}"
+                    title = s.get("title", "Unknown Document")
+                    doc_source = s.get("source", "N/A")
+                    page = s.get("page", "N/A")
+                    section = s.get("section", "N/A")
+                    year = s.get("year", "N/A")
+                    text = s.get("text", "No content available.")
+                    gcs_uri = s.get("gcs_uri", s.get("url", ""))
+                    public_url = generate_public_url(gcs_uri) if gcs_uri else ""
+
+                    # Build clickable GCS URL from source filename
+                    gcs_uri = s.get("gcs_uri", "")
+                    if not gcs_uri and doc_source and doc_source != "N/A":
+                        project_id = os.getenv("GOOGLE_CLOUD_PROJECT") or os.getenv("GCP_PROJECT")
+                        if project_id:
+                            gcs_uri = f"gs://wydot-documents-{project_id}/wydot documents/{doc_source}"
+                    public_url = generate_public_url(gcs_uri)
+                    if public_url and page and page != "N/A":
+                        public_url += f"#page={page}"
+
+                    formatted_sources.append({
+                        "index": i, "title": title, "source": doc_source,
+                        "page": page, "section": section, "year": year,
+                        "preview": text[:500], "url": public_url,
+                    })
+
+                    # Add source element if cited (check multiple patterns)
+                    if f"Source {i}" in answer or f"source {i}" in answer.lower() or f"SOURCE {i}" in answer.upper():
+                        file_link = f"[{doc_source}]({public_url})" if public_url else doc_source
+                        clean_elements.append(
+                            cl.Text(
+                                name=element_name,
+                                content=f"**Source {i}: {title}**\n\n**File:** {file_link}\n**Page:** {page}\n**Section:** {section}\n**Year:** {year}\n\n**Preview:**\n{text[:1500]}",
+                                display="side"
+                            )
+                        )
+
+            # Final message with header + answer + sources
+            msg.content = header + answer
+            msg.elements = clean_elements
+            await msg.update()
+
+            # ── Feedback context (same as regular flow) ──
+            user = cl.user_session.get("user")
+            _user_email = None
+            if user:
+                _user_email = getattr(user, 'identifier', None) or (user.metadata or {}).get("email")
+            _feedback_context[msg.id] = {
+                "question": message.content[:500],
+                "answer": answer[:1000],
+                "user_email": _user_email,
+                "sources": formatted_sources,
+            }
+            while len(_feedback_context) > _FEEDBACK_CTX_MAX:
+                _feedback_context.popitem(last=False)
+            try:
+                CHAT_DB.save_feedback_context(
+                    cl_msg_id=msg.id,
+                    question=message.content[:500],
+                    answer=answer[:1000],
+                    user_email=_user_email,
+                    sources=formatted_sources,
+                )
+            except Exception as e:
+                print(f"[WARN] Failed to save agentic feedback context: {e}")
+
+            # ── Chat history persistence (same as regular flow) ──
+            session_id = cl.user_session.get("session_id", "cl_session")
+            if user and user.metadata.get("db_id") and not user.metadata.get("is_guest"):
+                uid = user.metadata["db_id"]
+                conv_mem.append(uid, session_id, "user", message.content)
+                conv_mem.append(uid, session_id, "assistant", answer)
+                CHAT_DB.add_message(uid, session_id, "user", message.content, cl_msg_id=message.id)
+                CHAT_DB.add_message(uid, session_id, "assistant", answer, sources=formatted_sources, cl_msg_id=msg.id)
+            else:
+                memory = cl.user_session.get("memory", [])
+                memory.append({"role": "user", "content": message.content})
+                memory.append({"role": "assistant", "content": answer})
+                if len(memory) > 20:
+                    memory = memory[-20:]
+                cl.user_session.set("memory", memory)
+
+            # ── Telemetry ──
+            total_ms = (time.perf_counter() - t0) * 1000
+            telemetry.record_request(
+                retrieval_latency_ms=total_ms * 0.6,
+                generation_latency_ms=total_ms * 0.4,
+                total_latency_ms=total_ms,
+                num_sources=len(formatted_sources),
+                model_used="Gemini (Agentic)",
+                index_used="multi-agent",
+                has_error=False,
+            )
+
+        except Exception as e:
+            msg.content = f"**Error in Multi-Agent Mode:** {str(e)}"
+            await msg.update()
+            print(f"[AGENTIC ERROR] {e}", flush=True)
+            traceback.print_exc()
+
+        return
+
     # 2. Text Retrieval Route (with timing for telemetry)
     t0 = time.perf_counter()
     await msg.stream_token(" **Thinking...**\n")
     
     use_gemini = "Gemini" in model_choice
-    if thinking_mode:
-        # SYNC (Blocking) Search
-        context, sources = search_graph(message.content, index_name)
-    elif multihop:
+    if multihop:
         # INTENT ROUTING & ADVANCED GRAPH SEARCH
         await msg.stream_token(" **Analyzing query intent...**\n")
         intent = await route_query_intent(message.content, use_gemini)
@@ -2819,32 +3067,21 @@ async def main(message: cl.Message):
 
     t_gen_start = time.perf_counter()
     
-    # Streaming vs Sync Generation
+    # Streaming Generation
     full_answer = ""
     try:
-        if thinking_mode:
-            # SYNC Generation (Wait for full answer)
-            if model_type == "gemini":
-                full_answer = generate_answer_gemini(message.content, context, history_msgs, enhanced_citations=True)
-            elif model_type == "mistral":
-                full_answer = generate_answer_mistral(message.content, context, history_msgs, enhanced_citations=True)
-            else:
-                full_answer = await generate_answer_openrouter(model_id, message.content, context, history_msgs, enhanced_citations=True)
-            await msg.stream_token(full_answer) # Send all at once
+        if model_type == "gemini":
+            async for chunk in generate_answer_gemini_stream(message.content, context, history_msgs, enhanced_citations=True):
+                await msg.stream_token(chunk)
+                full_answer += chunk
+        elif model_type == "mistral":
+            async for chunk in generate_answer_mistral_stream(message.content, context, history_msgs, enhanced_citations=True):
+                await msg.stream_token(chunk)
+                full_answer += chunk
         else:
-            # ASYNC / Streaming Generation
-            if model_type == "gemini":
-                async for chunk in generate_answer_gemini_stream(message.content, context, history_msgs, enhanced_citations=True):
-                    await msg.stream_token(chunk)
-                    full_answer += chunk
-            elif model_type == "mistral":
-                async for chunk in generate_answer_mistral_stream(message.content, context, history_msgs, enhanced_citations=True):
-                    await msg.stream_token(chunk)
-                    full_answer += chunk
-            else:
-                async for chunk in generate_answer_openrouter_stream(model_id, message.content, context, history_msgs, enhanced_citations=True):
-                    await msg.stream_token(chunk)
-                    full_answer += chunk
+            async for chunk in generate_answer_openrouter_stream(model_id, message.content, context, history_msgs, enhanced_citations=True):
+                await msg.stream_token(chunk)
+                full_answer += chunk
                     
     except Exception as e:
         error_text = f"\n\n⚠️ Error during generation: {e}"
