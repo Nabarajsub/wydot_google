@@ -1,4 +1,28 @@
-/* Fix dark feedback modal text visibility in light mode */
+/* ============================================================
+   WYDOT Assistant — Light / White Theme Overrides
+   Covers: feedback modal, settings drawer, login page, all MUI dialogs
+   ============================================================ */
+
+/* ── Feedback & all MUI Dialogs ─────────────────────────────── */
+.MuiDialog-root .MuiPaper-root {
+    background-color: #ffffff !important;
+    color: #111111 !important;
+}
+
+.MuiDialog-root .MuiDialogTitle-root {
+    background-color: #ffffff !important;
+    color: #111111 !important;
+}
+
+.MuiDialog-root .MuiDialogContent-root {
+    background-color: #ffffff !important;
+    color: #222222 !important;
+}
+
+.MuiDialog-root .MuiDialogActions-root {
+    background-color: #f5f5f5 !important;
+}
+
 .MuiDialog-root .MuiInputBase-root {
     background-color: #ffffff !important;
     color: #111111 !important;
@@ -6,22 +30,132 @@
 
 .MuiDialog-root .MuiInputBase-input {
     color: #111111 !important;
-    -webkit-text-fill-color: #111111 !important; /* Fix for some browsers */
+    -webkit-text-fill-color: #111111 !important;
 }
 
-/* Ensure the label/placeholder is visible */
 .MuiDialog-root .MuiInputLabel-root {
-    color: #666666 !important;
+    color: #555555 !important;
 }
 
-/* Modal header/content background */
-.MuiDialog-root .MuiPaper-root {
-    background-color: #ffffff !important;
-}
-
-/* Feedback textarea specific fix */
 .MuiDialog-root textarea {
     background-color: #ffffff !important;
     color: #111111 !important;
-    border: 1px solid #ddd !important;
+    border: 1px solid #dddddd !important;
+}
+
+.MuiDialog-root .MuiTypography-root {
+    color: #111111 !important;
+}
+
+.MuiDialog-root .MuiSvgIcon-root {
+    color: #444444 !important;
+}
+
+/* ── Settings Drawer / Panel ────────────────────────────────── */
+.MuiDrawer-root .MuiPaper-root {
+    background-color: #ffffff !important;
+    color: #111111 !important;
+}
+
+.MuiDrawer-root .MuiTypography-root {
+    color: #111111 !important;
+}
+
+.MuiDrawer-root .MuiInputBase-root {
+    background-color: #fafafa !important;
+    color: #111111 !important;
+}
+
+.MuiDrawer-root .MuiInputBase-input {
+    color: #111111 !important;
+    -webkit-text-fill-color: #111111 !important;
+}
+
+.MuiDrawer-root .MuiInputLabel-root {
+    color: #555555 !important;
+}
+
+.MuiDrawer-root .MuiSlider-root {
+    color: #1976d2 !important;
+}
+
+.MuiDrawer-root .MuiSwitch-track {
+    background-color: #bbbbbb !important;
+}
+
+.MuiDrawer-root .MuiSvgIcon-root {
+    color: #444444 !important;
+}
+
+/* Chat settings panel (Chainlit built-in) */
+[data-testid="chat-settings"] {
+    background-color: #ffffff !important;
+    color: #111111 !important;
+}
+
+/* ── Login Page ─────────────────────────────────────────────── */
+.login-container,
+.cl-login-page,
+[class*="login"] .MuiPaper-root,
+[class*="Login"] .MuiPaper-root {
+    background-color: #ffffff !important;
+    color: #111111 !important;
+}
+
+/* Login form inputs */
+[class*="login"] .MuiInputBase-root,
+[class*="Login"] .MuiInputBase-root,
+[class*="auth"] .MuiInputBase-root {
+    background-color: #ffffff !important;
+    color: #111111 !important;
+}
+
+[class*="login"] .MuiInputBase-input,
+[class*="Login"] .MuiInputBase-input,
+[class*="auth"] .MuiInputBase-input {
+    color: #111111 !important;
+    -webkit-text-fill-color: #111111 !important;
+}
+
+[class*="login"] .MuiInputLabel-root,
+[class*="Login"] .MuiInputLabel-root {
+    color: #555555 !important;
+}
+
+/* ── General MUI Popper / Popover ───────────────────────────── */
+.MuiPopover-paper,
+.MuiMenu-paper {
+    background-color: #ffffff !important;
+    color: #111111 !important;
+}
+
+.MuiMenuItem-root {
+    color: #111111 !important;
+}
+
+.MuiMenuItem-root:hover {
+    background-color: #f0f0f0 !important;
+}
+
+/* ── Tooltip ────────────────────────────────────────────────── */
+.MuiTooltip-tooltip {
+    background-color: #333333 !important;
+    color: #ffffff !important;
+}
+
+/* ── Outlined / filled inputs globally (form fields) ───────── */
+.MuiOutlinedInput-root fieldset {
+    border-color: #cccccc !important;
+}
+
+.MuiOutlinedInput-root:hover fieldset {
+    border-color: #1976d2 !important;
+}
+
+/* ── Step settings (Chainlit CoT steps) ─────────────────────── */
+.step-settings,
+[class*="StepSettings"],
+[class*="step-settings"] {
+    background-color: #f9f9f9 !important;
+    color: #111111 !important;
 }
