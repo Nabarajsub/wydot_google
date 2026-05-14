@@ -209,13 +209,20 @@ async def get_source_content(thread_id: str, element_id: str):
             raise HTTPException(status_code=404, detail="Source index out of range")
 
         src = msg_sources[src_idx]
+        raw_preview = src.get('preview', '')
+        # Strip ingest header if still present in stored preview
+        marker = "--- CONTENT ---"
+        if marker in raw_preview:
+            raw_preview = raw_preview[raw_preview.find(marker) + len(marker):].strip()
+        import re as _re
+        clean_preview = _re.sub(r"[\s.]{6,}", " ", raw_preview).strip()
         content = (
             f"**Source {src.get('index', '?')}: {src.get('title', 'Unknown')}**\n\n"
             f"**File:** [{src.get('source', 'File')}]({src.get('url', '#')})\n"
             f"**Page:** {src.get('page', 'N/A')}\n"
             f"**Section:** {src.get('section', 'N/A')}\n"
             f"**Year:** {src.get('year', 'N/A')}\n\n"
-            f"**Preview:**\n{src.get('preview', '')}"
+            f"**Preview:**\n{clean_preview or '(No text preview available for this page)'}"
         )
         return PlainTextResponse(content=content, media_type="text/plain")
     except HTTPException:
@@ -1031,13 +1038,7 @@ async def on_chat_resume(thread: Dict):
         await cl.sleep(0.5) 
         settings = await cl.ChatSettings(
             [
-                Select(
-                    id="model",
-                    label="Model",
-                    values=["Mistral Large", "Gemini 2.5 Flash"] + list(OPENROUTER_MODELS.keys()),
-                    initial_index=1,
-                ),
-                Switch(id="agentic_mode", label="Multi-Agent Mode (Domain Routing)", initial=False),
+                Switch(id="agentic_mode", label="Multi-Agent Mode (Domain Routing)", initial=True),
                 Switch(id="multihop", label="Multi-hop Reasoning (HyDE + Reranking)", initial=False),
                 Slider(id="fetch_k", label="Initial Candidates (FETCH_K)", min=10, max=100, step=5, initial=15),
             ]
@@ -1164,7 +1165,7 @@ Transcribe the following audio:""",
         # Step 2: Search knowledge graph (same as text query)
         settings = cl.user_session.get("settings", {})
         index_name = settings.get("index", "All Documents")
-        model_type = "gemini" if settings.get("model", "Mistral Large") == "Gemini 2.5 Flash" else "mistral"
+        model_type = "gemini"  # always Gemini 2.5 Flash
         
         context, sources = search_graph(transcribed_text, index_name)
         
@@ -1984,7 +1985,7 @@ async def search_graph_async(query: str, index_name: str, use_gemini: bool = Fal
                 "year": meta.get("year", ""),
                 "section": section_name or meta.get("section", ""),
                 "page": "" if meta.get("page", 0) == 0 else meta.get("page", ""),
-                "preview": doc.page_content[:300]
+                "preview": _extract_preview(doc.page_content, 300)
             })
             
             # --- URL Generation ---
@@ -2061,6 +2062,16 @@ async def search_graph_async(query: str, index_name: str, use_gemini: bool = Fal
     except Exception as e:
         print(f"Search error: {e}")
         return "", []
+
+def _extract_preview(text: str, max_chars: int = 300) -> str:
+    """Strip ingest header and return the meaningful content excerpt."""
+    marker = "--- CONTENT ---"
+    idx = text.find(marker)
+    body = text[idx + len(marker):].strip() if idx != -1 else text.strip()
+    # Collapse runs of whitespace/dots that are just TOC leader lines
+    cleaned = re.sub(r"[\s.]{6,}", " ", body).strip()
+    return cleaned[:max_chars] if cleaned else body[:max_chars]
+
 
 def search_graph(query: str, index_name: str, use_gemini: bool = False) -> Tuple[str, List[Dict]]:
     # Sync version
@@ -2214,7 +2225,7 @@ def search_graph(query: str, index_name: str, use_gemini: bool = False) -> Tuple
                 "year": meta.get("year", ""),
                 "section": section_name or meta.get("section", ""),
                 "page": "" if meta.get("page", 0) == 0 else meta.get("page", ""),
-                "preview": doc.page_content[:300]
+                "preview": _extract_preview(doc.page_content, 300)
             })
             
             # URL Generation
@@ -2775,20 +2786,14 @@ async def start():
     # Chat Settings
     settings = await cl.ChatSettings(
         [
-            Select(
-                id="model",
-                label="Model",
-                values=["Mistral Large", "Gemini 2.5 Flash"] + list(OPENROUTER_MODELS.keys()),
-                initial_index=1,
-            ),
-            Switch(id="agentic_mode", label="Multi-Agent Mode (Domain Routing)", initial=False),
+            Switch(id="agentic_mode", label="Multi-Agent Mode (Domain Routing)", initial=True),
             Switch(id="multihop", label="Multi-hop Reasoning (HyDE + Reranking)", initial=False),
             Slider(id="fetch_k", label="Initial Candidates (FETCH_K)", min=10, max=100, step=5, initial=15),
         ]
     ).send()
 
     cl.user_session.set("settings", settings)
-    
+
     # Send welcome message
     # await cl.Message(
     #     content="**Welcome to WYDOT Assistant!**\n\nAsk about specifications, upload plans/images for analysis, or use the audio button to speak."
@@ -2804,7 +2809,7 @@ async def setup_agent(settings):
 @cl.on_message
 async def main(message: cl.Message):
     settings = cl.user_session.get("settings") or {}
-    model_choice = settings.get("model", "Gemini 2.5 Flash")
+    model_choice = "Gemini 2.5 Flash"  # always Gemini
     multihop = settings.get("multihop", False)
     index_name = NEO4J_INDEX_DEFAULT
     
@@ -2816,10 +2821,6 @@ async def main(message: cl.Message):
     
     # 1. Handle Multimodal (Gemini required)
     if has_media:
-        if model_choice != "Gemini 2.5 Flash":
-            await cl.Message(content="⚠️ **Please switch to 'Gemini 2.5 Flash' in settings to analyze files.**").send()
-            return
-            
         await msg.stream_token("🧠 **Analyzing media with Gemini...**\n")
         
         import google.generativeai as genai
@@ -2944,7 +2945,7 @@ async def main(message: cl.Message):
                     formatted_sources.append({
                         "index": i, "title": title, "source": doc_source,
                         "page": page, "section": section, "year": year,
-                        "preview": text[:500], "url": public_url,
+                        "preview": _extract_preview(text, 500), "url": public_url,
                     })
 
                     # Add source element if cited (check multiple patterns)
@@ -2953,7 +2954,7 @@ async def main(message: cl.Message):
                         clean_elements.append(
                             cl.Text(
                                 name=element_name,
-                                content=f"**Source {i}: {title}**\n\n**File:** {file_link}\n**Page:** {page}\n**Section:** {section}\n**Year:** {year}\n\n**Preview:**\n{text[:1500]}",
+                                content=f"**Source {i}: {title}**\n\n**File:** {file_link}\n**Page:** {page}\n**Section:** {section}\n**Year:** {year}\n\n**Preview:**\n{_extract_preview(text, 1500)}",
                                 display="side"
                             )
                         )
@@ -3126,7 +3127,7 @@ async def main(message: cl.Message):
             clean_elements.append(
                 cl.Text(
                     name=element_name,
-                    content=f"**Source {src['index']}: {src['title']}**\n\n**File:** [{src['source']}]({src.get('url', '#')})\n**Page:** {src.get('page', 'N/A')}\n**Section:** {src.get('section', 'N/A')}\n**Year:** {src.get('year', 'N/A')}\n\n**Preview:**\n{src['preview']}",
+                    content=f"**Source {src['index']}: {src['title']}**\n\n**File:** [{src['source']}]({src.get('url', '#')})\n**Page:** {src.get('page', 'N/A')}\n**Section:** {src.get('section', 'N/A')}\n**Year:** {src.get('year', 'N/A')}\n\n**Preview:**\n{src['preview'] or '(No text preview available for this page)'}",
                     display="side"
                 )
             )
