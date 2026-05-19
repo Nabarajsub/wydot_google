@@ -22,3 +22,7 @@ client_secret_986441629855-7bhr3o6hgljm66d1sn2dcveqhgaapqbj.apps.googleuserconte
 advance/client_secret.json
 llamacheck_metadata/wydot_vector_db
 **/model_cache/
+
+# Unpublished paper (under review)
+graph_processing/paper/
+graph_processing/paper_emnlp/
