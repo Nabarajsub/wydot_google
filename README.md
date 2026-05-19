@@ -2,7 +2,7 @@
 
 **Solving vector search dilution in large-scale heterogeneous document collections through LLM-based query routing and domain-scoped retrieval agents.**
 
-[![Paper](https://img.shields.io/badge/Paper-CoLM%202026-blue)](graph_processing/paper/Template_2026/colm2026_conference.tex)
+[![Paper](https://img.shields.io/badge/Paper-CoLM%202026%20(under%20review)-blue)](#research-paper)
 [![Neo4j](https://img.shields.io/badge/Database-Neo4j%20Aura-green)](https://neo4j.com/)
 [![Python](https://img.shields.io/badge/Python-3.11+-yellow)](https://python.org)
 
@@ -150,8 +150,7 @@ wydot_cloud/
 |   |   |-- planner.py           # Task decomposition
 |   |   |-- execution_engine.py  # Agent execution loop
 |   |   +-- agents/              # Specialized sub-agents
-|   |-- chatapp_full.py          # Production Chainlit chat interface
-|   +-- paper/                   # Research paper (CoLM 2026 submission)
+|   +-- chatapp_full.py          # Production Chainlit chat interface
 |-- ingestion_service/           # Document ingestion pipeline
 |   |-- app.py                   # Flask API for document upload
 |   +-- local_ingest.py          # Local PDF/DOCX processing
