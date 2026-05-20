@@ -1,26 +1,133 @@
 /* ============================================================
-   WYDOT Assistant — Light / White Theme Overrides
-   Covers: feedback modal, settings drawer, login page, all MUI dialogs
+   WYDOT Assistant — Full White Theme
+   Forces light/white on EVERY component: body, header, sidebar,
+   chat area, settings, feedback, dialogs, login, tooltips, steps
    ============================================================ */
 
-/* ── Feedback & all MUI Dialogs ─────────────────────────────── */
-.MuiDialog-root .MuiPaper-root {
+/* ── Global body & root ────────────────────────────────────── */
+html, body, #root, #app,
+[data-theme="dark"],
+[data-theme="light"] {
     background-color: #ffffff !important;
     color: #111111 !important;
 }
 
-.MuiDialog-root .MuiDialogTitle-root {
+/* ── Header / AppBar ───────────────────────────────────────── */
+header,
+.MuiAppBar-root,
+[class*="header"],
+[class*="Header"],
+nav[class*="MuiToolbar"] {
+    background-color: #ffffff !important;
+    color: #111111 !important;
+    border-bottom: 1px solid #e5e7eb !important;
+    box-shadow: none !important;
+}
+
+header *,
+.MuiAppBar-root * {
+    color: #111111 !important;
+}
+
+header .MuiSvgIcon-root,
+.MuiAppBar-root .MuiSvgIcon-root {
+    color: #444444 !important;
+}
+
+header button,
+.MuiAppBar-root button {
+    color: #111111 !important;
+}
+
+/* ── Sidebar / Thread History ──────────────────────────────── */
+aside,
+[class*="sidebar"],
+[class*="Sidebar"],
+[class*="thread-history"],
+[class*="ThreadHistory"],
+.MuiDrawer-root .MuiPaper-root {
+    background-color: #ffffff !important;
+    color: #111111 !important;
+    border-right: 1px solid #e5e7eb !important;
+}
+
+aside *,
+[class*="sidebar"] *,
+[class*="Sidebar"] * {
+    color: #111111 !important;
+}
+
+/* Thread list items */
+[class*="thread"] {
     background-color: #ffffff !important;
     color: #111111 !important;
 }
 
+[class*="thread"]:hover {
+    background-color: #f5f5f5 !important;
+}
+
+[class*="thread"][class*="active"],
+[class*="thread"][class*="selected"] {
+    background-color: #f0f0f0 !important;
+}
+
+/* ── Main Chat Area ────────────────────────────────────────── */
+main,
+[class*="chat-body"],
+[class*="ChatBody"],
+[class*="message-container"],
+[class*="MessageContainer"],
+[class*="messages"],
+[class*="conversation"] {
+    background-color: #ffffff !important;
+}
+
+/* ── Message Composer / Input ──────────────────────────────── */
+[class*="composer"],
+[class*="Composer"],
+[class*="input-container"],
+[class*="InputContainer"] {
+    background-color: #ffffff !important;
+    border-top: 1px solid #e5e7eb !important;
+}
+
+[class*="composer"] textarea,
+[class*="Composer"] textarea {
+    background-color: #ffffff !important;
+    color: #111111 !important;
+    border: 1px solid #d1d5db !important;
+}
+
+[class*="composer"] textarea:focus,
+[class*="Composer"] textarea:focus {
+    border-color: #2563eb !important;
+    box-shadow: 0 0 0 2px rgba(37,99,235,0.1) !important;
+}
+
+/* ── Message Bubbles ───────────────────────────────────────── */
+[class*="message"][class*="assistant"],
+[class*="Message"][class*="assistant"] {
+    background-color: #f9fafb !important;
+    color: #111111 !important;
+}
+
+[class*="message"][class*="user"],
+[class*="Message"][class*="user"] {
+    color: #111111 !important;
+}
+
+/* ── Feedback & all MUI Dialogs ────────────────────────────── */
+.MuiDialog-root .MuiPaper-root,
+.MuiDialog-root .MuiDialogTitle-root,
 .MuiDialog-root .MuiDialogContent-root {
     background-color: #ffffff !important;
-    color: #222222 !important;
+    color: #111111 !important;
 }
 
 .MuiDialog-root .MuiDialogActions-root {
-    background-color: #f5f5f5 !important;
+    background-color: #ffffff !important;
+    border-top: 1px solid #e5e7eb !important;
 }
 
 .MuiDialog-root .MuiInputBase-root {
@@ -40,7 +147,7 @@
 .MuiDialog-root textarea {
     background-color: #ffffff !important;
     color: #111111 !important;
-    border: 1px solid #dddddd !important;
+    border: 1px solid #d1d5db !important;
 }
 
 .MuiDialog-root .MuiTypography-root {
@@ -51,18 +158,18 @@
     color: #444444 !important;
 }
 
-/* ── Settings Drawer / Panel ────────────────────────────────── */
-.MuiDrawer-root .MuiPaper-root {
-    background-color: #ffffff !important;
-    color: #111111 !important;
+/* Dialog backdrop — white/light instead of dark */
+.MuiBackdrop-root {
+    background-color: rgba(255, 255, 255, 0.8) !important;
 }
 
+/* ── Settings Drawer / Panel ───────────────────────────────── */
 .MuiDrawer-root .MuiTypography-root {
     color: #111111 !important;
 }
 
 .MuiDrawer-root .MuiInputBase-root {
-    background-color: #fafafa !important;
+    background-color: #ffffff !important;
     color: #111111 !important;
 }
 
@@ -76,11 +183,27 @@
 }
 
 .MuiDrawer-root .MuiSlider-root {
-    color: #1976d2 !important;
+    color: #2563eb !important;
+}
+
+.MuiDrawer-root .MuiSlider-thumb {
+    background-color: #2563eb !important;
+}
+
+.MuiDrawer-root .MuiSlider-track {
+    background-color: #2563eb !important;
+}
+
+.MuiDrawer-root .MuiSlider-rail {
+    background-color: #d1d5db !important;
 }
 
 .MuiDrawer-root .MuiSwitch-track {
-    background-color: #bbbbbb !important;
+    background-color: #d1d5db !important;
+}
+
+.MuiDrawer-root .MuiSwitch-switchBase.Mui-checked + .MuiSwitch-track {
+    background-color: #2563eb !important;
 }
 
 .MuiDrawer-root .MuiSvgIcon-root {
@@ -93,16 +216,24 @@
     color: #111111 !important;
 }
 
-/* ── Login Page ─────────────────────────────────────────────── */
+/* ── Login Page ────────────────────────────────────────────── */
 .login-container,
 .cl-login-page,
-[class*="login"] .MuiPaper-root,
-[class*="Login"] .MuiPaper-root {
+[class*="login"],
+[class*="Login"],
+[class*="auth"],
+[class*="Auth"] {
     background-color: #ffffff !important;
     color: #111111 !important;
 }
 
-/* Login form inputs */
+[class*="login"] .MuiPaper-root,
+[class*="Login"] .MuiPaper-root {
+    background-color: #ffffff !important;
+    color: #111111 !important;
+    box-shadow: 0 1px 3px rgba(0,0,0,0.08) !important;
+}
+
 [class*="login"] .MuiInputBase-root,
 [class*="Login"] .MuiInputBase-root,
 [class*="auth"] .MuiInputBase-root {
@@ -122,11 +253,19 @@
     color: #555555 !important;
 }
 
-/* ── General MUI Popper / Popover ───────────────────────────── */
+[class*="login"] button[type="submit"],
+[class*="Login"] button[type="submit"] {
+    background-color: #2563eb !important;
+    color: #ffffff !important;
+}
+
+/* ── General MUI Popper / Popover / Menu ───────────────────── */
 .MuiPopover-paper,
-.MuiMenu-paper {
+.MuiMenu-paper,
+.MuiAutocomplete-popper .MuiPaper-root {
     background-color: #ffffff !important;
     color: #111111 !important;
+    border: 1px solid #e5e7eb !important;
 }
 
 .MuiMenuItem-root {
@@ -134,28 +273,197 @@
 }
 
 .MuiMenuItem-root:hover {
-    background-color: #f0f0f0 !important;
+    background-color: #f5f5f5 !important;
 }
 
-/* ── Tooltip ────────────────────────────────────────────────── */
+/* ── Tooltip ───────────────────────────────────────────────── */
 .MuiTooltip-tooltip {
-    background-color: #333333 !important;
+    background-color: #1e293b !important;
     color: #ffffff !important;
 }
 
-/* ── Outlined / filled inputs globally (form fields) ───────── */
+/* ── Outlined / filled inputs globally ─────────────────────── */
 .MuiOutlinedInput-root fieldset {
-    border-color: #cccccc !important;
+    border-color: #d1d5db !important;
 }
 
 .MuiOutlinedInput-root:hover fieldset {
-    border-color: #1976d2 !important;
+    border-color: #2563eb !important;
 }
 
-/* ── Step settings (Chainlit CoT steps) ─────────────────────── */
+.MuiOutlinedInput-root.Mui-focused fieldset {
+    border-color: #2563eb !important;
+}
+
+/* ── Step / CoT (Chain of Thought) ─────────────────────────── */
 .step-settings,
 [class*="StepSettings"],
-[class*="step-settings"] {
-    background-color: #f9f9f9 !important;
+[class*="step-settings"],
+[class*="step-container"],
+[class*="StepContainer"] {
+    background-color: #ffffff !important;
     color: #111111 !important;
+}
+
+[class*="step"] details {
+    background-color: #f9fafb !important;
+    border: 1px solid #e5e7eb !important;
+    color: #111111 !important;
+}
+
+[class*="step"] details summary {
+    color: #111111 !important;
+}
+
+[class*="step"] details[open] {
+    background-color: #ffffff !important;
+}
+
+/* ── Code blocks inside messages ───────────────────────────── */
+pre, code {
+    background-color: #f3f4f6 !important;
+    color: #111111 !important;
+}
+
+/* ── Feedback thumbs / actions ─────────────────────────────── */
+[class*="feedback"] button,
+[class*="Feedback"] button {
+    color: #6b7280 !important;
+}
+
+[class*="feedback"] button:hover,
+[class*="Feedback"] button:hover {
+    color: #111111 !important;
+    background-color: #f5f5f5 !important;
+}
+
+/* ── Chat profile selector (top dropdown) ──────────────────── */
+[class*="chat-profile"],
+[class*="ChatProfile"] {
+    background-color: #ffffff !important;
+    color: #111111 !important;
+}
+
+/* ── Welcome screen ────────────────────────────────────────── */
+[class*="welcome"],
+[class*="Welcome"] {
+    background-color: #ffffff !important;
+    color: #111111 !important;
+}
+
+/* ── Scrollbar styling ─────────────────────────────────────── */
+::-webkit-scrollbar {
+    width: 6px;
+}
+
+::-webkit-scrollbar-track {
+    background: #ffffff;
+}
+
+::-webkit-scrollbar-thumb {
+    background: #d1d5db;
+    border-radius: 3px;
+}
+
+::-webkit-scrollbar-thumb:hover {
+    background: #9ca3af;
+}
+
+/* ── New Chat button / FAB ─────────────────────────────────── */
+.MuiFab-root,
+[class*="new-chat"],
+[class*="NewChat"] {
+    background-color: #ffffff !important;
+    color: #111111 !important;
+    border: 1px solid #e5e7eb !important;
+    box-shadow: 0 1px 2px rgba(0,0,0,0.05) !important;
+}
+
+.MuiFab-root:hover {
+    background-color: #f5f5f5 !important;
+}
+
+/* ── Dividers ──────────────────────────────────────────────── */
+.MuiDivider-root,
+hr {
+    border-color: #e5e7eb !important;
+}
+
+/* ── Chips / Tags ──────────────────────────────────────────── */
+.MuiChip-root {
+    background-color: #f3f4f6 !important;
+    color: #111111 !important;
+    border: 1px solid #e5e7eb !important;
+}
+
+/* ── Tab panels ────────────────────────────────────────────── */
+.MuiTab-root {
+    color: #6b7280 !important;
+}
+
+.MuiTab-root.Mui-selected {
+    color: #2563eb !important;
+}
+
+.MuiTabs-indicator {
+    background-color: #2563eb !important;
+}
+
+/* ── Action buttons in messages ────────────────────────────── */
+[class*="action"] button,
+[class*="Action"] button {
+    background-color: #ffffff !important;
+    color: #2563eb !important;
+    border: 1px solid #d1d5db !important;
+}
+
+[class*="action"] button:hover,
+[class*="Action"] button:hover {
+    background-color: #f0f7ff !important;
+    border-color: #2563eb !important;
+}
+
+/* ── Elements / Attachments panel ──────────────────────────── */
+[class*="element"],
+[class*="Element"],
+[class*="inline-file"],
+[class*="InlineFile"] {
+    background-color: #f9fafb !important;
+    color: #111111 !important;
+    border: 1px solid #e5e7eb !important;
+}
+
+/* ── Source / Citation cards ───────────────────────────────── */
+[class*="source"],
+[class*="Source"],
+[class*="citation"],
+[class*="Citation"] {
+    background-color: #ffffff !important;
+    color: #111111 !important;
+    border: 1px solid #e5e7eb !important;
+}
+
+/* ── Override any remaining dark backgrounds ────────────────── */
+[style*="background-color: rgb(18"],
+[style*="background-color: rgb(30"],
+[style*="background-color: rgb(31"],
+[style*="background-color: rgb(38"],
+[style*="background-color: rgb(43"],
+[style*="background-color: rgb(50"],
+[style*="background-color: #1"],
+[style*="background-color: #2"],
+[style*="background: rgb(18"],
+[style*="background: rgb(30"],
+[style*="background: rgb(31"] {
+    background-color: #ffffff !important;
+    color: #111111 !important;
+}
+
+/* ── Dark mode override — force light everywhere ───────────── */
+[data-theme="dark"] * {
+    --bg-primary: #ffffff !important;
+    --bg-secondary: #f9fafb !important;
+    --text-primary: #111111 !important;
+    --text-secondary: #6b7280 !important;
+    --border: #e5e7eb !important;
 }

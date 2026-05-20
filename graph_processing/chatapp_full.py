@@ -1051,7 +1051,6 @@ async def on_chat_resume(thread: Dict):
                 Switch(id="agentic_mode", label="Multi-Agent Mode (Domain Routing)", initial=True),
                 Switch(id="multihop", label="Multi-hop Reasoning (HyDE + Reranking)", initial=False),
                 Switch(id="autonomous_mode", label="Autonomous Task Mode (Plan & Execute)", initial=False),
-                Switch(id="ingest_mode", label="File Ingest Mode (Upload & Index to Neo4j)", initial=False),
                 Slider(id="fetch_k", label="Initial Candidates (FETCH_K)", min=10, max=100, step=5, initial=15),
             ]
         ).send()
@@ -2795,326 +2794,12 @@ def _ensure_keepalive():
         print("[keepalive] Neo4j keepalive started", flush=True)
 
 
-# ── Interview Agent conversation handler ──
-_INTERVIEW_QUESTIONS = [
-    "Can you describe the main challenge or observation you'd like to capture?",
-    "What technical specifications or standards are most relevant here?",
-    "Have you seen this issue on other projects? What was different?",
-    "What would you recommend as the correct procedure or fix?",
-    "Are there any safety considerations engineers should watch for?",
-    "Is there any documentation (drawings, specs, field reports) that captures this?",
-    "Any other context, lessons learned, or caveats to add?",
-]
-
-async def _handle_interview_message(message: cl.Message):
-    state = cl.user_session.get("interview_state") or {}
-    phase = state.get("phase", "intro")
-    exchanges = state.get("exchanges", [])
-    q_idx = state.get("question_index", 0)
-    topic = state.get("topic")
-
-    user_text = message.content.strip()
-    exchanges.append({"role": "user", "content": user_text})
-
-    if phase == "intro":
-        topic = user_text
-        state["topic"] = topic
-        state["phase"] = "questioning"
-        state["question_index"] = 0
-        await cl.Message(
-            content=(
-                f"### Topic: *{topic}*\n\n"
-                f"Great — let's explore this systematically. I'll ask up to "
-                f"{len(_INTERVIEW_QUESTIONS)} questions. Answer as thoroughly as you like; "
-                f"type **done** at any time to finish.\n\n"
-                f"---\n**Question 1 of {len(_INTERVIEW_QUESTIONS)}:** "
-                f"{_INTERVIEW_QUESTIONS[0]}"
-            ),
-            author="WYDOT Interview Agent",
-        ).send()
-        state["question_index"] = 1
-
-    elif phase == "questioning":
-        if user_text.lower() in {"done", "finish", "end", "stop", "complete"}:
-            state["phase"] = "complete"
-        elif q_idx < len(_INTERVIEW_QUESTIONS):
-            next_q = _INTERVIEW_QUESTIONS[q_idx]
-            progress = f"**Question {q_idx + 1} of {len(_INTERVIEW_QUESTIONS)}:**"
-            hint = "\n\n*(Type **done** to finish early and generate summary)*"
-            await cl.Message(
-                content=f"---\n{progress} {next_q}{hint}",
-                author="WYDOT Interview Agent",
-            ).send()
-            state["question_index"] = q_idx + 1
-        else:
-            state["phase"] = "complete"
-
-        if state["phase"] == "complete":
-            summary_lines = [f"## Interview Summary — *{topic}*\n"]
-            q_iter = iter(_INTERVIEW_QUESTIONS)
-            for ex in exchanges:
-                if ex["role"] == "user":
-                    q = next(q_iter, None)
-                    if q:
-                        summary_lines.append(f"**Q:** {q}\n**A:** {ex['content']}\n")
-            summary = "\n".join(summary_lines)
-
-            # Store draft summary for editing
-            cl.user_session.set("interview_summary_draft", summary)
-            cl.user_session.set("interview_topic", topic)
-
-            await cl.Message(
-                content=(
-                    f"{summary}\n\n---\n"
-                    "✏️ **Review and edit the summary above.**\n\n"
-                    "To make changes, type your edited version in the chat and send it.\n"
-                    "When you're happy with it, click **Save & Ingest** to store it in the knowledge graph.\n"
-                    "Or click **Discard** to cancel."
-                ),
-                actions=[
-                    cl.Action(name="ingest_interview",
-                              payload={"topic": topic or "interview"},
-                              label="💾 Save & Ingest"),
-                    cl.Action(name="discard_interview",
-                              payload={"topic": topic or "interview"},
-                              label="🗑 Discard"),
-                ],
-                author="WYDOT Interview Agent",
-            ).send()
-            state["phase"] = "editing"
-
-    elif phase == "editing":
-        # User typed an edited version of the summary
-        cl.user_session.set("interview_summary_draft", user_text)
-        await cl.Message(
-            content=(
-                "✅ **Draft updated.** Your edits have been saved.\n\n"
-                "Click **Save & Ingest** when ready, or keep editing."
-            ),
-            actions=[
-                cl.Action(name="ingest_interview",
-                          payload={"topic": topic or "interview"},
-                          label="💾 Save & Ingest"),
-                cl.Action(name="discard_interview",
-                          payload={"topic": topic or "interview"},
-                          label="🗑 Discard"),
-            ],
-            author="WYDOT Interview Agent",
-        ).send()
-
-    state["exchanges"] = exchanges
-    cl.user_session.set("interview_state", state)
-
-
-async def _handle_ingest_upload(message: cl.Message):
-    """Extract metadata, show preview, and offer Confirm Ingest action."""
-    import sys as _sys
-    import shutil as _shutil
-    import tempfile as _tempfile
-    from pathlib import Path as _Path
-
-    files = message.elements
-    if not files:
-        await cl.Message(
-            content=(
-                "📂 **File Ingest Mode is ON.**\n\n"
-                "Attach a **PDF or DOCX** file using the 📎 paperclip, "
-                "then send — I'll extract metadata and confirm before ingesting."
-            )
-        ).send()
-        return
-
-    f = files[0]
-    fname = f.name or "uploaded_file"
-    ext = _Path(fname).suffix.lower()
-
-    if ext not in (".pdf", ".docx", ".doc"):
-        await cl.Message(
-            content=f"⚠️ **Unsupported file type:** `{ext}`\n\nPlease upload a **PDF** or **DOCX** file."
-        ).send()
-        return
-
-    status_msg = cl.Message(content=f"🔍 **Extracting metadata from `{fname}`...**")
-    await status_msg.send()
-
-    # Copy uploaded file to a temp location
-    _tmp_dir = _tempfile.mkdtemp()
-    _dest = _Path(_tmp_dir) / fname
-    _shutil.copy2(f.path, _dest)
-
-    # Extract metadata using the same logic as ingestneo4j.py
-    try:
-        if ext == ".pdf":
-            from pypdf import PdfReader
-            reader = PdfReader(str(_dest))
-            info = reader.metadata or {}
-            raw_author = info.get("/Author", "Unknown") or "Unknown"
-            raw_title  = info.get("/Title",  fname)      or fname
-            raw_date   = info.get("/CreationDate", "")
-            year = raw_date.split("D:")[1][:4] if "D:" in raw_date else "Unknown"
-            page_count = len(reader.pages)
-            # Sample first-page text for section detection
-            first_text = reader.pages[0].extract_text()[:500] if reader.pages else ""
-        else:
-            import docx as _docx
-            doc = _docx.Document(str(_dest))
-            props = doc.core_properties
-            raw_author = props.author or "Unknown"
-            raw_title  = props.title  or fname
-            year = str(props.created.year) if props.created else "Unknown"
-            page_count = len(doc.paragraphs)
-            first_text = "\n".join(p.text for p in doc.paragraphs[:10])
-
-        # Infer doc_type from filename
-        fl = fname.lower()
-        if "specification" in fl or "spec" in fl:
-            doc_type = "Specification"
-        elif "report" in fl:
-            doc_type = "Report"
-        elif "memo" in fl:
-            doc_type = "Memo"
-        elif "manual" in fl:
-            doc_type = "Manual"
-        elif "plan" in fl:
-            doc_type = "Plan Sheet"
-        else:
-            doc_type = "General Document"
-
-        # Detect section header
-        import re as _re
-        section_match = _re.search(
-            r"(SECTION\s+\d+|DIVISION\s+\d+|CHAPTER\s+\d+)", first_text, _re.IGNORECASE
-        )
-        first_section = section_match.group(1).upper() if section_match else "General"
-
-    except Exception as e:
-        await cl.Message(content=f"❌ Could not read file metadata: {e}").send()
-        return
-
-    # Store pending ingest info in session
-    cl.user_session.set("pending_ingest", {
-        "path": str(_dest),
-        "filename": fname,
-        "title": raw_title,
-        "author": raw_author,
-        "year": year,
-        "doc_type": doc_type,
-        "page_count": page_count,
-        "first_section": first_section,
-    })
-
-    await cl.Message(
-        content=(
-            f"## 📄 File Ready for Ingestion\n\n"
-            f"| Field | Value |\n"
-            f"|---|---|\n"
-            f"| **File** | `{fname}` |\n"
-            f"| **Title** | {raw_title} |\n"
-            f"| **Author** | {raw_author} |\n"
-            f"| **Year** | {year} |\n"
-            f"| **Type** | {doc_type} |\n"
-            f"| **Pages / Paragraphs** | {page_count} |\n"
-            f"| **First Section** | {first_section} |\n\n"
-            f"**Preview (first 400 chars):**\n```\n{first_text[:400]}\n```\n\n"
-            f"Confirm to chunk, embed, and index this document into the WYDOT Neo4j knowledge graph."
-        ),
-        actions=[
-            cl.Action(name="confirm_ingest", payload={"filename": fname}, label="✅ Confirm & Ingest"),
-            cl.Action(name="cancel_ingest",  payload={"filename": fname}, label="🗑 Cancel"),
-        ],
-    ).send()
-
-
-@cl.action_callback("confirm_ingest")
-async def _confirm_ingest(action: cl.Action):
-    info = cl.user_session.get("pending_ingest")
-    if not info:
-        await cl.Message(content="⚠️ No pending file to ingest.").send()
-        return
-
-    fname = info["filename"]
-    progress = cl.Message(content=f"⚙️ **Ingesting `{fname}` into Neo4j...**\n")
-    await progress.send()
-
-    try:
-        import sys as _sys, os as _os
-        _root = _os.path.abspath(_os.path.join(_os.path.dirname(__file__), ".."))
-        if _root not in _sys.path:
-            _sys.path.insert(0, _root)
-
-        # Import the ingestion functions
-        from ingestneo4j import process_file
-        from langchain_huggingface import HuggingFaceEmbeddings
-        from langchain_neo4j import Neo4jVector
-
-        await progress.stream_token("📖 Chunking document...\n")
-        docs = await asyncio.to_thread(process_file, info["path"])
-
-        if not docs:
-            await cl.Message(content="⚠️ No content could be extracted from this file.").send()
-            return
-
-        await progress.stream_token(f"✂️ Created **{len(docs)} chunks**\n")
-        await progress.stream_token("🔢 Generating embeddings (this may take a minute)...\n")
-
-        embeddings = await asyncio.to_thread(
-            HuggingFaceEmbeddings,
-            model_name="sentence-transformers/all-MiniLM-L6-v2"
-        )
-
-        neo4j_uri  = os.getenv("NEO4J_URI")
-        neo4j_user = os.getenv("NEO4J_USERNAME")
-        neo4j_pass = os.getenv("NEO4J_PASSWORD")
-
-        await progress.stream_token("📡 Uploading to Neo4j vector index...\n")
-
-        BATCH = 50
-        total = len(docs)
-        for i in range(0, total, BATCH):
-            batch = docs[i:i + BATCH]
-            await asyncio.to_thread(
-                Neo4jVector.from_documents,
-                batch,
-                embeddings,
-                url=neo4j_uri,
-                username=neo4j_user,
-                password=neo4j_pass,
-                index_name="wydot_gemini_index",
-                node_label="Chunk",
-            )
-            await progress.stream_token(
-                f"  Batch {i // BATCH + 1}/{(total + BATCH - 1) // BATCH} done\n"
-            )
-
-        await progress.stream_token(
-            f"\n✅ **Ingestion complete!**\n"
-            f"`{fname}` → **{total} chunks** indexed in `wydot_gemini_index`.\n"
-            f"The document is now searchable in the WYDOT Assistant."
-        )
-
-        cl.user_session.set("pending_ingest", None)
-
-    except Exception as e:
-        await cl.Message(content=f"❌ Ingestion failed: {e}").send()
-        import traceback
-        print(f"[ingest] error: {traceback.format_exc()}")
-
-
-@cl.action_callback("cancel_ingest")
-async def _cancel_ingest(action: cl.Action):
-    cl.user_session.set("pending_ingest", None)
-    await cl.Message(content="🗑 Ingest cancelled.").send()
-
-
 @cl.set_chat_profiles
 async def chat_profiles(current_user: cl.User):
     return [
         cl.ChatProfile(
             name="WYDOT Assistant",
-            markdown_description=(
-                "**GraphRAG Chatbot** — Ask questions about WYDOT specs, "
-                "contracts, safety, and engineering documents."
-            ),
+            markdown_description="",
             icon="/public/logo.png",
         ),
         cl.ChatProfile(
@@ -3149,7 +2834,6 @@ async def start():
                 Switch(id="agentic_mode", label="Multi-Agent Mode (Domain Routing)", initial=True),
                 Switch(id="multihop", label="Multi-hop Reasoning (HyDE + Reranking)", initial=False),
                 Switch(id="autonomous_mode", label="Autonomous Task Mode (Plan & Execute)", initial=False),
-                Switch(id="ingest_mode", label="File Ingest Mode (Upload & Index to Neo4j)", initial=False),
                 Slider(id="fetch_k", label="Initial Candidates (FETCH_K)", min=10, max=100, step=5, initial=15),
             ]
         ).send()
@@ -3185,7 +2869,6 @@ async def start():
     else:
         cl.user_session.set("doc_qa_mode", False)
 
-    cl.user_session.set("interview_mode", False)
 
 @cl.on_settings_update
 async def setup_agent(settings):
@@ -3210,67 +2893,9 @@ if _autonomous_available:
     async def _revise_draft(action: cl.Action):
         await on_revise_draft(action)
 
-@cl.action_callback("ingest_interview")
-async def _ingest_interview(action: cl.Action):
-    summary = cl.user_session.get("interview_summary_draft", "")
-    topic = (action.payload or {}).get("topic", "interview")
-    if not summary:
-        await cl.Message(content="⚠️ No interview summary found.").send()
-        return
-
-    # Save to disk
-    import uuid as _uuid
-    from pathlib import Path as _Path
-    _save_dir = _Path(__file__).parent / "task_artifacts" / "interviews"
-    _save_dir.mkdir(parents=True, exist_ok=True)
-    _slug = re.sub(r"[^a-z0-9_]", "_", topic.lower())[:40]
-    _fname = f"{_slug}_{_uuid.uuid4().hex[:6]}.md"
-    (_save_dir / _fname).write_text(summary, encoding="utf-8")
-
-    # Persist to chat DB
-    try:
-        user = cl.user_session.get("user")
-        if user and user.metadata.get("db_id") and not user.metadata.get("is_guest"):
-            uid = user.metadata["db_id"]
-            session_id = cl.user_session.get("session_id", "cl_session")
-            CHAT_DB.add_message(uid, session_id, "user", f"[Interview saved: {topic}]",
-                                cl_msg_id=None)
-            CHAT_DB.add_message(uid, session_id, "assistant", summary[:2000], cl_msg_id=None)
-    except Exception as e:
-        print(f"[Interview ingest] DB error: {e}")
-
-    await cl.Message(
-        content=(
-            f"✅ **Interview saved as `{_fname}`**\n\n"
-            f"The knowledge report is ready for ingestion into the WYDOT knowledge graph.\n"
-            f"Run the ingestion pipeline to make it searchable:\n"
-            f"```bash\npython ingestneo4j.py --source task_artifacts/interviews/{_fname}\n```"
-        ),
-        elements=[cl.File(name=_fname, path=str(_save_dir / _fname), display="inline")],
-        author="WYDOT Interview Agent",
-    ).send()
-    cl.user_session.set("interview_summary_draft", None)
-    cl.user_session.set("interview_mode", False)
-
-
-@cl.action_callback("discard_interview")
-async def _discard_interview(action: cl.Action):
-    cl.user_session.set("interview_summary_draft", None)
-    cl.user_session.set("interview_mode", False)
-    await cl.Message(
-        content="🗑 Interview discarded. Start a **New Chat** to begin again.",
-        author="WYDOT Interview Agent",
-    ).send()
-
 
 @cl.on_message
 async def main(message: cl.Message):
-    # ── File Ingest mode ──
-    _settings_early = cl.user_session.get("settings") or {}
-    if _settings_early.get("ingest_mode"):
-        await _handle_ingest_upload(message)
-        return
-
     # ── Document Q&A mode ──
     if cl.user_session.get("doc_qa_mode"):
         files = message.elements
