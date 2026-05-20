@@ -2795,18 +2795,12 @@ def _ensure_keepalive():
 
 
 
-
-
-
 @cl.set_chat_profiles
 async def chat_profiles(current_user: cl.User):
     return [
         cl.ChatProfile(
             name="WYDOT Assistant",
-            markdown_description=(
-                "**GraphRAG Chatbot** — Ask questions about WYDOT specs, "
-                "contracts, safety, and engineering documents."
-            ),
+            markdown_description="",
             icon="/public/logo.png",
         ),
         cl.ChatProfile(
@@ -2899,6 +2893,7 @@ if _autonomous_available:
     @cl.action_callback("revise_draft")
     async def _revise_draft(action: cl.Action):
         await on_revise_draft(action)
+
 
 @cl.on_message
 async def main(message: cl.Message):
