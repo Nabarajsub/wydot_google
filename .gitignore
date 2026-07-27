@@ -31,3 +31,15 @@ llamacheck_metadata/wydot_vector_db
 # Unpublished paper (under review)
 graph_processing/paper/
 graph_processing/paper_emnlp/
+
+# Research scaffolding / notes (not needed to run or deploy the app)
+research/
+
+# Intermediate / debug artifacts
+entity_memory.json
+sources_debug.json
+*_debug.json
+verification_codes.txt
+ingest_updated_tracker.txt
+test_agent_output.txt
+evaluation/reports/
